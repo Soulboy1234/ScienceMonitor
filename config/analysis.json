@@ -1,0 +1,31 @@
+{
+  "provider": "codex_local",
+  "article_summaries": {
+    "enabled": true,
+    "max_items_per_run": 0,
+    "fallback_to_rules": true
+  },
+  "report": {
+    "enabled": true,
+    "max_papers_in_prompt": 50,
+    "fallback_to_rules": true
+  },
+  "deep_reads": {
+    "enabled": true,
+    "max_input_chars": 28000,
+    "fallback_to_rules": false
+  },
+  "codex_local": {
+    "model": "",
+    "executable": "",
+    "sandbox": "read-only",
+    "timeout_seconds": 300
+  },
+  "openai_api": {
+    "api_key": "",
+    "api_key_env": "SCIENCEMONITOR_OPENAI_API_KEY",
+    "model": "gpt-5-mini",
+    "base_url": "https://api.openai.com/v1/responses",
+    "timeout_seconds": 120
+  }
+}

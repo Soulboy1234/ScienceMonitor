@@ -1,0 +1,272 @@
+[
+  {
+    "id": "ionosphere",
+    "label": "电离层",
+    "keywords": [
+      "ionosphere",
+      "ionospheric",
+      "total electron content",
+      "tec",
+      "electron density",
+      "plasma bubble",
+      "equatorial ionization anomaly",
+      "gnss",
+      "scintillation",
+      "tid",
+      "tids",
+      "mstid",
+      "sporadic e",
+      "f region",
+      "e region",
+      "电离层",
+      "总电子含量"
+    ]
+  },
+  {
+    "id": "thermosphere",
+    "label": "热层",
+    "keywords": [
+      "thermosphere",
+      "thermospheres",
+      "thermospheric",
+      "neutral thermosphere",
+      "neutral thermospheres",
+      "upper atmosphere",
+      "neutral density",
+      "drag",
+      "o/n2",
+      "composition",
+      "exosphere",
+      "热层",
+      "中性密度"
+    ]
+  },
+  {
+    "id": "solar_terrestrial_coupling",
+    "label": "日地耦合",
+    "keywords": [
+      "solar terrestrial",
+      "solar-terrestrial",
+      "solar wind",
+      "coronal mass ejection",
+      "cme",
+      "interplanetary magnetic field",
+      "imf",
+      "geomagnetic storm",
+      "heliosphere",
+      "日地耦合",
+      "太阳风",
+      "地磁暴"
+    ]
+  },
+  {
+    "id": "solar_heliosphere",
+    "label": "太阳与日球层",
+    "keywords": [
+      "solar corona",
+      "corona",
+      "coronal hole",
+      "coronal mass ejection",
+      "cme",
+      "solar flare",
+      "solar flares",
+      "flare",
+      "flares",
+      "solar energetic particle",
+      "solar energetic particles",
+      "sep",
+      "heliosphere",
+      "heliospheric",
+      "slow solar wind",
+      "fast solar wind",
+      "coronal loop",
+      "sunspot",
+      "prominence",
+      "filament eruption",
+      "太阳",
+      "日冕",
+      "耀斑",
+      "日球层"
+    ]
+  },
+  {
+    "id": "magnetosphere",
+    "label": "磁层",
+    "keywords": [
+      "magnetosphere",
+      "magnetospheric",
+      "magnetotail",
+      "plasmasphere",
+      "plasma sheet",
+      "ring current",
+      "radiation belt",
+      "substorm",
+      "reconnection",
+      "magnetopause",
+      "cusp",
+      "auroral oval",
+      "磁层",
+      "磁尾",
+      "磁层顶",
+      "重联"
+    ]
+  },
+  {
+    "id": "waves_particles",
+    "label": "波粒相互作用",
+    "keywords": [
+      "wave-particle interaction",
+      "wave particle interaction",
+      "chorus",
+      "plasmaspheric hiss",
+      "whistler",
+      "whistler mode",
+      "alfven wave",
+      "alfven waves",
+      "emic",
+      "ulf wave",
+      "ulf waves",
+      "pc5",
+      "poynting flux",
+      "波粒相互作用",
+      "等离子体波"
+    ]
+  },
+  {
+    "id": "energetic_particles",
+    "label": "高能粒子与辐射带",
+    "keywords": [
+      "energetic electron",
+      "energetic electrons",
+      "energetic proton",
+      "energetic protons",
+      "relativistic electron",
+      "relativistic electrons",
+      "radiation belt",
+      "radiation belts",
+      "particle precipitation",
+      "trapped particle",
+      "高能粒子",
+      "辐射带",
+      "粒子沉降"
+    ]
+  },
+  {
+    "id": "lower_atmosphere_wave_coupling",
+    "label": "低层大气波动上传",
+    "keywords": [
+      "gravity wave",
+      "gravity waves",
+      "planetary wave",
+      "planetary waves",
+      "atmospheric tide",
+      "atmospheric tides",
+      "tidal",
+      "vertical coupling",
+      "upward propagation",
+      "lower atmosphere",
+      "wave coupling",
+      "acoustic gravity wave",
+      "低层大气",
+      "重力波",
+      "行星波",
+      "潮汐",
+      "垂直耦合"
+    ]
+  },
+  {
+    "id": "mit_coupling",
+    "label": "磁层-电离层-热层耦合",
+    "keywords": [
+      "magnetosphere-ionosphere",
+      "magnetosphere ionosphere",
+      "magnetosphere-ionosphere-thermosphere",
+      "joule heating",
+      "field aligned current",
+      "field-aligned current",
+      "fac",
+      "auroral electrodynamics",
+      "electrodynamics",
+      "substorm current wedge",
+      "mi coupling",
+      "mit coupling",
+      "磁层",
+      "焦耳加热",
+      "场向电流"
+    ]
+  },
+  {
+    "id": "interplanetary_drivers",
+    "label": "行星际环境驱动",
+    "keywords": [
+      "interplanetary",
+      "high-speed stream",
+      "co-rotating interaction region",
+      "corotating interaction region",
+      "cir",
+      "interplanetary shock",
+      "sheath region",
+      "solar wind driver",
+      "行星际",
+      "高速流"
+    ]
+  },
+  {
+    "id": "space_weather",
+    "label": "空间天气",
+    "keywords": [
+      "space weather",
+      "forecast",
+      "forecasting",
+      "nowcast",
+      "geomagnetic storm",
+      "substorm",
+      "dst",
+      "sym-h",
+      "kp index",
+      "operational",
+      "空间天气",
+      "预报"
+    ]
+  },
+  {
+    "id": "methods_models",
+    "label": "观测/反演/同化/模型",
+    "keywords": [
+      "assimilation",
+      "data assimilation",
+      "inversion",
+      "simulation",
+      "empirical model",
+      "general circulation model",
+      "machine learning",
+      "deep learning",
+      "reanalysis",
+      "tie-gcm",
+      "gitm",
+      "waccm-x",
+      "observations",
+      "retrieval",
+      "同化",
+      "反演",
+      "模型"
+    ]
+  },
+  {
+    "id": "planetary_space_environment",
+    "label": "行星空间环境",
+    "keywords": [
+      "martian ionosphere",
+      "mars ionosphere",
+      "venus ionosphere",
+      "planetary magnetosphere",
+      "mercury magnetosphere",
+      "jovian magnetosphere",
+      "saturnian magnetosphere",
+      "planetary plasma",
+      "planetary atmosphere",
+      "行星电离层",
+      "行星磁层"
+    ]
+  }
+]

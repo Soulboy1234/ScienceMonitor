@@ -1,0 +1,20 @@
+{
+  "features": {
+    "weekly_report_enabled": true
+  },
+  "cli_defaults": {
+    "daily_days_back": 7,
+    "daily_max_per_source": 20,
+    "update_days_back": 7,
+    "update_max_per_source": 20,
+    "update_hydrate": true,
+    "report_window_days": 7,
+    "summaries_window_days": 7,
+    "audit_window_days": 7,
+    "audit_max_per_source": 100
+  },
+  "deep_read": {
+    "search_full_text_when_pdf_missing": true,
+    "pdf_page_limit": 40
+  }
+}

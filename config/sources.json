@@ -1,0 +1,275 @@
+[
+  {
+    "id": "jgr_space_physics",
+    "journal_title": "JGR: Space Physics",
+    "aliases": [
+      "JGR: Space Physics",
+      "Journal of Geophysical Research: Space Physics"
+    ],
+    "tier": "core",
+    "mode": "full",
+    "priority": 1,
+    "description": "Core space physics journal.",
+    "issn": "2169-9402",
+    "crossref_date_field": "online"
+  },
+  {
+    "id": "space_weather",
+    "journal_title": "Space Weather",
+    "aliases": ["Space Weather"],
+    "tier": "core",
+    "mode": "full",
+    "priority": 1,
+    "description": "Operational and scientific space weather studies.",
+    "issn": "1542-7390",
+    "crossref_date_field": "online"
+  },
+  {
+    "id": "jswsc",
+    "journal_title": "Journal of Space Weather and Space Climate",
+    "aliases": ["Journal of Space Weather and Space Climate"],
+    "tier": "core",
+    "mode": "full",
+    "priority": 1,
+    "description": "European space weather and space climate journal.",
+    "issn": "2115-7251",
+    "crossref_date_field": "online"
+  },
+  {
+    "id": "annales_geophysicae",
+    "journal_title": "Annales Geophysicae",
+    "aliases": ["Annales Geophysicae"],
+    "tier": "core",
+    "mode": "full",
+    "priority": 1,
+    "description": "Solar-terrestrial and geospace physics.",
+    "issn": "1432-0576",
+    "crossref_date_field": "online"
+  },
+  {
+    "id": "jastp",
+    "journal_title": "Journal of Atmospheric and Solar-Terrestrial Physics",
+    "aliases": ["Journal of Atmospheric and Solar-Terrestrial Physics"],
+    "tier": "core",
+    "mode": "full",
+    "priority": 1,
+    "description": "Upper atmosphere, wave coupling, and solar-terrestrial studies.",
+    "issn": "1364-6826",
+    "crossref_date_field": "online"
+  },
+  {
+    "id": "eps",
+    "journal_title": "Earth, Planets and Space",
+    "aliases": ["Earth, Planets and Space"],
+    "tier": "core",
+    "mode": "topic_filter",
+    "priority": 2,
+    "description": "Aeronomy, geomagnetism, and space science.",
+    "issn": "1880-5981",
+    "crossref_date_field": "pub"
+  },
+  {
+    "id": "cjss",
+    "journal_title": "Chinese Journal of Space Science",
+    "aliases": [
+      "Chinese Journal of Space Science",
+      "空间科学学报"
+    ],
+    "tier": "core",
+    "mode": "full",
+    "priority": 2,
+    "description": "Chinese journal covering space science and space weather.",
+    "issn": "0254-6124",
+    "crossref_date_field": "pub"
+  },
+  {
+    "id": "solar_physics",
+    "journal_title": "Solar Physics",
+    "aliases": ["Solar Physics"],
+    "tier": "core",
+    "mode": "full",
+    "priority": 2,
+    "description": "Solar drivers relevant to heliophysics and space weather.",
+    "issn": "0038-0938",
+    "crossref_date_field": "online"
+  },
+  {
+    "id": "grl",
+    "journal_title": "Geophysical Research Letters",
+    "aliases": ["Geophysical Research Letters"],
+    "tier": "related",
+    "mode": "topic_filter",
+    "priority": 2,
+    "description": "Broad high-impact geoscience letters; keep relevant upper-atmosphere papers.",
+    "issn": "1944-8007",
+    "crossref_date_field": "online"
+  },
+  {
+    "id": "jgr_atmospheres",
+    "journal_title": "JGR: Atmospheres",
+    "aliases": [
+      "JGR: Atmospheres",
+      "Journal of Geophysical Research: Atmospheres"
+    ],
+    "tier": "related",
+    "mode": "topic_filter",
+    "priority": 2,
+    "description": "Atmospheric and vertical coupling studies relevant to upper atmosphere.",
+    "issn": "2169-8996",
+    "crossref_date_field": "online"
+  },
+  {
+    "id": "asr",
+    "journal_title": "Advances in Space Research",
+    "aliases": ["Advances in Space Research"],
+    "tier": "related",
+    "mode": "topic_filter",
+    "priority": 2,
+    "description": "Broad space science journal with regular space physics content.",
+    "issn": "0273-1177",
+    "crossref_date_field": "pub"
+  },
+  {
+    "id": "pss",
+    "journal_title": "Planetary and Space Science",
+    "aliases": ["Planetary and Space Science"],
+    "tier": "related",
+    "mode": "topic_filter",
+    "priority": 3,
+    "description": "Planetary space environment and plasma interactions.",
+    "issn": "0032-0633",
+    "crossref_date_field": "pub"
+  },
+  {
+    "id": "acp",
+    "journal_title": "Atmospheric Chemistry and Physics",
+    "aliases": ["Atmospheric Chemistry and Physics"],
+    "tier": "related",
+    "mode": "topic_filter",
+    "priority": 3,
+    "description": "Broader atmosphere journal with possible vertical coupling relevance.",
+    "issn": "1680-7324",
+    "crossref_date_field": "online"
+  },
+  {
+    "id": "nature",
+    "journal_title": "Nature",
+    "aliases": ["Nature"],
+    "tier": "watchlist",
+    "mode": "watchlist",
+    "priority": 4,
+    "description": "High-impact watchlist for space-physics-relevant papers.",
+    "issn": "0028-0836",
+    "crossref_date_field": "pub"
+  },
+  {
+    "id": "science",
+    "journal_title": "Science",
+    "aliases": ["Science"],
+    "tier": "watchlist",
+    "mode": "watchlist",
+    "priority": 4,
+    "description": "High-impact watchlist for space-physics-relevant papers.",
+    "issn": "0036-8075",
+    "crossref_date_field": "pub"
+  },
+  {
+    "id": "nature_geoscience",
+    "journal_title": "Nature Geoscience",
+    "aliases": ["Nature Geoscience"],
+    "tier": "watchlist",
+    "mode": "watchlist",
+    "priority": 3,
+    "description": "High-impact geoscience watchlist.",
+    "issn": "1752-0894",
+    "crossref_date_field": "online"
+  },
+  {
+    "id": "nature_communications",
+    "journal_title": "Nature Communications",
+    "aliases": ["Nature Communications"],
+    "tier": "watchlist",
+    "mode": "watchlist",
+    "priority": 3,
+    "description": "High-impact watchlist for broadly relevant work.",
+    "issn": "2041-1723",
+    "crossref_date_field": "online"
+  },
+  {
+    "id": "communications_earth_environment",
+    "journal_title": "Communications Earth & Environment",
+    "aliases": ["Communications Earth & Environment"],
+    "tier": "watchlist",
+    "mode": "watchlist",
+    "priority": 3,
+    "description": "High-impact Earth and environment watchlist.",
+    "issn": "2662-4435",
+    "crossref_date_field": "pub"
+  },
+  {
+    "id": "nature_astronomy",
+    "journal_title": "Nature Astronomy",
+    "aliases": ["Nature Astronomy"],
+    "tier": "watchlist",
+    "mode": "watchlist",
+    "priority": 4,
+    "description": "Watch heliophysics and solar system space environment papers.",
+    "issn": "2397-3366",
+    "crossref_date_field": "online"
+  },
+  {
+    "id": "science_advances",
+    "journal_title": "Science Advances",
+    "aliases": ["Science Advances"],
+    "tier": "watchlist",
+    "mode": "watchlist",
+    "priority": 3,
+    "description": "High-impact multidisciplinary watchlist.",
+    "issn": "2375-2548",
+    "crossref_date_field": "pub"
+  },
+  {
+    "id": "radio_science",
+    "journal_title": "Radio Science",
+    "aliases": ["Radio Science"],
+    "tier": "related",
+    "mode": "topic_filter",
+    "priority": 3,
+    "description": "Radio propagation, ionospheric sounding, and transionospheric techniques.",
+    "issn": "1944-799X",
+    "crossref_date_field": "online"
+  },
+  {
+    "id": "astrophysical_journal",
+    "journal_title": "The Astrophysical Journal",
+    "aliases": ["The Astrophysical Journal", "Astrophysical Journal"],
+    "tier": "watchlist",
+    "mode": "watchlist",
+    "priority": 4,
+    "description": "Watch solar and heliophysics-relevant papers from ApJ.",
+    "issn": "0004-637X",
+    "crossref_date_field": "online"
+  },
+  {
+    "id": "astrophysical_journal_letters",
+    "journal_title": "The Astrophysical Journal Letters",
+    "aliases": ["The Astrophysical Journal Letters", "Astrophysical Journal Letters", "ApJ Letters"],
+    "tier": "watchlist",
+    "mode": "watchlist",
+    "priority": 4,
+    "description": "High-impact short papers for solar and heliophysics topics.",
+    "issn": "2041-8205",
+    "crossref_date_field": "online"
+  },
+  {
+    "id": "astronomy_astrophysics",
+    "journal_title": "Astronomy & Astrophysics",
+    "aliases": ["Astronomy & Astrophysics", "Astronomy and Astrophysics"],
+    "tier": "watchlist",
+    "mode": "watchlist",
+    "priority": 4,
+    "description": "Watch solar and heliospheric papers from A&A.",
+    "issn": "0004-6361",
+    "crossref_date_field": "online"
+  }
+]
