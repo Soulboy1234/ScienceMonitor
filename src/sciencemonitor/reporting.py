@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from datetime import date, datetime
 from pathlib import Path
+import re
 
 from .article_summaries import (
     ArticleSummaryResult,
@@ -14,7 +15,7 @@ from .article_summaries import (
     is_placeholder_title,
     obsidian_link,
 )
-from .config import UserPreferenceProfile, load_master_plan_preferences
+from .config import UserPreferenceProfile, load_master_plan_preferences, project_root, templates_root
 from .llm import AnalysisEngine, ReportAnalysis
 
 FOCUS_LABELS = {
@@ -32,13 +33,52 @@ FOCUS_LABELS = {
     "行星空间环境",
 }
 
+REPORT_TEMPLATE_VAR_RE = re.compile(r"{{\s*([A-Za-z_][A-Za-z0-9_]*)\s*}}")
+REQUIRED_REPORT_HEADINGS = [
+    "## 今日概览",
+    "## 今日搜索的文献的主要关注点分类",
+    "## 今日建议",
+    "### 今日最值得关注的论文",
+    "### 按主题聚焦",
+    "### 按期刊汇总",
+    "## 附注",
+]
+REPORT_TEMPLATE_REQUIRED_MARKERS = [
+    "----",
+    "标题：Space Physics Daily Report -",
+    "统计窗口：近",
+    "监控期刊：",
+    *REQUIRED_REPORT_HEADINGS,
+    "- 本报告以标题、摘要和元数据为基础生成，后续可结合单篇文献卡片进一步细读。",
+    "- 生成时间：",
+]
+REPORT_TEMPLATE_REQUIRED_VARS = {
+    "report_date",
+    "window_days",
+    "journals",
+    "paper_count",
+    "journal_count",
+    "overview_bullets_block",
+    "focus_categories_block",
+    "daily_suggestions_block",
+    "highlights_block",
+    "topics_block",
+    "journals_block",
+    "generated_at",
+}
+REPORT_REVIEW_MAX_PASSES = 3
+
 
 def build_report(
     report_date: date,
     summaries: list[ArticleSummaryResult],
     window_days: int = 7,
     analysis_engine: AnalysisEngine | None = None,
+    root: Path | None = None,
+    require_analysis: bool = True,
 ) -> tuple[str, dict]:
+    project = root or getattr(analysis_engine, "root", None) or project_root()
+    template_text = load_report_template(templates_root(project) / "daily_report_template.md")
     preferences = analysis_engine.user_preferences if analysis_engine else load_master_plan_preferences()
     rows = [item.row for item in summaries]
     source_groups: dict[str, list[ArticleSummaryResult]] = defaultdict(list)
@@ -56,6 +96,13 @@ def build_report(
     top_labels = label_counts.most_common(6)
     highlight_summaries = select_highlights(summaries, preferences=preferences, limit=4)
     report_analysis = resolve_report_analysis(report_date, summaries, analysis_engine)
+    if require_analysis and summaries:
+        if analysis_engine is None:
+            raise RuntimeError("周报生成已不再支持规则法。请提供可用的 LLM 分析后端。")
+        if not analysis_engine.report_enabled():
+            raise RuntimeError("当前 report.enabled=false，周报生成无法继续。请先启用周报 LLM 分析。")
+        if report_analysis is None:
+            raise RuntimeError("周报生成需要有效的 LLM 分析结果，但当前未成功返回结果。请检查 provider 配置、模型可用性或额度。")
     stats = {
         "report_date": report_date.isoformat(),
         "window_days": window_days,
@@ -66,54 +113,42 @@ def build_report(
         "highlight_count": len(highlight_summaries),
     }
 
-    lines: list[str] = []
-    lines.append("----")
-    lines.append(f"标题：Space Physics Daily Report - {report_date.isoformat()}")
-    lines.append(f"统计窗口：近 {window_days} 天")
-    lines.append(f"监控期刊：{', '.join(sorted(source_groups)) if source_groups else '暂无'}")
-    lines.append("")
-
-    lines.append("## 今日概览")
-    lines.append(f"- 今日共监控到 {len(rows)} 篇新论文，来自 {len(source_groups)} 本期刊。")
+    overview_lines: list[str] = []
     if report_analysis and report_analysis.overview_bullets:
         for bullet in report_analysis.overview_bullets:
-            lines.append(f"- {bullet}")
+            overview_lines.append(f"- {bullet}")
     elif top_labels:
         hotspot_text = "、".join(f"{label}（{count}篇）" for label, count in top_labels[:4])
-        lines.append(f"- 今天的论文主要集中在：{hotspot_text}。")
-        lines.append(build_overview_line(summaries, top_labels, preferences))
+        overview_lines.append(f"- 今天的论文主要集中在：{hotspot_text}。")
+        overview_lines.append(build_overview_line(summaries, top_labels, preferences))
     else:
-        lines.append("- 今天新增论文较少，暂未形成明显的主题聚集。")
-        lines.append("- 今天仍建议关注与你研究方向相关的电离层、热层和日地耦合论文。")
-    lines.append("")
+        overview_lines.append("- 今天新增论文较少，暂未形成明显的主题聚集。")
+        overview_lines.append("- 今天仍建议关注与你研究方向相关的电离层、热层和日地耦合论文。")
 
-    lines.append("## 今日搜索的文献的主要关注点分类")
+    focus_category_lines: list[str] = []
     if top_labels:
         for label, count in top_labels:
-            lines.append(f"- {label}：{count} 篇")
+            focus_category_lines.append(f"- {label}：{count} 篇")
     else:
-        lines.append("- 暂无明确分类结果。")
-    lines.append("")
+        focus_category_lines.append("- 暂无明确分类结果。")
 
-    lines.append("## 今日建议")
+    daily_suggestion_lines: list[str] = []
     if report_analysis and report_analysis.daily_suggestions:
-        lines.extend(f"- {item}" for item in report_analysis.daily_suggestions)
+        daily_suggestion_lines.extend(f"- {item}" for item in report_analysis.daily_suggestions)
     else:
-        lines.extend(build_daily_suggestions(highlight_summaries, top_labels, preferences))
-    lines.append("")
+        daily_suggestion_lines.extend(build_daily_suggestions(highlight_summaries, top_labels, preferences))
 
-    lines.append("### 今日最值得关注的论文")
+    highlight_lines: list[str] = []
     if highlight_summaries:
         for index, summary in enumerate(highlight_summaries, start=1):
-            lines.extend(format_highlight_block(index, summary))
+            highlight_lines.extend(format_highlight_block(index, summary))
     else:
-        lines.append("   1. 今日暂无重点推荐论文。")
-    lines.append("")
+        highlight_lines.append("   1. 今日暂无重点推荐论文。")
 
-    lines.append("### 按主题聚焦")
+    topic_lines: list[str] = []
     if top_labels:
         for index, (label, _) in enumerate(top_labels[:4], start=1):
-            lines.extend(
+            topic_lines.extend(
                 format_topic_section(
                     index,
                     label,
@@ -123,14 +158,13 @@ def build_report(
                 )
             )
     else:
-        lines.append("#### 主题 1：暂无")
-        lines.append("   - 暂无可汇总主题。")
-    lines.append("")
+        topic_lines.append("#### 主题 1：暂无")
+        topic_lines.append("   - 暂无可汇总主题。")
 
-    lines.append("### 按期刊汇总")
+    journal_lines: list[str] = []
     if source_groups:
         for source_name in sorted(source_groups):
-            lines.extend(
+            journal_lines.extend(
                 format_journal_section(
                     source_name,
                     source_groups[source_name],
@@ -139,17 +173,31 @@ def build_report(
                 )
             )
     else:
-        lines.append("#### 暂无期刊")
-        lines.append("   - 暂无新增论文。")
-    lines.append("")
+        journal_lines.append("#### 暂无期刊")
+        journal_lines.append("   - 暂无新增论文。")
 
-    lines.append("## 附注")
-    lines.append("- 本报告以标题、摘要和元数据为基础生成，后续可结合单篇文献卡片进一步细读。")
-    lines.append(f"- 生成时间：{datetime.utcnow().isoformat(timespec='seconds')} UTC")
-    lines.append("")
-    lines.append("----")
-    lines.append("")
-    return "\n".join(lines), stats
+    markdown = render_report_template(
+        template_text,
+        {
+            "report_date": report_date.isoformat(),
+            "window_days": str(window_days),
+            "journals": ", ".join(sorted(source_groups)) if source_groups else "暂无",
+            "paper_count": str(len(rows)),
+            "journal_count": str(len(source_groups)),
+            "overview_bullets_block": join_report_lines(overview_lines),
+            "focus_categories_block": join_report_lines(focus_category_lines),
+            "daily_suggestions_block": join_report_lines(daily_suggestion_lines),
+            "highlights_block": join_report_lines(highlight_lines),
+            "topics_block": join_report_lines(topic_lines),
+            "journals_block": join_report_lines(journal_lines),
+            "generated_at": f"{datetime.utcnow().isoformat(timespec='seconds')} UTC",
+        },
+    )
+    markdown, review_issues = _run_report_review_loop(markdown)
+    validation_issues = review_issues + validate_report_markdown(markdown)
+    if validation_issues:
+        raise ValueError("Report output failed template validation: " + "；".join(validation_issues))
+    return markdown, stats
 
 
 def build_overview_line(
@@ -429,3 +477,89 @@ def resolve_report_analysis(
         return analysis_engine.analyze_report(report_date, summaries)
     except Exception:
         return None
+
+
+def load_report_template(template_path: Path) -> str:
+    template_text = template_path.read_text(encoding="utf-8")
+    validate_report_template(template_text, template_path)
+    return template_text
+
+
+def validate_report_template(template_text: str, template_path: Path) -> None:
+    missing_markers = [marker for marker in REPORT_TEMPLATE_REQUIRED_MARKERS if marker not in template_text]
+    if missing_markers:
+        joined = "、".join(missing_markers)
+        raise ValueError(f"Daily report template missing required markers in {template_path}: {joined}")
+
+    found_vars = set(REPORT_TEMPLATE_VAR_RE.findall(template_text))
+    missing_vars = sorted(REPORT_TEMPLATE_REQUIRED_VARS - found_vars)
+    if missing_vars:
+        joined = ", ".join(missing_vars)
+        raise ValueError(f"Daily report template missing required placeholders in {template_path}: {joined}")
+
+
+def render_report_template(template_text: str, context: dict[str, str]) -> str:
+    def replace(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key not in context:
+            raise ValueError(f"Daily report template placeholder has no context value: {key}")
+        return str(context[key])
+
+    rendered = REPORT_TEMPLATE_VAR_RE.sub(replace, template_text)
+    if not rendered.endswith("\n"):
+        rendered += "\n"
+    return rendered
+
+
+def join_report_lines(lines: list[str]) -> str:
+    return "\n".join(lines)
+
+
+def validate_report_markdown(markdown: str) -> list[str]:
+    issues: list[str] = []
+    for marker in [
+        "标题：Space Physics Daily Report -",
+        "统计窗口：近",
+        "监控期刊：",
+        *REQUIRED_REPORT_HEADINGS,
+        "- 本报告以标题、摘要和元数据为基础生成，后续可结合单篇文献卡片进一步细读。",
+        "- 生成时间：",
+    ]:
+        if marker not in markdown:
+            issues.append(f"缺少报告模板要求的区块：{marker}")
+    if "{{" in markdown or "}}" in markdown:
+        issues.append("报告正文仍包含未替换的模板占位符")
+    return issues
+
+
+def _run_report_review_loop(markdown: str) -> tuple[str, list[str]]:
+    reviewed = markdown
+    for _ in range(REPORT_REVIEW_MAX_PASSES):
+        fixed = _autofix_report_markdown(reviewed)
+        issues = _audit_report_markdown(fixed)
+        if not issues:
+            return fixed, []
+        if fixed == reviewed:
+            return fixed, issues
+        reviewed = fixed
+    return reviewed, _audit_report_markdown(reviewed)
+
+
+def _autofix_report_markdown(markdown: str) -> str:
+    fixed = markdown.replace("\r\n", "\n").replace("\r", "\n")
+    fixed = re.sub(r"[ \t]+\n", "\n", fixed)
+    fixed = re.sub(r"\n{3,}", "\n\n", fixed)
+    fixed = re.sub(r"(?m)^(#### .+)\n\n+(?=   - )", r"\1\n", fixed)
+    fixed = re.sub(r"(?m)^(### .+)\n{3,}", r"\1\n\n", fixed)
+    return fixed.strip() + "\n"
+
+
+def _audit_report_markdown(markdown: str) -> list[str]:
+    issues: list[str] = []
+    for heading in ("## 今日概览", "## 今日搜索的文献的主要关注点分类", "## 今日建议", "### 今日最值得关注的论文", "### 按主题聚焦", "### 按期刊汇总", "## 附注"):
+        pattern = re.compile(rf"(?m)^{re.escape(heading)}\n\n\n+")
+        if pattern.search(markdown):
+            issues.append(f"报告区块 {heading} 后存在多余空行")
+    if re.search(r"(?m)^#### .+\n\n(?=   - )", markdown):
+        issues.append("主题或期刊小节标题与正文之间存在多余空行")
+    return issues

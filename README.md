@@ -12,7 +12,7 @@ Space Physics 文献监测、单篇总结、深度解读与周报生成工具。
 - 监控多个 Space Physics 相关期刊与高影响力观察哨期刊
 - 抓取标题、摘要、DOI、发表日期等元数据
 - 生成单篇文献总结、深度解读和周报
-- 支持 `rules`、`codex_local`、`openai_api` 三种分析后端
+- 支持 `codex_local`、`openai_api` 两种分析后端
 - 支持 Obsidian wiki link、article index 和双向链接
 - 支持 PDF 工具链自检与项目环境自检
 
@@ -20,11 +20,13 @@ Space Physics 文献监测、单篇总结、深度解读与周报生成工具。
 
 ```text
 ScienceMonitor/
+├── evals/                    # golden eval 与真实论文集成评测
 ├── PROJECT_CONFIG.md         # 根目录配置面板，推荐的日常配置入口
 ├── README.md
-├── config/                   # 机器可读配置
+├── config/                   # 机器可读配置与运行时模板
+│   └── templates/            # 程序运行时直接消费的模板资产
 ├── data/                     # SQLite、LLM cache 等运行态数据
-├── doc/                      # 规则、模板、说明文档
+├── docs/                     # 规则、说明文档与执行计划
 ├── log/                      # 审计日志、LLM 临时文件
 ├── scripts/                  # 环境初始化、运行脚本
 ├── src/                      # 主代码
@@ -42,11 +44,16 @@ ScienceMonitor/
 - 可写本地磁盘
 
 可选环境：
-- 本地 `codex` CLI：如果使用 `codex_local`
+- 本地 `codex` CLI：只有使用 `codex_local` 时才需要
 - OpenAI 兼容 API：如果使用 `openai_api`
 - `poppler`：如果系统已安装，项目会优先复用；如果没有，项目会回退到本地 PDF 包装器
 
 当前项目不是打包发布形态，没有 `pyproject.toml`。默认通过虚拟环境 + `scripts/requirements/requirements-local.txt` 运行。
+
+项目不依赖 Codex desktop 或 Codex app 本身。
+
+- 如果选择 `openai_api`，只要提供可用模型和 API key，就可以脱离 Codex 环境运行
+- 只有 `codex_local` provider 才依赖本地 `codex` CLI
 
 ## 依赖包
 
@@ -120,16 +127,23 @@ python3 -m venv .venv
 - [config/sources.json](config/sources.json)
 - [config/topics.json](config/topics.json)
 - [config/focus_tags.json](config/focus_tags.json)
-- [doc/runtime_control/master plan.md](doc/runtime_control/master%20plan.md)
+- [config/templates/article_summary_template.md](config/templates/article_summary_template.md)
+- [config/templates/daily_report_template.md](config/templates/daily_report_template.md)
+- [config/templates/deep_reading_report_template.md](config/templates/deep_reading_report_template.md)
+
+研究偏好和重点提醒不要直接改 JSON，改 [PROJECT_CONFIG.md](PROJECT_CONFIG.md) 里的 `## Sync: config/research_preferences.json` 段。
 
 ### 4. 配置 LLM 后端
 
 当前默认配置是 `codex_local`，见 [config/analysis.json](config/analysis.json)。
 
 可选模式：
-- `rules`：只用规则与模板
 - `codex_local`：调用本地 Codex
 - `openai_api`：调用外部 API
+
+说明：
+- 单篇总结、周报和深度解读已不再支持规则法文本生成
+- 规则逻辑仍保留在抓取、过滤、标签归一化、模板校验和一致性检查等护栏层
 
 如果使用 `codex_local`：
 - 确保本机已安装并可调用 `codex`
@@ -141,7 +155,14 @@ python3 -m venv .venv
 export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 ```
 
-详细说明见 [doc/user_guides/llm_analysis_readme.md](doc/user_guides/llm_analysis_readme.md)。
+详细说明见 [docs/user_guides/llm_analysis_readme.md](docs/user_guides/llm_analysis_readme.md)。
+
+如果你的目标是“脱离 Codex 环境独立运行”，推荐直接用：
+
+- `provider=openai_api`
+- 正确的 `SCIENCEMONITOR_OPENAI_API_KEY`
+- 可访问的 `openai_api.base_url`
+- 已安装好的 Python 依赖和 PDF 工具链
 
 ### 5. 运行自检
 
@@ -173,6 +194,8 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 ```bash
 ./scripts/run_science_monitor.sh sources
 ./scripts/run_science_monitor.sh doctor
+./scripts/run_science_monitor.sh entropy-check
+./scripts/run_science_monitor.sh maintenance-check --auto-repair
 ./scripts/run_science_monitor.sh config-ui
 ./scripts/run_science_monitor.sh update --date 2026-03-31 --days-back 7 --max-per-source 100
 ./scripts/run_science_monitor.sh summaries --date 2026-03-31 --window-days 7
@@ -180,6 +203,8 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 ./scripts/run_science_monitor.sh daily --date 2026-03-31 --days-back 7 --max-per-source 100
 ./scripts/run_science_monitor.sh audit --date 2026-03-31 --window-days 7 --max-per-source 100
 ./scripts/run_science_monitor.sh deep-read --doi 10.xxxx/xxxxx --pdf /path/to/paper.pdf
+./scripts/run_science_monitor.sh tag-candidates --min-count 2 --limit 50
+./scripts/run_science_monitor.sh real-eval --case-ids 2024_epp_superstorm_it_diff
 ./scripts/run_science_monitor.sh index
 ```
 
@@ -237,7 +262,7 @@ export SCIENCEMONITOR_LOG_ROOT="$HOME/Library/Application Support/ScienceMonitor
 - 周报功能开关
 - 深度解读功能开关
 - 缺少 PDF 时是否自动搜索全文
-- `codex_local / openai_api / rules`
+- `codex_local / openai_api`
 - `codex_local.model`、超时、输出路径等
 
 注意：
@@ -258,9 +283,14 @@ export SCIENCEMONITOR_LOG_ROOT="$HOME/Library/Application Support/ScienceMonitor
 
 新增的深度解读流程是：
 1. 优先读取你提供的 PDF
-2. 如果没有提供 PDF，且配置允许，则按 DOI/题目尝试获取全文
+2. 如果没有提供 PDF，且配置允许，则按 DOI/题目做简单网页搜索
 3. 如果拿到了 PDF 或可判定的全文页面，则调用当前 LLM provider 生成深度解读
-4. 如果没拿到全文，则明确返回失败并提示提供 PDF
+4. 如果没拿到可用全文，则明确返回失败并提示提供 PDF
+
+单篇总结与周报在无 PDF 场景下的策略是：
+1. 优先尝试网页全文
+2. 如果拿不到全文，则退回摘要继续生成
+3. 仅基于摘要生成的单篇总结会显式打上 `#信息来源/仅摘要`
 
 常用命令示例：
 
@@ -280,15 +310,60 @@ export SCIENCEMONITOR_LOG_ROOT="$HOME/Library/Application Support/ScienceMonitor
 运行全部测试：
 
 ```bash
-./.venv/bin/python -m unittest discover -s tests -v
+./.venv/bin/python -m pytest -q
 ```
+
+运行 golden eval：
+
+```bash
+./scripts/run_science_monitor.sh golden-eval
+```
+
+运行统一 harness gate：
+
+```bash
+./scripts/run_science_monitor.sh harness-check
+./scripts/run_science_monitor.sh harness-check --include-real-eval --real-case-ids 2023_sw_resnet_tmd
+```
+
+运行代码维护治理：
+
+```bash
+./scripts/run_science_monitor.sh entropy-check
+./scripts/run_science_monitor.sh maintenance-check
+./scripts/run_science_monitor.sh maintenance-check --auto-repair
+```
+
+运行真实论文集成评测：
+
+```bash
+./scripts/run_science_monitor.sh real-eval
+./scripts/run_science_monitor.sh real-eval --case-ids 2023_sw_resnet_tmd,2026_jgr_polar_convection_mohe
+./scripts/run_science_monitor.sh real-eval --case-ids 2026_jgr_polar_convection_mohe --include-deep-read
+./scripts/run_science_monitor.sh real-eval --check-fixtures
+./scripts/run_science_monitor.sh real-eval --update-fixtures
+```
+
+说明：
+
+- `golden-eval` 负责固定样例回归
+- `real-eval` 负责真实论文集成评测
+- `real-eval --check-fixtures` 会把当前真实案例输出和已认可基线比较
+- `real-eval --update-fixtures` 只在你确认“新输出更正确”时使用
+- `harness-check` 是本地和 CI 的统一 gate，默认只跑 `doctor` 一致性检查和 `golden eval`
+- `maintenance-check` 是代码维护 gate，负责“审核 -> 调整 -> 测试 -> 再审核”
+- `entropy-check` 负责代码熵预算，不检查业务输出正确性
 
 ## 相关文档
 
-- [doc/README.md](doc/README.md)
-- [doc/user_guides/llm_analysis_readme.md](doc/user_guides/llm_analysis_readme.md)
-- [doc/runtime_control/master plan.md](doc/runtime_control/master%20plan.md)
-- [doc/user_guides/tasks.md](doc/user_guides/tasks.md)
+- [PROJECT_CONFIG.md](PROJECT_CONFIG.md)
+- [docs/README.md](docs/README.md)
+- [docs/user_guides/llm_analysis_readme.md](docs/user_guides/llm_analysis_readme.md)
+- [docs/user_guides/eval_governance_runbook.md](docs/user_guides/eval_governance_runbook.md)
+- [docs/user_guides/maintenance_governance_runbook.md](docs/user_guides/maintenance_governance_runbook.md)
+- [config/research_preferences.json](config/research_preferences.json)
+- [config/maintenance_budget.json](config/maintenance_budget.json)
+- [docs/workflow_specs/source_of_truth_matrix.md](docs/workflow_specs/source_of_truth_matrix.md)
 
 ## 迁移到其他电脑时建议优先检查
 

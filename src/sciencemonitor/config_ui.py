@@ -26,7 +26,7 @@ from .config import (
 )
 from .deep_reads import run_deep_read
 from .doctor import run_doctor
-from .llm import DEFAULT_ANALYSIS_CONFIG
+from .llm import DEFAULT_ANALYSIS_CONFIG, SUPPORTED_ANALYSIS_PROVIDERS
 from .pipeline import ScienceMonitor
 
 
@@ -123,6 +123,9 @@ def _save_from_form(project: Path, form: dict[str, list[str]]) -> None:
     analysis.setdefault("deep_reads", {})
     analysis.setdefault("codex_local", {})
     analysis.setdefault("openai_api", {})
+    analysis["article_summaries"].pop("fallback_to_rules", None)
+    analysis["report"].pop("fallback_to_rules", None)
+    analysis["deep_reads"].pop("fallback_to_rules", None)
 
     runtime["features"]["weekly_report_enabled"] = _bool_field(form, "weekly_report_enabled")
 
@@ -139,16 +142,19 @@ def _save_from_form(project: Path, form: dict[str, list[str]]) -> None:
     runtime["deep_read"]["search_full_text_when_pdf_missing"] = _bool_field(form, "search_full_text_when_pdf_missing")
     runtime["deep_read"]["pdf_page_limit"] = _int_field(form, "pdf_page_limit", minimum=1)
 
-    analysis["provider"] = _text_field(form, "provider")
+    analysis["provider"] = _text_field(form, "provider") or "codex_local"
+    if analysis["provider"] not in SUPPORTED_ANALYSIS_PROVIDERS:
+        supported = "、".join(SUPPORTED_ANALYSIS_PROVIDERS)
+        raise ValueError(f"provider 只支持：{supported}")
     analysis["article_summaries"]["enabled"] = _bool_field(form, "article_summaries_enabled")
     analysis["article_summaries"]["max_items_per_run"] = _int_field(form, "article_summaries_max_items_per_run", minimum=0)
-    analysis["article_summaries"]["fallback_to_rules"] = _bool_field(form, "article_summaries_fallback_to_rules")
+    analysis["article_summaries"]["reasoning_effort"] = _text_field(form, "article_summaries_reasoning_effort") or "medium"
     analysis["report"]["enabled"] = _bool_field(form, "report_enabled")
     analysis["report"]["max_papers_in_prompt"] = _int_field(form, "report_max_papers_in_prompt", minimum=1)
-    analysis["report"]["fallback_to_rules"] = _bool_field(form, "report_fallback_to_rules")
+    analysis["report"]["reasoning_effort"] = _text_field(form, "report_reasoning_effort") or "medium"
     analysis["deep_reads"]["enabled"] = _bool_field(form, "deep_reads_enabled")
     analysis["deep_reads"]["max_input_chars"] = _int_field(form, "deep_reads_max_input_chars", minimum=2000)
-    analysis["deep_reads"]["fallback_to_rules"] = _bool_field(form, "deep_reads_fallback_to_rules")
+    analysis["deep_reads"]["reasoning_effort"] = _text_field(form, "deep_reads_reasoning_effort") or "high"
     analysis["codex_local"]["model"] = _text_field(form, "codex_model")
     analysis["codex_local"]["executable"] = _text_field(form, "codex_executable")
     analysis["codex_local"]["sandbox"] = _text_field(form, "codex_sandbox") or "read-only"
@@ -194,7 +200,9 @@ def _render_page(
         body = "".join(details)
         status_html = f'<div class="banner {banner_class}"><strong>{title}</strong>{body}</div>'
 
-    provider = str(analysis.get("provider", "rules") or "rules")
+    provider = str(analysis.get("provider", "codex_local") or "codex_local")
+    if provider not in SUPPORTED_ANALYSIS_PROVIDERS:
+        provider = "codex_local"
     codex_model = str(analysis.get("codex_local", {}).get("model", "") or "").strip()
     effective_model = codex_model or "由本机 codex 默认模型决定"
     warnings = doctor.get("warnings", [])
@@ -345,7 +353,7 @@ def _render_page(
 
       <section class="card">
         <h2>LLM 总体配置</h2>
-        {_select("provider", provider, [("rules", "rules"), ("codex_local", "codex_local"), ("openai_api", "openai_api")], "分析后端")}
+        {_select("provider", provider, [("codex_local", "codex_local"), ("openai_api", "openai_api")], "分析后端")}
         <div class="row">
           {_checkbox("article_summaries_enabled", analysis.get("article_summaries", {}).get("enabled", True), "启用单篇总结 LLM")}
           {_checkbox("report_enabled", analysis.get("report", {}).get("enabled", True), "启用周报 LLM 分析")}
@@ -354,11 +362,11 @@ def _render_page(
           {_number("article_summaries_max_items_per_run", analysis.get("article_summaries", {}).get("max_items_per_run", 0), "单篇总结 LLM 数量")}
           {_number("report_max_papers_in_prompt", analysis.get("report", {}).get("max_papers_in_prompt", 50), "周报送入 LLM 篇数")}
         </div>
-        <div class="checks">
-          {_checkbox("article_summaries_fallback_to_rules", analysis.get("article_summaries", {}).get("fallback_to_rules", True), "单篇总结失败回退到规则法")}
-          {_checkbox("report_fallback_to_rules", analysis.get("report", {}).get("fallback_to_rules", True), "周报失败回退到规则法")}
-          {_checkbox("deep_reads_fallback_to_rules", analysis.get("deep_reads", {}).get("fallback_to_rules", False), "深度解读失败回退到规则法")}
+        <div class="row">
+          {_select("article_summaries_reasoning_effort", analysis.get("article_summaries", {}).get("reasoning_effort", "medium"), [("low", "low"), ("medium", "medium"), ("high", "high"), ("xhigh", "xhigh")], "单篇总结推理强度")}
+          {_select("report_reasoning_effort", analysis.get("report", {}).get("reasoning_effort", "medium"), [("low", "low"), ("medium", "medium"), ("high", "high"), ("xhigh", "xhigh")], "周报推理强度")}
         </div>
+        <p class="muted">当前已不再支持规则法兜底。单篇总结、周报和深度解读都需要有效的 LLM 分析结果。推理强度设置仅对 codex_local 生效。</p>
       </section>
 
       <section class="card">
@@ -380,6 +388,10 @@ def _render_page(
         <div class="row">
           {_number("openai_timeout_seconds", analysis.get("openai_api", {}).get("timeout_seconds", 120), "超时秒数")}
           {_number("deep_reads_max_input_chars", analysis.get("deep_reads", {}).get("max_input_chars", 28000), "深度解读最大输入字符")}
+        </div>
+        <div class="row">
+          {_select("deep_reads_reasoning_effort", analysis.get("deep_reads", {}).get("reasoning_effort", "high"), [("low", "low"), ("medium", "medium"), ("high", "high"), ("xhigh", "xhigh")], "深度解读推理强度")}
+          <div></div>
         </div>
       </section>
 

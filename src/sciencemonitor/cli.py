@@ -13,9 +13,20 @@ from .config import (
 )
 from .config_ui import serve_config_ui
 from .doctor import run_doctor
+from .entropy import render_entropy_check_summary, run_entropy_check
+from .golden_eval import render_golden_eval_summary, run_golden_eval
 from .deep_reads import run_deep_read
+from .harness import render_harness_check_summary, run_harness_check
+from .maintenance import render_maintenance_summary, run_maintenance_cycle
 from .pipeline import ScienceMonitor
+from .real_case_eval import (
+    render_real_case_eval_summary,
+    render_real_case_fixture_summary,
+    run_real_case_eval,
+    run_real_case_fixture_eval,
+)
 from .source_audit import generate_source_audit
+from .tag_candidates import filter_tag_candidates, write_tag_candidates_report
 
 
 def parse_args() -> argparse.Namespace:
@@ -99,6 +110,148 @@ def parse_args() -> argparse.Namespace:
     deep_read.add_argument("--journal", default="", help="Optional journal name.")
     deep_read.add_argument("--url", default="", help="Optional landing page URL.")
 
+    tag_candidates = subparsers.add_parser("tag-candidates", help="Review open-vocabulary tag candidates collected during runtime.")
+    tag_candidates.add_argument("--min-count", type=int, default=2, help="Only show tags used at least this many times.")
+    tag_candidates.add_argument("--limit", type=int, default=50, help="Maximum number of tags to include in the report. Use 0 for all.")
+    tag_candidates.add_argument(
+        "--no-write-report",
+        action="store_true",
+        help="Print the summary only and skip writing the markdown review report.",
+    )
+
+    golden_eval = subparsers.add_parser("golden-eval", help="Run stable golden-output regression checks.")
+    golden_eval.add_argument(
+        "--update",
+        action="store_true",
+        help="Refresh golden fixtures to the current normalized outputs.",
+    )
+
+    real_eval = subparsers.add_parser("real-eval", help="Run real-paper integration cases for summary retrieval.")
+    real_eval.add_argument(
+        "--case-ids",
+        default="",
+        help="Comma-separated real case ids. Leave empty to run all tracked cases.",
+    )
+    real_eval.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Only run the first N selected cases. Use 0 for all.",
+    )
+    real_eval.add_argument(
+        "--include-report",
+        action="store_true",
+        help="Also generate a daily report for each case. Leave off when calibrating single-paper summaries.",
+    )
+    real_eval.add_argument(
+        "--include-deep-read",
+        action="store_true",
+        help="Also generate a repo-local deep-read eval artifact for each selected case.",
+    )
+    real_eval.add_argument(
+        "--check-fixtures",
+        action="store_true",
+        help="Compare generated real-case artifacts against approved fixtures under evals/real_cases/fixtures.",
+    )
+    real_eval.add_argument(
+        "--update-fixtures",
+        action="store_true",
+        help="Refresh approved real-case fixtures from the current generated artifacts.",
+    )
+
+    entropy_check = subparsers.add_parser(
+        "entropy-check",
+        help="Check code-size budgets, oversized functions, and import-cycle entropy guards.",
+    )
+
+    maintenance_check = subparsers.add_parser(
+        "maintenance-check",
+        help="Run the maintenance loop: audit, safe adjustments, test, and final re-audit.",
+    )
+    maintenance_check.add_argument(
+        "--auto-repair",
+        action="store_true",
+        help="Apply low-risk deterministic maintenance actions before testing.",
+    )
+    maintenance_check.add_argument(
+        "--max-passes",
+        type=int,
+        default=2,
+        help="Maximum maintenance passes when auto-repair is enabled.",
+    )
+    maintenance_check.add_argument(
+        "--include-real-eval",
+        action="store_true",
+        help="Also include real-case fixture checks in the maintenance harness portion.",
+    )
+    maintenance_check.add_argument(
+        "--real-case-ids",
+        default="",
+        help="Comma-separated real case ids for the maintenance harness portion.",
+    )
+    maintenance_check.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Only run the first N selected real cases during maintenance. Use 0 for all.",
+    )
+    maintenance_check.add_argument(
+        "--include-report",
+        action="store_true",
+        help="Include daily report generation in the maintenance real-eval portion.",
+    )
+    maintenance_check.add_argument(
+        "--include-deep-read",
+        action="store_true",
+        help="Include repo-local deep-read generation in the maintenance real-eval portion.",
+    )
+    maintenance_check.add_argument(
+        "--no-write-report",
+        action="store_true",
+        help="Skip writing the markdown maintenance report under log/maintenance/.",
+    )
+
+    harness_check = subparsers.add_parser(
+        "harness-check",
+        help="Run the standard eval governance gate: doctor + golden eval, and optionally real-case fixtures.",
+    )
+    harness_check.add_argument(
+        "--include-real-eval",
+        action="store_true",
+        help="Also run real-case fixture checks after doctor and golden eval.",
+    )
+    harness_check.add_argument(
+        "--real-case-ids",
+        default="",
+        help="Comma-separated real case ids for the real-eval portion of harness-check.",
+    )
+    harness_check.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Only run the first N selected real cases during harness-check. Use 0 for all.",
+    )
+    harness_check.add_argument(
+        "--include-report",
+        action="store_true",
+        help="Include daily report generation in the real-eval portion of harness-check.",
+    )
+    harness_check.add_argument(
+        "--include-deep-read",
+        action="store_true",
+        help="Include repo-local deep-read eval generation in the real-eval portion of harness-check.",
+    )
+    harness_check.add_argument(
+        "--update-golden",
+        action="store_true",
+        help="Refresh golden fixtures before finishing harness-check.",
+    )
+    harness_check.add_argument(
+        "--update-real-fixtures",
+        action="store_true",
+        help="Refresh approved real-case fixtures during the real-eval portion of harness-check.",
+    )
+
     config_ui = subparsers.add_parser("config-ui", help="Open a local configuration web UI.")
     config_ui.add_argument("--host", default="127.0.0.1", help="Host to bind the local config UI.")
     config_ui.add_argument("--port", type=int, default=8765, help="Port to bind the local config UI.")
@@ -106,7 +259,12 @@ def parse_args() -> argparse.Namespace:
 
     subparsers.add_parser("sources", help="List configured journal sources.")
     subparsers.add_parser("index", help="Repair Obsidian links and sync article index pages under the configured output root.")
-    subparsers.add_parser("doctor", help="Check environment, paths, PDF tools, and LLM backend readiness.")
+    doctor = subparsers.add_parser("doctor", help="Check environment, paths, PDF tools, and control-plane consistency.")
+    doctor.add_argument(
+        "--consistency-only",
+        action="store_true",
+        help="Only check config/template/tag consistency and skip machine-specific runtime dependency warnings.",
+    )
     return parser.parse_args()
 
 
@@ -124,7 +282,7 @@ def main() -> int:
             return 0
 
         if args.command == "doctor":
-            report = run_doctor(monitor.root)
+            report = run_doctor(monitor.root, strict_runtime=not args.consistency_only)
             print(f"project_root={report['project_root']}")
             print(f"current_python={report['current_python']}")
             print(f"current_prefix={report['current_prefix']}")
@@ -145,6 +303,8 @@ def main() -> int:
             print(f"openai_api_key_present={report['provider_status']['openai_api_key_present']}")
             print(f"openai_api_key_source={report['provider_status']['openai_api_key_source'] or 'NONE'}")
             print(f"skills_runtime_dependency={report['skills_runtime_dependency']}")
+            for check in report.get("consistency_checks", []):
+                print(f"check.{check['id']}={check['status']}")
             if report["warnings"]:
                 print("warnings:")
                 for item in report["warnings"]:
@@ -183,6 +343,86 @@ def main() -> int:
                 return 0
             print(result.message)
             return 2
+
+        if args.command == "tag-candidates":
+            candidates = filter_tag_candidates(monitor.root, min_count=args.min_count, limit=args.limit)
+            if not args.no_write_report:
+                report_path = write_tag_candidates_report(monitor.root, min_count=args.min_count, limit=args.limit)
+                print(f"Wrote tag candidate review report to {report_path}.")
+            if not candidates:
+                print("No tag candidates matched the current filter.")
+                return 0
+            print(f"Matched {len(candidates)} tag candidates.")
+            for item in candidates:
+                contexts = ", ".join(f"{key}:{value}" for key, value in sorted(item.contexts.items())) or "-"
+                print(f"- {item.tag} count={item.count} contexts={contexts} last_seen={item.last_seen or '-'}")
+            return 0
+
+        if args.command == "golden-eval":
+            results = run_golden_eval(monitor.root, update=args.update)
+            print(render_golden_eval_summary(results))
+            return 0 if all(item.passed for item in results) else 1
+
+        if args.command == "entropy-check":
+            report = run_entropy_check(monitor.root)
+            print(render_entropy_check_summary(report))
+            return 0 if report.passed else 1
+
+        if args.command == "real-eval":
+            case_ids = {item.strip() for item in args.case_ids.split(",") if item.strip()}
+            if args.check_fixtures or args.update_fixtures:
+                results, checks = run_real_case_fixture_eval(
+                    monitor.root,
+                    case_ids=case_ids or None,
+                    limit=args.limit,
+                    include_report=bool(args.include_report),
+                    include_deep_read=bool(args.include_deep_read),
+                    update=bool(args.update_fixtures),
+                )
+                print(render_real_case_fixture_summary(results, checks))
+                result_ok = (not results) or all(item.passed for item in results)
+                checks_ok = bool(checks) and all(item.passed for item in checks)
+                return 0 if result_ok and checks_ok else 1
+            results = run_real_case_eval(
+                monitor.root,
+                case_ids=case_ids or None,
+                limit=args.limit,
+                include_report=bool(args.include_report),
+                include_deep_read=bool(args.include_deep_read),
+            )
+            print(render_real_case_eval_summary(results))
+            return 0 if results and all(item.passed for item in results) else (0 if not results else 1)
+
+        if args.command == "harness-check":
+            real_case_ids = {item.strip() for item in args.real_case_ids.split(",") if item.strip()}
+            report = run_harness_check(
+                monitor.root,
+                include_real_eval=bool(args.include_real_eval),
+                real_case_ids=real_case_ids or None,
+                limit=args.limit,
+                include_report=bool(args.include_report),
+                include_deep_read=bool(args.include_deep_read),
+                update_golden=bool(args.update_golden),
+                update_real_fixtures=bool(args.update_real_fixtures),
+            )
+            print(render_harness_check_summary(report))
+            return 0 if report.passed else 1
+
+        if args.command == "maintenance-check":
+            real_case_ids = {item.strip() for item in args.real_case_ids.split(",") if item.strip()}
+            report = run_maintenance_cycle(
+                monitor.root,
+                auto_repair=bool(args.auto_repair),
+                max_passes=args.max_passes,
+                include_real_eval=bool(args.include_real_eval),
+                real_case_ids=real_case_ids or None,
+                limit=args.limit,
+                include_report=bool(args.include_report),
+                include_deep_read=bool(args.include_deep_read),
+                write_report=not args.no_write_report,
+            )
+            print(render_maintenance_summary(report))
+            return 0 if report.passed else 1
 
         report_date = date.fromisoformat(args.date)
 
@@ -256,6 +496,9 @@ def main() -> int:
                 for error in update_result.errors[:10]:
                     print(f"- {error}")
             return 0
+    except RuntimeError as exc:
+        print(str(exc))
+        return 2
     finally:
         monitor.close()
 

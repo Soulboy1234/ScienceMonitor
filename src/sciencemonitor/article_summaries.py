@@ -6,8 +6,12 @@ from datetime import datetime
 from pathlib import Path
 from sqlite3 import Row
 
+from .article_fetch import resolve_summary_source_material
 from .config import obsidian_target as configured_obsidian_target
+from .crossref import CrossrefClient
+from .http import HTTPClient
 from .llm import AnalysisEngine, ArticleAnalysis
+from .tags import clean_tag_text, group_tags, infer_preferred_tags_from_text, normalize_tags
 from .utils import clean_title_text
 
 
@@ -15,7 +19,7 @@ SPECIAL_PAPER_OVERRIDES = {
     "10.1029/2025ja034386": {
         "summary_title": "2025年新年磁暴期间漠河热层风异常与极区对流边界演化",
         "chinese_title": "2025年新年磁暴期间漠河热层风异常与极区对流边界演化",
-        "tags": ["磁暴", "极区对流/边界", "FPI", "SuperDARN", "极光图像", "热层/风", "等离子体对流", "极光强度"],
+        "tags": ["热层/风场", "极区/对流边界", "磁暴", "仪器/FPI", "仪器/SuperDARN", "仪器/极光图像", "特征/等离子体对流", "特征/极光强度"],
         "body": (
             "这篇文章关注的问题是：2025年新年磁暴期间，漠河上空出现的异常热层风，是否与极区对流及其边界位置变化直接相关，"
             "以及这种高纬扰动为什么会明显影响东亚扇区。作者主要使用了漠河 FPI 的热层风观测、极光图像以及 SuperDARN 的"
@@ -43,108 +47,42 @@ GENERIC_SENTENCE_FRAGMENTS = (
     "与当前主题方向相关",
     "摘要显示，该研究给出了与上述问题相关的主要结果和解释",
 )
-
-TAG_ALIAS_MAP = {
-    "热层风": "热层/风",
-    "热层密度": "热层/密度",
-    "中性密度": "热层/密度",
-    "热层成分": "热层/成分",
-    "热层温度": "热层/温度",
-    "地球": "研究星球/地球",
-    "月球": "研究星球/月球",
-    "火星": "研究星球/火星",
-    "金星": "研究星球/金星",
-    "水星": "研究星球/水星",
-    "木星": "研究星球/木星",
-    "土星": "研究星球/土星",
-    "天王星": "研究星球/天王星",
-    "海王星": "研究星球/海王星",
+ABSTRACT_ONLY_TAG = "信息来源/仅摘要"
+ARTICLE_SUMMARY_TEMPLATE_VAR_RE = re.compile(r"{{\s*([A-Za-z_][A-Za-z0-9_]*)\s*}}")
+ARTICLE_SUMMARY_TEMPLATE_REQUIRED_MARKERS = (
+    "- 「补充信息」",
+    "- 「文中引用」",
+    "- 「好句子」",
+    "- 「关联报告」",
+    "记录时间戳:",
+)
+ARTICLE_SUMMARY_TEMPLATE_REQUIRED_VARS = {
+    "resource_line",
+    "apa_citation",
+    "body",
+    "supplement",
+    "references_block",
+    "quotes_block",
+    "related_reports_block",
+    "timestamp_date",
+    "timestamp_time",
 }
-
-OTHER_PLANET_TAG_ALIASES = {
-    "研究星球/月球": "其他行星/月球",
-    "研究星球/水星": "其他行星/水星",
-    "研究星球/金星": "其他行星/金星",
-    "研究星球/火星": "其他行星/火星",
-    "研究星球/木星": "其他行星/木星",
-    "研究星球/土星": "其他行星/土星",
-    "研究星球/天王星": "其他行星/天王星",
-    "研究星球/海王星": "其他行星/海王星",
-    "木卫三/极光": "其他行星/木星",
-    "木卫三/大气": "其他行星/木星",
-    "土卫六": "其他行星/土星",
-    "行星大气/天王星": "其他行星/天王星",
-}
-
-
-SCIENCE_TAG_RULES = [
-    ("磁暴", ["geomagnetic storm", "superstorm", "magnetic storm", "storm-time", "storm time", "substorm"]),
-    ("极区对流/边界", ["polar convection", "convection boundary", "polar cap", "auroral oval"]),
-    ("电离层", ["ionosphere", "ionospheric", "plasma bubble", "equatorial plasma bubble", "tec", "total electron content"]),
-    ("热层", ["thermosphere", "thermospheric", "upper atmosphere", "neutral density", "exobase"]),
-    ("日地耦合", ["solar wind", "interplanetary", "magnetopause", "magnetosheath", "imf", "reconnection"]),
-    ("空间天气", ["space weather", "forecast"]),
-    ("重力波/潮汐", ["gravity wave", "gravity waves", "planetary wave", "planetary waves", "tide", "tidal"]),
-    ("行星空间环境", ["mars", "martian", "venus", "mercury", "jovian", "saturn", "planetary"]),
-]
-
-RESEARCH_BODY_TAG_RULES = [
-    ("研究星球/地球", [" earth ", "earth", "earth's", "terrestrial", "地球"]),
-    ("研究星球/月球", [" moon ", "moon", "lunar", "月球"]),
-    ("研究星球/火星", [" mars ", "mars", "martian", "火星"]),
-    ("研究星球/金星", [" venus ", "venus", "venusian", "金星"]),
-    ("研究星球/水星", [" mercury ", "mercury", "mercurian", "水星"]),
-    ("研究星球/木星", [" jupiter ", "jupiter", "jovian", "木星"]),
-    ("研究星球/土星", [" saturn ", "saturn", "saturnian", "土星"]),
-    ("研究星球/天王星", [" uranus ", "uranus", "uranian", "天王星"]),
-    ("研究星球/海王星", [" neptune ", "neptune", "neptunian", "海王星"]),
-]
-
-INSTRUMENT_DATA_TAG_RULES = [
-    ("FPI", ["fabry-perot", "fabry perot", "fpi"]),
-    ("SuperDARN", ["superdarn"]),
-    ("GNSS", ["gnss", "beidou", "gps", "galileo"]),
-    ("MMS", ["magnetospheric multi-scale", "mms"]),
-    ("DMSP", ["dmsp"]),
-    ("ICON", [" icon ", "icon satellite", "observed by icon"]),
-    ("Van Allen Probes", ["van allen probes", "van allen"]),
-    ("NICER", ["nicer"]),
-    ("磁强计", ["magnetometer", "magnetometers"]),
-    ("电离层测高仪", ["ionosonde", "ionosonde doppler"]),
-    ("雷达", ["radar", "radars"]),
-    ("极光图像", ["auroral image", "auroral images", "auroral photograph", "auroral photographs", "aurora", "auroral"]),
-    ("再分析资料", ["reanalysis", "era5"]),
-    ("模式模拟", ["simulation", "simulations", "model", "modeling", "sami2", "m-gitm", "swmf", "bats-r-us", "gitm", "waccm-x"]),
-]
-
-PHYSICAL_TAG_RULES = [
-    ("TEC", ["total electron content", " tec ", "tec ", " tec"]),
-    ("热层/风", ["thermospheric wind", "thermospheric winds", "neutral wind", "neutral winds", "meridional wind", "zonal wind", "热层风", "中性风", "经向风", "纬向风"]),
-    ("热层/密度", ["thermospheric mass density", "thermospheric density", "neutral density", "mass density", "air density", "热层密度", "中性密度", "外逸层", "卫星阻力", "drag environment", "satellite drag", "drag of leo satellites", "leo satellite drag"]),
-    ("热层/成分", ["o/n2", "composition", "neutral composition", "thermospheric composition", "nitric oxide", "atomic oxygen", "热层成分", "一氧化氮", "成分变化", "no production"]),
-    ("热层/温度", ["thermospheric temperature", "neutral temperature", "exospheric temperature", "热层温度", "中性温度"]),
-    ("等离子体对流", ["plasma convection", "convection", "drift"]),
-    ("极光强度", ["auroral emission", "auroral emissions", "continuum emission", "aurora", "auroral"]),
-    ("电子温度", ["electron temperature"]),
-    ("电子密度", ["electron density"]),
-    ("等离子体密度", ["plasma density", "density peak", "density bulge"]),
-    ("相对论电子", ["relativistic electron", "mev electron", "mev electrons", "radiation belt"]),
-    ("重力波", ["gravity wave", "gravity waves", "secondary gravity wave"]),
-]
+ARTICLE_SUMMARY_REVIEW_MAX_PASSES = 3
 
 TOPIC_TO_TAG = {
     "电离层": "电离层",
     "热层": "热层",
     "日地耦合": "日地耦合",
     "低层大气波动上传": "重力波/潮汐",
-    "磁层-电离层-热层耦合": "磁层-电离层-热层耦合",
-    "行星际环境驱动": "日地耦合",
+    "磁层-电离层-热层耦合": "磁层-电离层耦合",
+    "行星际环境驱动": "太阳风/高速流",
     "空间天气": "空间天气",
-    "行星空间环境": "行星空间环境",
+    "行星空间环境": "其他行星/行星综合",
 }
 
 JOURNAL_ABBREVIATIONS = {
     "JGR: Space Physics": "JGR.SP",
+    "Journal of Geophysical Research: Space Physics": "JGR.SP",
     "Space Weather": "SW",
     "Journal of Space Weather and Space Climate": "JSWSC",
     "Annales Geophysicae": "Ann. Geophys.",
@@ -195,29 +133,24 @@ def sanitize_generation_text(text: str) -> str:
 
 
 def sanitize_tag(tag: str) -> str:
-    cleaned = sanitize_generation_text(tag).lstrip("#")
-    cleaned = re.sub(r"[^\u4e00-\u9fffA-Za-z0-9/+\-_.&]+", "", cleaned)
-    cleaned = cleaned.strip("./-_")
-    return TAG_ALIAS_MAP.get(cleaned, cleaned)
+    return clean_tag_text(sanitize_generation_text(tag))
 
 
-def sanitize_tags(tags: list[str]) -> list[str]:
-    normalized: list[str] = []
-    seen_research_body = False
-    for tag in tags:
-        cleaned = sanitize_tag(tag)
-        if not cleaned:
-            continue
-        if any(snippet in cleaned.lower() for snippet in INVALID_OUTPUT_SNIPPETS):
-            continue
-        if cleaned.startswith("研究星球/"):
-            if seen_research_body:
-                continue
-            seen_research_body = True
-        if cleaned not in normalized:
-            normalized.append(cleaned)
-    normalized = append_other_planet_tags(normalized)
-    return prefer_more_specific_tags(normalized)[:14]
+def sanitize_tags(
+    tags: list[str],
+    *,
+    root: Path | None = None,
+    max_tags: int = 14,
+    context: str = "",
+    record_candidates: bool = False,
+) -> list[str]:
+    return normalize_tags(
+        tags,
+        root=root,
+        max_tags=max_tags,
+        context=context,
+        record_candidates=record_candidates,
+    )
 
 
 def prefer_more_specific_tags(tags: list[str]) -> list[str]:
@@ -227,15 +160,6 @@ def prefer_more_specific_tags(tags: list[str]) -> list[str]:
             continue
         refined.append(tag)
     return refined
-
-
-def append_other_planet_tags(tags: list[str]) -> list[str]:
-    enriched = list(tags)
-    for tag in tags:
-        extra = OTHER_PLANET_TAG_ALIASES.get(tag)
-        if extra and extra not in enriched:
-            enriched.append(extra)
-    return enriched
 
 
 def is_placeholder_title(text: str) -> bool:
@@ -276,14 +200,17 @@ def validate_summary_fields(
     supplement: str,
     recommendation: str,
     one_sentence: str,
+    *,
+    root: Path | None = None,
+    candidate_context: str = "",
 ) -> tuple[str, list[str], str, str, str, str]:
-    cleaned_tags = sanitize_tags(tags)
+    cleaned_tags = sanitize_tags(tags, root=root, context=candidate_context, record_candidates=bool(root))
     if not cleaned_tags:
-        cleaned_tags = sanitize_tags(get_focus_tags(row, analysis=None))
+        cleaned_tags = sanitize_tags(get_focus_tags(row, analysis=None, root=root), root=root)
 
     cleaned_title = sanitize_generation_text(chinese_title)
     if is_placeholder_title(cleaned_title):
-        cleaned_title = sanitize_generation_text(build_chinese_title(row, analysis=None))
+        cleaned_title = sanitize_generation_text(build_chinese_title(row, analysis=None, root=root))
     if is_placeholder_title(cleaned_title):
         cleaned_title = "标题与摘要信息待补充"
 
@@ -293,7 +220,8 @@ def validate_summary_fields(
 
     cleaned_supplement = sanitize_generation_text(supplement)
     if not cleaned_supplement:
-        cleaned_supplement = build_supplement_text(row, analysis=None)
+        cleaned_supplement = build_supplement_text(row, analysis=None, root=root)
+    cleaned_supplement = normalize_summary_supplement(row, cleaned_supplement)
 
     cleaned_recommendation = sanitize_generation_text(recommendation)
     if is_generic_sentence(cleaned_recommendation):
@@ -331,11 +259,25 @@ HASH_TAG_RE = re.compile(r"(?<!\w)#([^\s#]+)")
 RELATED_REPORTS_HEADER = "- 「关联报告」"
 
 
+def resolve_summary_root(root: Path | None = None, template_path: Path | None = None) -> Path | None:
+    if root is not None:
+        return root
+    if template_path is not None:
+        if template_path.parent.name == "templates" and template_path.parent.parent.name == "config":
+            return template_path.parent.parent.parent
+        if template_path.parent.name == "config":
+            return template_path.parent.parent
+    return None
+
+
 def generate_article_summaries(
     rows: list[Row],
     template_path: Path,
     output_dir: Path,
     analysis_engine: AnalysisEngine | None = None,
+    root: Path | None = None,
+    enable_live_fetch: bool = False,
+    require_analysis: bool = True,
 ) -> list[Path]:
     return [
         item.output_path
@@ -344,6 +286,9 @@ def generate_article_summaries(
             template_path=template_path,
             output_dir=output_dir,
             analysis_engine=analysis_engine,
+            root=root,
+            enable_live_fetch=enable_live_fetch,
+            require_analysis=require_analysis,
         )
     ]
 
@@ -353,51 +298,121 @@ def generate_article_summary_results(
     template_path: Path,
     output_dir: Path,
     analysis_engine: AnalysisEngine | None = None,
+    root: Path | None = None,
+    enable_live_fetch: bool = False,
+    require_analysis: bool = True,
 ) -> list[ArticleSummaryResult]:
-    _ = template_path.read_text(encoding="utf-8")
+    project = resolve_summary_root(root=root, template_path=template_path)
+    template_text = load_article_summary_template(template_path)
     output_dir.mkdir(parents=True, exist_ok=True)
     results: list[ArticleSummaryResult] = []
     used_paths: set[Path] = set()
     existing_files = index_existing_summary_files(output_dir)
+    http = HTTPClient(timeout=20) if enable_live_fetch else None
+    crossref = CrossrefClient(http) if http is not None else None
 
     for index, row in enumerate(rows):
-        existing = load_existing_summary_result(existing_files, row)
+        existing = load_existing_summary_result(existing_files, row, template_text=template_text, root=project)
         if existing is not None:
             results.append(existing)
             used_paths.add(existing.output_path)
             continue
 
-        analysis = resolve_article_analysis(row, analysis_engine, index)
-        chinese_title = build_chinese_title(row, analysis=analysis)
-        tags = get_focus_tags(row, analysis=analysis)
-        body = build_body_paragraph(row, analysis=analysis)
-        supplement = build_supplement_text(row, analysis=analysis)
-        recommendation = build_recommendation(row, analysis=analysis)
-        one_sentence = build_one_sentence_summary(row, analysis=analysis)
+        effective_row = row
+        source_material = None
+        if http is not None and crossref is not None:
+            local_pdf_path = _resolve_local_pdf_path(row)
+            source_material = resolve_summary_source_material(
+                doi=clean_text(row["doi"]),
+                url=clean_text(row["url"]),
+                title=display_title(row),
+                journal=clean_text(row["source_name"] or row["journal_title"]),
+                abstract=clean_text(row["abstract"]),
+                authors=parse_authors(str(row["authors"] or "")),
+                published_date=clean_text(row["published_date"]),
+                http=http,
+                crossref=crossref,
+                local_pdf_path=local_pdf_path,
+                project_root=project,
+            )
+            effective_row = apply_summary_source_material(row, source_material)
+
+        analysis = resolve_article_analysis(
+            effective_row,
+            analysis_engine,
+            index,
+            raise_on_error=require_analysis,
+        )
+        if require_analysis and analysis is None and not get_override(effective_row):
+            if analysis_engine is None:
+                raise RuntimeError(
+                    f"单篇总结已不再支持规则法。当前文章缺少 LLM 分析结果：{display_title(effective_row)}。"
+                )
+            raise RuntimeError(
+                f"单篇总结生成需要 LLM 分析结果，但当前文章未得到有效结果：{display_title(effective_row)}。"
+                f"请检查 provider 配置、模型可用性或额度，再重试。"
+            )
+        chinese_title = build_chinese_title(effective_row, analysis=analysis, root=project)
+        tags = get_focus_tags(effective_row, analysis=analysis, root=project)
+        if source_material is not None and source_material.abstract_only:
+            tags = sanitize_tags(
+                tags + [ABSTRACT_ONLY_TAG],
+                root=project,
+                context="article_summary",
+                record_candidates=True,
+            )
+        body = build_body_paragraph(effective_row, analysis=analysis, root=project)
+        supplement = build_supplement_text(effective_row, analysis=analysis, root=project)
+        if source_material is not None and source_material.abstract_only:
+            supplement = annotate_abstract_only_supplement(supplement)
+        recommendation = build_recommendation(effective_row, analysis=analysis, root=project)
+        one_sentence = build_one_sentence_summary(effective_row, analysis=analysis, root=project)
         chinese_title, tags, body, supplement, recommendation, one_sentence = validate_summary_fields(
-            row,
+            effective_row,
             chinese_title,
             tags,
             body,
             supplement,
             recommendation,
             one_sentence,
+            root=project,
+            candidate_context="article_summary",
         )
-        note_title = build_note_title_from_chinese(row, chinese_title)
+        note_title = build_note_title_from_chinese(effective_row, chinese_title)
         rendered = render_article_summary(
-            row,
+            effective_row,
+            template_text=template_text,
             analysis=analysis,
             note_title=note_title,
             tags=tags,
             body=body,
             supplement=supplement,
+            root=project,
         )
-        target = unique_output_path(output_dir, build_filename_from_chinese(row, chinese_title), row["fingerprint"], used_paths)
+        rendered, review_issues = _run_article_summary_review_loop(
+            effective_row,
+            template_text=template_text,
+            note_title=note_title,
+            markdown=rendered,
+            analysis=analysis,
+            root=project,
+        )
+        if review_issues:
+            raise ValueError("Article summary output failed review: " + "；".join(review_issues))
+        tags = extract_summary_tags(rendered) or tags
+        body = extract_summary_body(rendered) or body
+        supplement = extract_numbered_line(rendered, "- 「补充信息」") or supplement
+        target = unique_output_path(
+            output_dir,
+            build_filename_from_chinese(effective_row, chinese_title),
+            row["fingerprint"],
+            used_paths,
+        )
         target.write_text(rendered, encoding="utf-8")
         used_paths.add(target)
         results.append(
             ArticleSummaryResult(
-                row=row,
+                row=effective_row,
                 analysis=analysis,
                 output_path=target,
                 note_title=note_title,
@@ -412,6 +427,44 @@ def generate_article_summary_results(
         )
 
     return results
+
+
+def apply_summary_source_material(row: Row, source_material) -> dict:
+    summary_text = clean_source_text(source_material.summary_text)
+    if len(summary_text) > 18000:
+        summary_text = summary_text[:18000].rsplit(" ", 1)[0].strip() + "\n..."
+    result = dict(row)
+    if source_material.title:
+        result["title"] = source_material.title
+    if source_material.url:
+        result["url"] = source_material.url
+    if source_material.doi:
+        result["doi"] = source_material.doi
+    if source_material.journal:
+        result["source_name"] = source_material.journal
+        result["journal_title"] = source_material.journal
+    if source_material.authors:
+        result["authors"] = "\n".join(source_material.authors)
+    if source_material.published_date:
+        result["published_date"] = source_material.published_date
+    if summary_text:
+        result["abstract"] = summary_text
+    elif source_material.abstract:
+        result["abstract"] = source_material.abstract
+    result["summary_source_kind"] = source_material.source_kind
+    if source_material.cache_path:
+        result["source_text_cache_path"] = source_material.cache_path
+    return result
+
+
+def annotate_abstract_only_supplement(supplement: str) -> str:
+    notice = "当前总结仅基于摘要和元数据生成，未获得全文，结论需按摘要级别理解。"
+    clean_supplement = sanitize_generation_text(supplement)
+    if notice in clean_supplement:
+        return clean_supplement
+    if not clean_supplement:
+        return notice
+    return f"{notice} {clean_supplement}"
 
 
 def obsidian_target(path: Path, root: Path | None = None) -> str:
@@ -446,8 +499,7 @@ def upsert_related_reports_section(markdown: str, report_links: list[str]) -> st
 
     existing_links = extract_related_report_links(markdown)
     all_links = dedupe(existing_links + normalized)
-    block_lines = [RELATED_REPORTS_HEADER]
-    block_lines.extend(f"\t{index}. {link}" for index, link in enumerate(all_links, start=1))
+    block_lines = [RELATED_REPORTS_HEADER, build_numbered_block(all_links)]
     block = "\n".join(block_lines)
 
     pattern = re.compile(
@@ -485,7 +537,12 @@ def index_existing_summary_files(output_dir: Path) -> dict[str, Path]:
     return indexed
 
 
-def load_existing_summary_result(existing_files: dict[str, Path], row: Row) -> ArticleSummaryResult | None:
+def load_existing_summary_result(
+    existing_files: dict[str, Path],
+    row: Row,
+    template_text: str,
+    root: Path | None = None,
+) -> ArticleSummaryResult | None:
     doi = normalize_doi(row["doi"])
     path = existing_files.get(doi)
     if path is None or not path.exists():
@@ -496,29 +553,45 @@ def load_existing_summary_result(existing_files: dict[str, Path], row: Row) -> A
     tags = extract_summary_tags(text)
     body = extract_summary_body(text)
     supplement = extract_numbered_line(text, "- 「补充信息」")
-    chinese_title = note_title.split(" - ", 3)[-1] if " - " in note_title else build_chinese_title(row)
-    recommendation = build_recommendation(row)
-    one_sentence = build_one_sentence_summary(row)
-    inferred_tags = infer_tags_from_text("\n".join(filter(None, [note_title, body, supplement])))
-    merged_tags = dedupe(get_focus_tags(row) + inferred_tags + (tags or []))
+    chinese_title = note_title.split(" - ", 3)[-1] if " - " in note_title else build_chinese_title(row, root=root)
+    recommendation = build_recommendation(row, root=root)
+    one_sentence = build_one_sentence_summary(row, root=root)
+    inferred_tags = infer_tags_from_text("\n".join(filter(None, [note_title, body, supplement])), root=root)
+    merged_tags = dedupe(get_focus_tags(row, root=root) + inferred_tags + (tags or []))
     chinese_title, tags, body, supplement, recommendation, one_sentence = validate_summary_fields(
         row,
         chinese_title,
         merged_tags,
-        body or build_body_paragraph(row),
-        supplement or build_supplement_text(row),
+        body or build_body_paragraph(row, root=root),
+        supplement or build_supplement_text(row, root=root),
         recommendation,
         one_sentence,
+        root=root,
+        candidate_context="article_summary_repair",
     )
     note_title = build_note_title_from_chinese(row, chinese_title)
     repaired = render_article_summary(
         row,
+        template_text=template_text,
         note_title=note_title,
         tags=tags,
         body=body,
         supplement=supplement,
+        root=root,
     )
     repaired = upsert_related_reports_section(repaired, extract_related_report_links(text))
+    repaired, review_issues = _run_article_summary_review_loop(
+        row,
+        template_text=template_text,
+        note_title=note_title,
+        markdown=repaired,
+        root=root,
+    )
+    if review_issues:
+        raise ValueError("Article summary output failed review: " + "；".join(review_issues))
+    tags = extract_summary_tags(repaired) or tags
+    body = extract_summary_body(repaired) or body
+    supplement = extract_numbered_line(repaired, "- 「补充信息」") or supplement
     if repaired != text:
         path.write_text(repaired, encoding="utf-8")
         text = repaired
@@ -540,38 +613,145 @@ def load_existing_summary_result(existing_files: dict[str, Path], row: Row) -> A
 
 def render_article_summary(
     row: Row,
+    template_text: str,
     analysis: ArticleAnalysis | None = None,
     note_title: str | None = None,
     tags: list[str] | None = None,
     body: str | None = None,
     supplement: str | None = None,
+    report_links: list[str] | None = None,
+    root: Path | None = None,
 ) -> str:
     now = datetime.now()
-    resolved_note_title = note_title or build_note_title(row, analysis=analysis)
-    resolved_tags = tags or get_focus_tags(row, analysis=analysis)
-    resolved_body = body or build_body_paragraph(row, analysis=analysis)
-    resolved_supplement = supplement or build_supplement_text(row, analysis=analysis)
-    lines = [
-        "----",
-        build_resource_line(row, resolved_tags),
-        f"- _{build_apa_citation(row, analysis=analysis)}_",
-        f"- {resolved_body}",
-        "- 「补充信息」",
-        f"\t1. {resolved_supplement}",
-        "- 「文中引用」",
-        "\t1. 暂留空。",
-        "- 「好句子」",
-        "\t1. 暂留空。",
-        "",
-        "",
-        "----",
-        f"记录时间戳: {now.strftime('%Y-%m-%d')} {now.strftime('%H:%M:%S')}",
-    ]
-    return "\n".join(lines) + "\n"
+    resolved_note_title = note_title or build_note_title(row, analysis=analysis, root=root)
+    resolved_tags = tags or get_focus_tags(row, analysis=analysis, root=root)
+    resolved_body = body or build_body_paragraph(row, analysis=analysis, root=root)
+    resolved_supplement = supplement or build_supplement_text(row, analysis=analysis, root=root)
+    rendered = render_article_summary_template(
+        template_text,
+        {
+            "note_title": resolved_note_title,
+            "resource_line": build_resource_line(row, resolved_tags),
+            "resource_link": build_resource_link(row),
+            "tag_line": build_tag_line(resolved_tags),
+            "apa_citation": build_apa_citation(row, analysis=analysis),
+            "body": resolved_body,
+            "supplement": resolved_supplement,
+            "references_block": build_numbered_block([]),
+            "quotes_block": build_numbered_block([]),
+            "related_reports_block": build_numbered_block(report_links or []),
+            "timestamp_date": now.strftime("%Y-%m-%d"),
+            "timestamp_time": now.strftime("%H:%M:%S"),
+            "timestamp": now.strftime("%Y-%m-%d %H:%M:%S"),
+        },
+    )
+    return rendered
 
 
-def build_note_title(row: Row, analysis: ArticleAnalysis | None = None) -> str:
-    return build_note_title_from_chinese(row, build_chinese_title(row, analysis=analysis))
+def _run_article_summary_review_loop(
+    row: Row,
+    *,
+    template_text: str,
+    note_title: str,
+    markdown: str,
+    analysis: ArticleAnalysis | None = None,
+    root: Path | None = None,
+) -> tuple[str, list[str]]:
+    reviewed = markdown
+    for _ in range(ARTICLE_SUMMARY_REVIEW_MAX_PASSES):
+        fixed = _autofix_article_summary_markdown(
+            row,
+            template_text=template_text,
+            note_title=note_title,
+            markdown=reviewed,
+            analysis=analysis,
+            root=root,
+        )
+        issues = _validate_article_summary_markdown(fixed, row=row)
+        if not issues:
+            return fixed, []
+        if fixed == reviewed:
+            return fixed, issues
+        reviewed = fixed
+    return reviewed, _validate_article_summary_markdown(reviewed, row=row)
+
+
+def _autofix_article_summary_markdown(
+    row: Row,
+    *,
+    template_text: str,
+    note_title: str,
+    markdown: str,
+    analysis: ArticleAnalysis | None = None,
+    root: Path | None = None,
+) -> str:
+    tags = extract_summary_tags(markdown) or get_focus_tags(row, analysis=analysis, root=root)
+    body = extract_summary_body(markdown) or build_body_paragraph(row, analysis=analysis, root=root)
+    supplement = extract_numbered_line(markdown, "- 「补充信息」") or build_supplement_text(row, analysis=analysis, root=root)
+    supplement = normalize_summary_supplement(row, supplement)
+    source_kind = str(row.get("summary_source_kind", "") or "").strip().lower()
+    if source_kind and source_kind not in FULL_TEXT_SOURCE_KINDS:
+        tags = sanitize_tags(tags + [ABSTRACT_ONLY_TAG], root=root, context="article_summary_review")
+        supplement = annotate_abstract_only_supplement(supplement)
+    elif source_kind in FULL_TEXT_SOURCE_KINDS:
+        tags = [tag for tag in tags if tag != ABSTRACT_ONLY_TAG]
+    recommendation = build_recommendation(row, analysis=analysis, root=root)
+    one_sentence = build_one_sentence_summary(row, analysis=analysis, root=root)
+    chinese_title = note_title.split(" - ", 3)[-1] if " - " in note_title else note_title
+    _, tags, body, supplement, _, _ = validate_summary_fields(
+        row,
+        chinese_title,
+        tags,
+        body,
+        supplement,
+        recommendation,
+        one_sentence,
+        root=root,
+        candidate_context="article_summary_review",
+    )
+    fixed = render_article_summary(
+        row,
+        template_text=template_text,
+        analysis=analysis,
+        note_title=note_title,
+        tags=tags,
+        body=body,
+        supplement=supplement,
+        report_links=extract_related_report_links(markdown),
+        root=root,
+    )
+    return fixed
+
+
+def _validate_article_summary_markdown(markdown: str, *, row: Row) -> list[str]:
+    issues: list[str] = []
+    for marker in ARTICLE_SUMMARY_TEMPLATE_REQUIRED_MARKERS:
+        if marker not in markdown:
+            issues.append(f"缺少单篇总结模板要求的区块：{marker}")
+    if "{{" in markdown or "}}" in markdown:
+        issues.append("单篇总结正文仍包含未替换的模板占位符")
+    tags = extract_summary_tags(markdown)
+    body = extract_summary_body(markdown)
+    supplement = extract_numbered_line(markdown, "- 「补充信息」")
+    if not body:
+        issues.append("单篇总结缺少正文概括")
+    elif is_generic_sentence(body):
+        issues.append("单篇总结正文仍然过于空泛")
+    if "结果片段" in supplement:
+        issues.append("单篇总结补充信息仍包含“结果片段”旧表述")
+    source_kind = str(row.get("summary_source_kind", "") or "").strip().lower()
+    if source_kind and source_kind not in FULL_TEXT_SOURCE_KINDS:
+        if ABSTRACT_ONLY_TAG not in tags:
+            issues.append("摘要级单篇总结缺少“信息来源/仅摘要”标签")
+        if "当前总结仅基于摘要和元数据生成" not in supplement:
+            issues.append("摘要级单篇总结缺少摘要来源说明")
+    if source_kind in FULL_TEXT_SOURCE_KINDS and ABSTRACT_ONLY_TAG in tags:
+        issues.append("全文级单篇总结不应保留“信息来源/仅摘要”标签")
+    return issues
+
+
+def build_note_title(row: Row, analysis: ArticleAnalysis | None = None, root: Path | None = None) -> str:
+    return build_note_title_from_chinese(row, build_chinese_title(row, analysis=analysis, root=root))
 
 
 def build_note_title_from_chinese(row: Row, chinese_title: str) -> str:
@@ -581,66 +761,132 @@ def build_note_title_from_chinese(row: Row, chinese_title: str) -> str:
     return f"{first_author} {year} - {journal} - {sanitize_generation_text(chinese_title)}"
 
 
-def build_chinese_title(row: Row, analysis: ArticleAnalysis | None = None) -> str:
+TAG_GROUP_IDS = (
+    "research_object",
+    "event_driver",
+    "index_control",
+    "instrument_data",
+    "model_method",
+    "result_feature",
+    "application_impact",
+    "status",
+)
+
+
+def _empty_tag_groups() -> dict[str, list[str]]:
+    return {key: [] for key in TAG_GROUP_IDS}
+
+
+def _tag_phrase_for_sentence(tag: str) -> str:
+    parts = [item for item in tag.split("/") if item]
+    if not parts:
+        return tag
+    if parts[0] in {"仪器", "指数", "模型", "建模", "特征", "应用", "状态"} and len(parts) > 1:
+        return "/".join(parts[1:])
+    if parts[0] == "其他行星" and len(parts) > 1:
+        return parts[-1]
+    return tag
+
+
+def _tag_phrase_for_title(tag: str) -> str:
+    parts = [item for item in tag.split("/") if item]
+    if not parts:
+        return tag
+    if parts[0] in {"仪器", "指数", "模型", "建模", "特征", "应用", "状态"} and len(parts) > 1:
+        return "".join(parts[1:])
+    if parts[0] == "其他行星" and len(parts) > 1:
+        return parts[-1]
+    return "".join(parts)
+
+
+def _tag_text(tags: list[str], *, title_mode: bool = False) -> str:
+    if not tags:
+        return ""
+    formatter = _tag_phrase_for_title if title_mode else _tag_phrase_for_sentence
+    return "、".join(formatter(tag) for tag in tags)
+
+
+def _prefer_deeper_tags(tags: list[str]) -> list[str]:
+    ranked = [(tag.count("/"), index, tag) for index, tag in enumerate(tags)]
+    ranked.sort(key=lambda item: (-item[0], item[1]))
+    return [item[2] for item in ranked]
+
+
+def build_chinese_title(row: Row, analysis: ArticleAnalysis | None = None, root: Path | None = None) -> str:
     override = get_override(row)
     if override and "chinese_title" in override:
         return override["chinese_title"]
     if analysis:
         return analysis.chinese_title
 
-    science_tags = get_focus_tags_by_group(row)["science"]
-    physical_tags = get_focus_tags_by_group(row)["physical"]
-    if science_tags and physical_tags:
-        return f"{science_tags[0]}背景下{physical_tags[0]}特征研究"
-    if physical_tags:
-        return f"{physical_tags[0]}特征研究"
-    if science_tags:
-        return f"{science_tags[0]}相关研究"
+    grouped = get_focus_tags_by_group(row, root=root)
+    research_tags = _prefer_deeper_tags(grouped["research_object"])
+    driver_tags = grouped["event_driver"]
+    if driver_tags and research_tags:
+        return f"{_tag_phrase_for_title(driver_tags[0])}背景下{_tag_phrase_for_title(research_tags[0])}特征研究"
+    if research_tags:
+        return f"{_tag_phrase_for_title(research_tags[0])}特征研究"
+    if driver_tags:
+        return f"{_tag_phrase_for_title(driver_tags[0])}相关研究"
     return "文献内容概括待补充"
 
 
-def get_focus_tags(row: Row, analysis: ArticleAnalysis | None = None) -> list[str]:
+def get_focus_tags(row: Row, analysis: ArticleAnalysis | None = None, root: Path | None = None) -> list[str]:
     override = get_override(row)
     if override and "tags" in override:
-        return list(override["tags"])
+        return sanitize_tags(list(override["tags"]), root=root)
     if analysis:
-        return dedupe(list(analysis.tags))
+        inferred = infer_preferred_tags_from_text(
+            title_text=display_title(row),
+            extra_text="\n".join(filter(None, [clean_text(row["notes"]), "\n".join(topic_labels(row))])),
+            root=root,
+        )
+        source_inferred = infer_preferred_tags_from_text(
+            body_text=clean_text(row["abstract"]),
+            root=root,
+        )
+        source_grouped = group_tags(source_inferred, root=root)
+        body_driver_tags = source_grouped.get("event_driver", [])
+        return sanitize_tags(list(analysis.tags) + inferred + body_driver_tags, root=root)
 
-    grouped = get_focus_tags_by_group(row)
-    tags = grouped["science"][:2] + grouped["body"][:1] + grouped["instrument"][:3] + grouped["physical"][:3]
+    grouped = get_focus_tags_by_group(row, root=root)
+    tags = (
+        grouped["research_object"][:2]
+        + grouped["event_driver"][:2]
+        + grouped["index_control"][:1]
+        + grouped["instrument_data"][:3]
+        + grouped["model_method"][:2]
+        + grouped["result_feature"][:2]
+        + grouped["application_impact"][:1]
+        + grouped["status"][:1]
+    )
     if not tags:
-        tags = fallback_tags_from_topics(row)
-    return dedupe(tags)
+        tags = fallback_tags_from_topics(row, root=root)
+    return sanitize_tags(dedupe(tags), root=root)
 
 
-def get_focus_tags_by_group(row: Row) -> dict[str, list[str]]:
-    title_haystack = f" {display_title(row).lower()} "
-    haystack = normalize_haystack(row)
-    science = match_rules(haystack, SCIENCE_TAG_RULES)
-    body = match_rules(title_haystack, RESEARCH_BODY_TAG_RULES)
-    if not body:
-        body = match_rules(haystack, RESEARCH_BODY_TAG_RULES)
-    instrument = match_rules(haystack, INSTRUMENT_DATA_TAG_RULES)
-    physical = match_rules(haystack, PHYSICAL_TAG_RULES)
+def get_focus_tags_by_group(row: Row, root: Path | None = None) -> dict[str, list[str]]:
+    inferred = infer_preferred_tags_from_text(
+        title_text=display_title(row),
+        body_text=clean_text(row["abstract"]),
+        extra_text="\n".join(filter(None, [clean_text(row["notes"]), "\n".join(topic_labels(row))])),
+        root=root,
+    )
+    if not inferred:
+        inferred = fallback_tags_from_topics(row, root=root)
 
-    if not science:
-        science = fallback_tags_from_topics(row)
-
-    return {
-        "science": dedupe(science),
-        "body": dedupe(body),
-        "instrument": dedupe(instrument),
-        "physical": dedupe(physical),
-    }
+    groups = _empty_tag_groups()
+    grouped = group_tags(inferred, root=root)
+    for key in TAG_GROUP_IDS:
+        groups[key] = grouped.get(key, [])
+    return groups
 
 
-def infer_tags_from_text(text: str) -> list[str]:
-    haystack = f" {clean_text(text).lower()} "
-    return dedupe(
-        match_rules(haystack, SCIENCE_TAG_RULES)
-        + match_rules(haystack, RESEARCH_BODY_TAG_RULES)
-        + match_rules(haystack, INSTRUMENT_DATA_TAG_RULES)
-        + match_rules(haystack, PHYSICAL_TAG_RULES)
+def infer_tags_from_text(text: str, root: Path | None = None) -> list[str]:
+    return infer_preferred_tags_from_text(
+        title_text=text,
+        body_text=text,
+        root=root,
     )
 
 
@@ -658,17 +904,17 @@ def build_apa_citation(row: Row, analysis: ArticleAnalysis | None = None) -> str
     return f"{authors_text} ({year}). {title}. {journal}. {doi_url}"
 
 
-def build_body_paragraph(row: Row, analysis: ArticleAnalysis | None = None) -> str:
+def build_body_paragraph(row: Row, analysis: ArticleAnalysis | None = None, root: Path | None = None) -> str:
     override = get_override(row)
     if override and "body" in override:
         return override["body"]
     if analysis:
         return analysis.body
 
-    grouped = get_focus_tags_by_group(row)
-    science_text = "、".join(grouped["science"][:2]) if grouped["science"] else "相关空间物理问题"
-    instrument_text = "、".join(grouped["instrument"][:3]) if grouped["instrument"] else "题目和摘要提到的相关观测或模拟资料"
-    physical_text = "、".join(grouped["physical"][:3]) if grouped["physical"] else "关键物理过程"
+    grouped = get_focus_tags_by_group(row, root=root)
+    science_text = _tag_text(_prefer_deeper_tags(grouped["research_object"])[:2] + grouped["event_driver"][:1]) or "相关空间物理问题"
+    instrument_text = _tag_text(grouped["instrument_data"][:3] + grouped["model_method"][:1]) or "题目和摘要提到的相关观测或模拟资料"
+    physical_text = _tag_text(grouped["result_feature"][:2] + grouped["application_impact"][:1]) or _tag_text(grouped["research_object"][:2]) or "关键物理过程"
     method_text = infer_method(row)
     conclusion_text = infer_conclusion(row)
     return (
@@ -677,42 +923,78 @@ def build_body_paragraph(row: Row, analysis: ArticleAnalysis | None = None) -> s
     )
 
 
-def build_supplement_text(row: Row, analysis: ArticleAnalysis | None = None) -> str:
+def build_supplement_text(row: Row, analysis: ArticleAnalysis | None = None, root: Path | None = None) -> str:
     override = get_override(row)
     if override and "supplement" in override:
         return override["supplement"]
     if analysis:
-        return analysis.supplement
+        return normalize_summary_supplement(row, analysis.supplement)
 
-    grouped = get_focus_tags_by_group(row)
-    science_text = "、".join(grouped["science"][:2]) if grouped["science"] else "该研究主题"
-    physical_text = "、".join(grouped["physical"][:2]) if grouped["physical"] else "相关物理量"
+    grouped = get_focus_tags_by_group(row, root=root)
+    science_text = _tag_text(_prefer_deeper_tags(grouped["research_object"])[:2] + grouped["event_driver"][:1]) or "该研究主题"
+    physical_text = _tag_text(grouped["result_feature"][:2] + grouped["application_impact"][:1]) or _tag_text(_prefer_deeper_tags(grouped["research_object"])[:2]) or "相关物理量"
     return f"后续可继续关注{science_text}与{physical_text}之间的联系，以及是否有更多观测或模型结果支持当前结论。"
 
 
-def build_recommendation(row: Row, analysis: ArticleAnalysis | None = None) -> str:
+FULL_TEXT_SOURCE_KINDS = {"html_full_text", "local_pdf_full_text"}
+
+
+def normalize_summary_supplement(row: Row, supplement: str) -> str:
+    clean_supplement = sanitize_generation_text(supplement)
+    clean_supplement = clean_supplement.replace("结果片段", "相关内容")
+    clean_supplement = clean_supplement.replace("关键章节", "相关内容")
+    source_kind = str(row.get("summary_source_kind", "") or "").strip().lower()
+    if source_kind not in FULL_TEXT_SOURCE_KINDS:
+        return clean_supplement
+
+    normalized_prefix = (
+        "程序已读取并缓存全文；当前单篇总结为控制额度，基于从全文抽取的摘要、方法、结果和结论证据整理稿生成。"
+    )
+    if not clean_supplement:
+        return normalized_prefix
+    if normalized_prefix in clean_supplement:
+        return clean_supplement
+
+    cleaned_remainder = re.sub(
+        r"当前材料虽来自全文整理稿，但所给节选主要覆盖[^。]*。\s*",
+        "",
+        clean_supplement,
+    ).strip()
+    cleaned_remainder = re.sub(
+        r"来源文本为全文整理稿，但当前提供给我的证据[^。]*。\s*",
+        "",
+        cleaned_remainder,
+    ).strip()
+    cleaned_remainder = cleaned_remainder.replace("结果片段", "结果证据句")
+    cleaned_remainder = cleaned_remainder.replace("关键章节", "证据整理稿")
+    if not cleaned_remainder:
+        return normalized_prefix
+    return f"{normalized_prefix} {cleaned_remainder}"
+
+
+def build_recommendation(row: Row, analysis: ArticleAnalysis | None = None, root: Path | None = None) -> str:
     override = get_override(row)
     if override and "recommendation" in override:
         return override["recommendation"]
     if analysis:
         return analysis.recommendation
 
-    grouped = get_focus_tags_by_group(row)
-    science_text = "、".join(grouped["science"][:2]) if grouped["science"] else "当前主题"
+    grouped = get_focus_tags_by_group(row, root=root)
+    science_text = _tag_text(_prefer_deeper_tags(grouped["research_object"])[:2] + grouped["event_driver"][:1]) or "当前主题"
     return f"这篇文章与{science_text}方向相关，适合放入今日重点跟进列表。"
 
 
-def build_one_sentence_summary(row: Row, analysis: ArticleAnalysis | None = None) -> str:
+def build_one_sentence_summary(row: Row, analysis: ArticleAnalysis | None = None, root: Path | None = None) -> str:
     override = get_override(row)
     if override and "one_sentence" in override:
         return override["one_sentence"]
     if analysis:
         return analysis.one_sentence
 
-    grouped = get_focus_tags_by_group(row)
-    science_text = "、".join(grouped["science"][:2]) if grouped["science"] else "相关空间物理问题"
-    instrument_text = "、".join(grouped["instrument"][:2]) if grouped["instrument"] else "相关数据"
-    physical_text = "、".join(grouped["physical"][:2]) if grouped["physical"] else "关键物理量"
+    grouped = get_focus_tags_by_group(row, root=root)
+    science_text = _tag_text(_prefer_deeper_tags(grouped["research_object"])[:2] + grouped["event_driver"][:1]) or "相关空间物理问题"
+    instrument_text = _tag_text(grouped["instrument_data"][:2]) or "相关数据"
+    physical_text = _tag_text(grouped["result_feature"][:2] + grouped["application_impact"][:1]) or _tag_text(_prefer_deeper_tags(grouped["research_object"])[:2]) or "关键物理量"
     return f"文章围绕{science_text}，利用{instrument_text}分析了{physical_text}的变化特征。"
 
 
@@ -721,8 +1003,30 @@ def infer_method(row: Row) -> str:
     methods: list[str] = []
     if any(keyword in text for keyword in ["observation", "observations", "measured", "measurement", "satellite", "radar"]):
         methods.append("观测分析")
-    if any(keyword in text for keyword in ["simulation", "simulations", "model", "modeling", "reanalysis"]):
-        methods.append("数值模拟或模式对比")
+    if any(keyword in text for keyword in ["deep learning", "machine learning", "neural network", "resnet", "机器学习", "深度学习"]):
+        methods.append("机器学习建模")
+    if any(
+        keyword in text
+        for keyword in [
+            "first-principles",
+            "first principles",
+            "physics-based",
+            "general circulation model",
+            "mhd model",
+            "gitm",
+            "tie-gcm",
+            "waccm-x",
+            "ctipe",
+            "swmf",
+            "sami2",
+            "sami3",
+            "gaia",
+            "bats-r-us",
+        ]
+    ):
+        methods.append("理论数值模式")
+    if any(keyword in text for keyword in ["empirical model", "hasdm", "nrlmsise", "msis", "hwm", "jb2008", "iri"]):
+        methods.append("经验模型对比")
     if any(keyword in text for keyword in ["statistical", "statistics", "global", "climatology", "trend"]):
         methods.append("统计分析")
     if any(keyword in text for keyword in ["case study", "event", "storm", "substorm"]):
@@ -753,21 +1057,13 @@ def normalize_haystack(row: Row) -> str:
     return f" {display_title(row).lower()} {clean_text(row['abstract']).lower()} "
 
 
-def match_rules(haystack: str, rules: list[tuple[str, list[str]]]) -> list[str]:
-    matched: list[str] = []
-    for label, keywords in rules:
-        if any(keyword.lower() in haystack for keyword in keywords):
-            matched.append(label)
-    return matched
-
-
-def fallback_tags_from_topics(row: Row) -> list[str]:
+def fallback_tags_from_topics(row: Row, root: Path | None = None) -> list[str]:
     tags: list[str] = []
     for label in topic_labels(row):
         mapped = TOPIC_TO_TAG.get(label)
         if mapped:
             tags.append(mapped)
-    return tags
+    return sanitize_tags(tags, root=root)
 
 
 def format_authors_apa(authors: list[str]) -> str:
@@ -835,6 +1131,15 @@ def topic_labels(row: Row) -> list[str]:
     return [item for item in row["topic_labels"].split("\n") if item]
 
 
+def _resolve_local_pdf_path(row: Row) -> Path | None:
+    if "local_pdf_path" not in row.keys():
+        return None
+    raw = clean_text(row["local_pdf_path"])
+    if not raw:
+        return None
+    return Path(raw).expanduser()
+
+
 def build_filename(row: Row, analysis: ArticleAnalysis | None = None) -> str:
     return build_filename_from_chinese(row, build_chinese_title(row, analysis=analysis))
 
@@ -877,10 +1182,17 @@ def format_tag(tag: str) -> str:
     return "#" + re.sub(r"\s+", "", tag)
 
 
-def build_resource_line(row: Row, tags: list[str]) -> str:
+def build_tag_line(tags: list[str]) -> str:
+    return " ".join(format_tag(tag) for tag in tags)
+
+
+def build_resource_link(row: Row) -> str:
     doi_url = build_doi_url(row["doi"], row["url"])
-    resource_link = f"[DOI]({doi_url})" if doi_url else "PDF待补充"
-    return f"- {resource_link} {' '.join(format_tag(tag) for tag in tags)}".rstrip()
+    return f"[DOI]({doi_url})" if doi_url else "PDF待补充"
+
+
+def build_resource_line(row: Row, tags: list[str]) -> str:
+    return f"- {build_resource_link(row)} {build_tag_line(tags)}".rstrip()
 
 
 def display_title(row: Row) -> str:
@@ -894,6 +1206,11 @@ def abbreviate_journal_name(name: str) -> str:
 
 def clean_text(text: str) -> str:
     return re.sub(r"\s+", " ", str(text or "")).strip()
+
+
+def clean_source_text(text: str) -> str:
+    lines = [clean_text(line) for line in str(text or "").splitlines()]
+    return "\n".join(line for line in lines if line).strip()
 
 
 def normalize_doi(value: str) -> str:
@@ -937,6 +1254,17 @@ def extract_summary_body(text: str) -> str:
             break
         if stripped.startswith("- "):
             return stripped[2:].strip()
+    for follow in lines:
+        stripped = follow.strip()
+        if not stripped or not stripped.startswith("- "):
+            continue
+        if stripped.startswith("- _"):
+            continue
+        if "[DOI](" in stripped or "](https://" in stripped or stripped.startswith("- [["):
+            continue
+        if stripped.startswith("- 「"):
+            continue
+        return stripped[2:].strip()
     return ""
 
 
@@ -963,8 +1291,57 @@ def extract_numbered_line(text: str, header: str) -> str:
     return ""
 
 
+def load_article_summary_template(template_path: Path) -> str:
+    template_text = template_path.read_text(encoding="utf-8")
+    validate_article_summary_template(template_text, template_path)
+    return template_text
+
+
+def validate_article_summary_template(template_text: str, template_path: Path) -> None:
+    missing_markers = [marker for marker in ARTICLE_SUMMARY_TEMPLATE_REQUIRED_MARKERS if marker not in template_text]
+    if missing_markers:
+        joined = "、".join(missing_markers)
+        raise ValueError(f"Article summary template missing required markers in {template_path}: {joined}")
+
+    found_vars = set(ARTICLE_SUMMARY_TEMPLATE_VAR_RE.findall(template_text))
+    missing_vars = sorted(ARTICLE_SUMMARY_TEMPLATE_REQUIRED_VARS - found_vars)
+    if missing_vars:
+        joined = ", ".join(missing_vars)
+        raise ValueError(f"Article summary template missing required placeholders in {template_path}: {joined}")
+
+
+def render_article_summary_template(template_text: str, context: dict[str, str]) -> str:
+    def replace(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key not in context:
+            raise ValueError(f"Article summary template placeholder has no context value: {key}")
+        return str(context[key])
+
+    rendered = ARTICLE_SUMMARY_TEMPLATE_VAR_RE.sub(replace, template_text)
+    if not rendered.endswith("\n"):
+        rendered += "\n"
+    return rendered
+
+
+def build_numbered_block(items: list[str], empty_text: str = "暂留空。") -> str:
+    normalized = dedupe(items)
+    if not normalized:
+        return f"\t1. {empty_text}"
+    return "\n".join(f"\t{index}. {item}" for index, item in enumerate(normalized, start=1))
+
+
 def get_override(row: Row) -> dict | None:
+    if _row_flag(row, "disable_special_overrides", default=False):
+        return None
     return SPECIAL_PAPER_OVERRIDES.get(normalize_doi(row["doi"]))
+
+
+def _row_flag(row: Row, key: str, default: bool = False) -> bool:
+    try:
+        value = row[key]
+    except Exception:
+        value = row.get(key, default) if isinstance(row, dict) else default
+    return bool(value)
 
 
 def dedupe(items: list[str]) -> list[str]:
@@ -981,10 +1358,14 @@ def resolve_article_analysis(
     row: Row,
     analysis_engine: AnalysisEngine | None,
     index: int,
+    *,
+    raise_on_error: bool = False,
 ) -> ArticleAnalysis | None:
     if analysis_engine is None or get_override(row):
         return None
     try:
         return analysis_engine.analyze_article(row, index=index)
     except Exception:
+        if raise_on_error:
+            raise
         return None

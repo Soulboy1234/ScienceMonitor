@@ -1,32 +1,593 @@
 {
-  "version": "0.4",
-  "description": "Hierarchical focus tag taxonomy for article summaries. Tags should stay concise, noun-like, and suitable for long-term statistics in Obsidian.",
+  "version": "0.5",
+  "description": "Preferred hierarchical tag wordlist for ScienceMonitor. The runtime should normalize outputs toward these canonical names, but it remains open-vocabulary when no suitable preferred tag exists.",
   "categories": [
     {
-      "id": "science_questions",
-      "label": "科学问题"
+      "id": "research_object",
+      "label": "研究对象",
+      "order": 1
+    },
+    {
+      "id": "event_driver",
+      "label": "事件 / 驱动",
+      "order": 2
+    },
+    {
+      "id": "index_control",
+      "label": "指数 / 控制量",
+      "order": 3
     },
     {
       "id": "instrument_data",
-      "label": "仪器/数据"
+      "label": "仪器 / 数据",
+      "order": 4
     },
     {
-      "id": "research_body",
-      "label": "研究星球"
+      "id": "model_method",
+      "label": "模型 / 方法",
+      "order": 5
     },
     {
-      "id": "physical_quantities",
-      "label": "关注物理量"
+      "id": "result_feature",
+      "label": "结果特征",
+      "order": 6
+    },
+    {
+      "id": "application_impact",
+      "label": "应用 / 影响",
+      "order": 7
+    },
+    {
+      "id": "status",
+      "label": "状态标签",
+      "order": 8
     }
   ],
   "tag_rules": {
-    "style": "Use outer/inner hierarchy when helpful, keep outer layer broader and inner layer more specific, and prefer stable noun phrases over descriptive clauses."
+    "style": "Prefer concise noun-like hierarchical tags. Reuse this preferred wordlist first, but allow reasonable new tags when the list does not cover the paper.",
+    "open_vocabulary": true,
+    "default_max_tags": 14,
+    "candidate_log_path": "data/tag_candidates.json",
+    "drop_patterns": [
+      "^(研究星球/地球|地球|earth|terrestrial)$"
+    ],
+    "unknown_tag_policy": {
+      "max_length": 24,
+      "max_levels": 4,
+      "reject_patterns": [
+        "(?i)^(todo|tbd|placeholder|oops)$",
+        "^[0-9]+$"
+      ]
+    }
   },
+  "suppression_rules": [
+    {
+      "general": "指数/IMF",
+      "specific": "指数/IMF/Bx"
+    },
+    {
+      "general": "指数/IMF",
+      "specific": "指数/IMF/By"
+    },
+    {
+      "general": "指数/IMF",
+      "specific": "指数/IMF/Bz"
+    },
+    {
+      "general": "其他行星/行星综合",
+      "specific": "其他行星/月球"
+    },
+    {
+      "general": "其他行星/行星综合",
+      "specific": "其他行星/水星"
+    },
+    {
+      "general": "其他行星/行星综合",
+      "specific": "其他行星/金星"
+    },
+    {
+      "general": "其他行星/行星综合",
+      "specific": "其他行星/火星"
+    },
+    {
+      "general": "其他行星/行星综合",
+      "specific": "其他行星/木星"
+    },
+    {
+      "general": "其他行星/行星综合",
+      "specific": "其他行星/土星"
+    },
+    {
+      "general": "其他行星/行星综合",
+      "specific": "其他行星/天王星"
+    },
+    {
+      "general": "其他行星/行星综合",
+      "specific": "其他行星/海王星"
+    },
+    {
+      "general": "电离层",
+      "specific": "电离层/TEC"
+    },
+    {
+      "general": "电离层",
+      "specific": "电离层/低纬"
+    },
+    {
+      "general": "电离层",
+      "specific": "电离层/中纬"
+    },
+    {
+      "general": "电离层",
+      "specific": "电离层/高纬"
+    },
+    {
+      "general": "电离层",
+      "specific": "电离层/不规则体"
+    },
+    {
+      "general": "电离层",
+      "specific": "电离层/闪烁"
+    },
+    {
+      "general": "电离层",
+      "specific": "电离层/电子密度"
+    },
+    {
+      "general": "电离层",
+      "specific": "电离层/电子温度"
+    },
+    {
+      "general": "极区/对流",
+      "specific": "极区/对流边界"
+    },
+    {
+      "general": "极区/对流",
+      "specific": "极区/对流电场"
+    }
+  ],
   "tags": [
+    {
+      "id": "thermosphere",
+      "label": "热层",
+      "category": "research_object",
+      "patterns": [
+        "thermosphere",
+        "thermospheric",
+        "热层"
+      ]
+    },
+    {
+      "id": "thermosphere_density",
+      "label": "热层/密度",
+      "category": "research_object",
+      "aliases": [
+        "热层密度",
+        "中性密度",
+        "热层/质量密度"
+      ],
+      "patterns": [
+        "thermospheric mass density",
+        "thermospheric density",
+        "neutral density",
+        "mass density",
+        "air density",
+        "satellite drag",
+        "drag environment",
+        "drag of leo satellites",
+        "leo satellite drag",
+        "卫星阻力"
+      ]
+    },
+    {
+      "id": "thermosphere_wind",
+      "label": "热层/风场",
+      "category": "research_object",
+      "aliases": [
+        "热层/风",
+        "热层风"
+      ],
+      "patterns": [
+        "thermospheric wind",
+        "thermospheric winds",
+        "neutral wind",
+        "neutral winds",
+        "meridional wind",
+        "zonal wind",
+        "中性风",
+        "经向风",
+        "纬向风"
+      ]
+    },
+    {
+      "id": "thermosphere_temperature",
+      "label": "热层/温度",
+      "category": "research_object",
+      "aliases": [
+        "热层温度",
+        "中性温度"
+      ],
+      "patterns": [
+        "thermospheric temperature",
+        "neutral temperature",
+        "exospheric temperature"
+      ]
+    },
+    {
+      "id": "thermosphere_composition",
+      "label": "热层/成分",
+      "category": "research_object",
+      "aliases": [
+        "热层成分"
+      ],
+      "patterns": [
+        "o/n2",
+        "neutral composition",
+        "thermospheric composition",
+        "nitric oxide",
+        "atomic oxygen",
+        "oxygen-to-nitrogen ratio",
+        "一氧化氮",
+        "成分变化"
+      ]
+    },
+    {
+      "id": "thermosphere_tad",
+      "label": "热层/TAD",
+      "category": "research_object",
+      "patterns": [
+        "\\btad\\b",
+        "traveling atmospheric disturbance",
+        "traveling atmospheric disturbances"
+      ]
+    },
+    {
+      "id": "ionosphere",
+      "label": "电离层",
+      "category": "research_object",
+      "patterns": [
+        "ionosphere",
+        "ionospheric",
+        "电离层"
+      ]
+    },
+    {
+      "id": "ionosphere_tec",
+      "label": "电离层/TEC",
+      "category": "research_object",
+      "aliases": [
+        "TEC"
+      ],
+      "patterns": [
+        "total electron content",
+        "\\btec\\b",
+        "总电子含量"
+      ]
+    },
+    {
+      "id": "ionosphere_low_latitude",
+      "label": "电离层/低纬",
+      "category": "research_object",
+      "patterns": [
+        "low-latitude ionosphere",
+        "低纬电离层",
+        "赤道电离层"
+      ]
+    },
+    {
+      "id": "ionosphere_mid_latitude",
+      "label": "电离层/中纬",
+      "category": "research_object",
+      "patterns": [
+        "mid-latitude ionosphere",
+        "中纬电离层"
+      ]
+    },
+    {
+      "id": "ionosphere_high_latitude",
+      "label": "电离层/高纬",
+      "category": "research_object",
+      "patterns": [
+        "high-latitude ionosphere",
+        "高纬电离层",
+        "极区电离层"
+      ]
+    },
+    {
+      "id": "ionosphere_irregularity",
+      "label": "电离层/不规则体",
+      "category": "research_object",
+      "patterns": [
+        "ionospheric irregularit",
+        "equatorial plasma bubble",
+        "plasma bubble",
+        "等离子体泡",
+        "赤道等离子体泡"
+      ]
+    },
+    {
+      "id": "ionosphere_scintillation",
+      "label": "电离层/闪烁",
+      "category": "research_object",
+      "patterns": [
+        "ionospheric scintillation",
+        "电离层闪烁",
+        "闪烁"
+      ]
+    },
+    {
+      "id": "ionosphere_electron_density",
+      "label": "电离层/电子密度",
+      "category": "research_object",
+      "aliases": [
+        "电子密度"
+      ],
+      "patterns": [
+        "electron density",
+        "物理量/电子密度"
+      ]
+    },
+    {
+      "id": "ionosphere_electron_temperature",
+      "label": "电离层/电子温度",
+      "category": "research_object",
+      "aliases": [
+        "电子温度"
+      ],
+      "patterns": [
+        "electron temperature"
+      ]
+    },
+    {
+      "id": "polar_aurora",
+      "label": "极区/极光",
+      "category": "research_object",
+      "patterns": [
+        "aurora",
+        "auroral",
+        "极光"
+      ]
+    },
+    {
+      "id": "polar_convection",
+      "label": "极区/对流",
+      "category": "research_object",
+      "aliases": [
+        "高纬过程/极区对流"
+      ],
+      "patterns": [
+        "polar convection",
+        "极区对流"
+      ]
+    },
+    {
+      "id": "polar_convection_boundary",
+      "label": "极区/对流边界",
+      "category": "research_object",
+      "aliases": [
+        "极区对流/边界"
+      ],
+      "patterns": [
+        "convection boundary",
+        "polarconvectionboundary",
+        "polar cap boundary",
+        "极区对流边界"
+      ]
+    },
+    {
+      "id": "polar_convection_electric_field",
+      "label": "极区/对流电场",
+      "category": "research_object",
+      "patterns": [
+        "convection electric field",
+        "polar electric field",
+        "极区电场",
+        "对流电场"
+      ]
+    },
+    {
+      "id": "polar_facs",
+      "label": "极区/FACs",
+      "category": "research_object",
+      "patterns": [
+        "field-aligned current",
+        "\\bfacs?\\b",
+        "场向电流"
+      ]
+    },
+    {
+      "id": "polar_joule_heating",
+      "label": "极区/焦耳加热",
+      "category": "research_object",
+      "patterns": [
+        "joule heating",
+        "焦耳加热"
+      ]
+    },
+    {
+      "id": "magnetosphere",
+      "label": "磁层",
+      "category": "research_object",
+      "patterns": [
+        "magnetosphere",
+        "磁层",
+        "磁层状态",
+        "磁层活动"
+      ]
+    },
+    {
+      "id": "solar_terrestrial_coupling",
+      "label": "日地耦合",
+      "category": "research_object",
+      "patterns": [
+        "solar wind",
+        "interplanetary",
+        "日地耦合",
+        "太阳风"
+      ]
+    },
+    {
+      "id": "gravity_wave_tide",
+      "label": "重力波/潮汐",
+      "category": "research_object",
+      "patterns": [
+        "gravity wave",
+        "gravity waves",
+        "planetary wave",
+        "planetary waves",
+        "tidal",
+        "\\btide\\b",
+        "潮汐"
+      ]
+    },
+    {
+      "id": "moon",
+      "label": "其他行星/月球",
+      "category": "research_object",
+      "aliases": [
+        "研究星球/月球",
+        "电离层/月球",
+        "行星环境/月球"
+      ],
+      "patterns": [
+        "\\bmoon\\b",
+        "lunar",
+        "月球",
+        "danuri",
+        "\\bkplo\\b"
+      ],
+      "inference_scope": "title"
+    },
+    {
+      "id": "mercury",
+      "label": "其他行星/水星",
+      "category": "research_object",
+      "aliases": [
+        "研究星球/水星"
+      ],
+      "patterns": [
+        "\\bmercury\\b",
+        "mercurian",
+        "水星"
+      ],
+      "inference_scope": "title"
+    },
+    {
+      "id": "venus",
+      "label": "其他行星/金星",
+      "category": "research_object",
+      "aliases": [
+        "研究星球/金星"
+      ],
+      "patterns": [
+        "\\bvenus\\b",
+        "venusian",
+        "金星"
+      ],
+      "inference_scope": "title"
+    },
+    {
+      "id": "mars",
+      "label": "其他行星/火星",
+      "category": "research_object",
+      "aliases": [
+        "研究星球/火星"
+      ],
+      "patterns": [
+        "\\bmars\\b",
+        "martian",
+        "火星"
+      ],
+      "inference_scope": "title"
+    },
+    {
+      "id": "jupiter",
+      "label": "其他行星/木星",
+      "category": "research_object",
+      "aliases": [
+        "研究星球/木星",
+        "木卫三/极光",
+        "木卫三/大气"
+      ],
+      "patterns": [
+        "\\bjupiter\\b",
+        "jovian",
+        "木星",
+        "ganymede",
+        "europa",
+        "木卫三",
+        "木卫二"
+      ],
+      "inference_scope": "title"
+    },
+    {
+      "id": "saturn",
+      "label": "其他行星/土星",
+      "category": "research_object",
+      "aliases": [
+        "研究星球/土星",
+        "土卫六"
+      ],
+      "patterns": [
+        "\\bsaturn\\b",
+        "saturnian",
+        "土星",
+        "titan",
+        "enceladus",
+        "土卫二",
+        "土卫六"
+      ],
+      "inference_scope": "title"
+    },
+    {
+      "id": "uranus",
+      "label": "其他行星/天王星",
+      "category": "research_object",
+      "aliases": [
+        "研究星球/天王星",
+        "行星大气/天王星"
+      ],
+      "patterns": [
+        "\\buranus\\b",
+        "uranian",
+        "天王星"
+      ],
+      "inference_scope": "title"
+    },
+    {
+      "id": "neptune",
+      "label": "其他行星/海王星",
+      "category": "research_object",
+      "aliases": [
+        "研究星球/海王星"
+      ],
+      "patterns": [
+        "\\bneptune\\b",
+        "neptunian",
+        "海王星"
+      ],
+      "inference_scope": "title"
+    },
+    {
+      "id": "planetary_general",
+      "label": "其他行星/行星综合",
+      "category": "research_object",
+      "patterns": [
+        "planetary science",
+        "multi-planet",
+        "multi planet",
+        "行星比较",
+        "行星综合"
+      ],
+      "inference_scope": "title"
+    },
     {
       "id": "geomagnetic_storm",
       "label": "磁暴",
-      "category": "science_questions",
+      "category": "event_driver",
+      "aliases": [
+        "扰动/磁暴"
+      ],
       "patterns": [
         "geomagnetic storm",
         "magnetic storm",
@@ -37,305 +598,167 @@
       ]
     },
     {
-      "id": "space_weather",
-      "label": "空间天气",
-      "category": "science_questions",
+      "id": "cir_storm",
+      "label": "磁暴/CIR",
+      "category": "event_driver",
       "patterns": [
-        "space weather",
-        "空间天气",
-        "空间天气.*预报",
-        "预报.*空间天气"
+        "\\bcir\\b",
+        "corotating interaction region",
+        "corotating interaction regions"
       ]
     },
     {
-      "id": "solar_terrestrial",
-      "label": "日地耦合",
-      "category": "science_questions",
+      "id": "cme_storm",
+      "label": "磁暴/CME",
+      "category": "event_driver",
       "patterns": [
-        "solar wind",
-        "interplanetary",
-        "日地耦合",
-        "太阳风"
+        "\\bcme\\b",
+        "coronal mass ejection",
+        "coronal mass ejections"
       ]
     },
     {
-      "id": "magnetosphere",
-      "label": "磁层",
-      "category": "science_questions",
+      "id": "solar_wind_hss",
+      "label": "太阳风/高速流",
+      "category": "event_driver",
       "patterns": [
-        "magnetosphere",
-        "磁层",
-        "磁层状态",
-        "磁层活动",
-        "磁层/活动"
+        "high-speed stream",
+        "high speed stream",
+        "高速流"
       ]
     },
     {
-      "id": "polar_convection_boundary",
-      "label": "极区对流/边界",
-      "category": "science_questions",
+      "id": "interplanetary_shock",
+      "label": "行星际激波",
+      "category": "event_driver",
       "patterns": [
-        "polar convection",
-        "convection boundary",
-        "极区对流",
-        "边界.*极区对流",
-        "极区对流.*边界"
+        "interplanetary shock",
+        "interplanetary shocks",
+        "行星际激波"
       ]
     },
     {
-      "id": "ionosphere_low_latitude",
-      "label": "电离层/低纬",
-      "category": "science_questions",
+      "id": "ssw",
+      "label": "SSW",
+      "category": "event_driver",
       "patterns": [
-        "低纬.*电离层",
-        "电离层.*低纬",
-        "赤道电离层",
-        "low-latitude ionosphere"
+        "\\bssw\\b",
+        "sudden stratospheric warming",
+        "sudden stratospheric warmings"
       ]
     },
     {
-      "id": "ionosphere_mid_latitude",
-      "label": "电离层/中纬",
-      "category": "science_questions",
+      "id": "substorm",
+      "label": "亚暴",
+      "category": "event_driver",
       "patterns": [
-        "中纬.*电离层",
-        "电离层.*中纬",
-        "mid-latitude ionosphere"
+        "substorm",
+        "substorms",
+        "亚暴"
       ]
     },
     {
-      "id": "ionosphere_high_latitude",
-      "label": "电离层/高纬",
-      "category": "science_questions",
+      "id": "magnetic_reconnection",
+      "label": "磁重联",
+      "category": "event_driver",
       "patterns": [
-        "高纬.*电离层",
-        "电离层.*高纬",
-        "极区电离层",
-        "high-latitude ionosphere"
+        "magnetic reconnection",
+        "reconnection",
+        "磁重联"
       ]
     },
     {
-      "id": "ionosphere_irregularity",
-      "label": "电离层/不规则体",
-      "category": "science_questions",
+      "id": "imf",
+      "label": "指数/IMF",
+      "category": "index_control",
       "patterns": [
-        "电离层.*不规则体",
-        "等离子体泡",
-        "赤道等离子体泡",
-        "ionospheric irregularit"
+        "\\bimf\\b",
+        "interplanetary magnetic field"
       ]
     },
     {
-      "id": "ionosphere_scintillation",
-      "label": "电离层/闪烁",
-      "category": "science_questions",
+      "id": "imf_bx",
+      "label": "指数/IMF/Bx",
+      "category": "index_control",
       "patterns": [
-        "电离层.*闪烁",
-        "ionospheric scintillation",
-        "闪烁"
+        "\\bbx\\b",
+        "imf bx"
       ]
     },
     {
-      "id": "ionosphere_lunar",
-      "label": "电离层/月球",
-      "category": "science_questions",
+      "id": "imf_by",
+      "label": "指数/IMF/By",
+      "category": "index_control",
       "patterns": [
-        "月球.*电离层",
-        "电离层.*月球",
-        "lunar ionosphere"
+        "imf by",
+        "\\bimf\\s*by\\b",
+        "\\bb_y\\b",
+        "\\bby component\\b"
       ]
     },
     {
-      "id": "thermosphere",
-      "label": "热层",
-      "category": "science_questions",
+      "id": "imf_bz",
+      "label": "指数/IMF/Bz",
+      "category": "index_control",
       "patterns": [
-        "thermosphere",
-        "thermospheric",
-        "热层"
+        "\\bbz\\b",
+        "imf bz"
       ]
     },
     {
-      "id": "thermosphere_wind",
-      "label": "热层/风",
-      "category": "physical_quantities",
+      "id": "dst",
+      "label": "指数/Dst",
+      "category": "index_control",
       "patterns": [
-        "thermospheric wind",
-        "thermospheric winds",
-        "neutral wind",
-        "neutral winds",
-        "meridional wind",
-        "zonal wind",
-        "热层风",
-        "中性风",
-        "经向风",
-        "纬向风"
+        "\\bdst\\b"
       ]
     },
     {
-      "id": "thermosphere_density",
-      "label": "热层/密度",
-      "category": "physical_quantities",
+      "id": "symh",
+      "label": "指数/SYM-H",
+      "category": "index_control",
       "patterns": [
-        "thermospheric mass density",
-        "thermospheric density",
-        "neutral density",
-        "mass density",
-        "air density",
-        "drag environment",
-        "drag of leo satellites",
-        "leo satellite drag",
-        "satellite drag",
-        "热层密度",
-        "中性密度",
-        "卫星阻力"
+        "sym-h",
+        "\\bsymh\\b"
       ]
     },
     {
-      "id": "thermosphere_composition",
-      "label": "热层/成分",
-      "category": "physical_quantities",
+      "id": "ae",
+      "label": "指数/AE",
+      "category": "index_control",
       "patterns": [
-        "o/n2",
-        "composition",
-        "neutral composition",
-        "thermospheric composition",
-        "nitric oxide",
-        "atomic oxygen",
-        "oxygen-to-nitrogen ratio",
-        "热层成分",
-        "成分变化",
-        "一氧化氮"
+        "\\bae\\b"
       ]
     },
     {
-      "id": "thermosphere_temperature",
-      "label": "热层/温度",
-      "category": "physical_quantities",
+      "id": "f107",
+      "label": "指数/F107",
+      "category": "index_control",
       "patterns": [
-        "thermospheric temperature",
-        "neutral temperature",
-        "exospheric temperature",
-        "temperature",
-        "热层温度",
-        "中性温度",
-        "温度"
+        "f10.7",
+        "\\bf107\\b"
       ]
     },
     {
-      "id": "planetary_environment_lunar",
-      "label": "行星环境/月球",
-      "category": "science_questions",
+      "id": "roti",
+      "label": "指数/ROTI",
+      "category": "index_control",
+      "aliases": [
+        "GNSS/ROTI"
+      ],
       "patterns": [
-        "lunar environment",
-        "moon environment",
-        "月球环境"
-      ]
-    },
-    {
-      "id": "research_body_earth",
-      "label": "研究星球/地球",
-      "category": "research_body",
-      "patterns": [
-        "earth",
-        " earth ",
-        "earth's",
-        "terrestrial",
-        "地球"
-      ]
-    },
-    {
-      "id": "research_body_moon",
-      "label": "研究星球/月球",
-      "category": "research_body",
-      "patterns": [
-        "moon",
-        " moon ",
-        "lunar",
-        "月球"
-      ]
-    },
-    {
-      "id": "research_body_mars",
-      "label": "研究星球/火星",
-      "category": "research_body",
-      "patterns": [
-        "mars",
-        " mars ",
-        "martian",
-        "火星"
-      ]
-    },
-    {
-      "id": "research_body_venus",
-      "label": "研究星球/金星",
-      "category": "research_body",
-      "patterns": [
-        "venus",
-        " venus ",
-        "venusian",
-        "金星"
-      ]
-    },
-    {
-      "id": "research_body_mercury",
-      "label": "研究星球/水星",
-      "category": "research_body",
-      "patterns": [
-        "mercury",
-        " mercury ",
-        "mercurian",
-        "水星"
-      ]
-    },
-    {
-      "id": "research_body_jupiter",
-      "label": "研究星球/木星",
-      "category": "research_body",
-      "patterns": [
-        "jupiter",
-        " jupiter ",
-        "jovian",
-        "木星"
-      ]
-    },
-    {
-      "id": "research_body_saturn",
-      "label": "研究星球/土星",
-      "category": "research_body",
-      "patterns": [
-        "saturn",
-        " saturn ",
-        "saturnian",
-        "土星"
-      ]
-    },
-    {
-      "id": "research_body_uranus",
-      "label": "研究星球/天王星",
-      "category": "research_body",
-      "patterns": [
-        "uranus",
-        " uranus ",
-        "uranian",
-        "天王星"
-      ]
-    },
-    {
-      "id": "research_body_neptune",
-      "label": "研究星球/海王星",
-      "category": "research_body",
-      "patterns": [
-        "neptune",
-        " neptune ",
-        "neptunian",
-        "海王星"
+        "\\broti\\b",
+        "roti data",
+        "gnss/?roti"
       ]
     },
     {
       "id": "fpi",
-      "label": "FPI",
+      "label": "仪器/FPI",
       "category": "instrument_data",
+      "aliases": [
+        "FPI"
+      ],
       "patterns": [
         "fabry-perot",
         "fabry perot",
@@ -344,16 +767,60 @@
     },
     {
       "id": "superdarn",
-      "label": "SuperDARN",
+      "label": "仪器/SuperDARN",
       "category": "instrument_data",
+      "aliases": [
+        "SuperDARN"
+      ],
       "patterns": [
         "superdarn"
       ]
     },
     {
-      "id": "gnss",
-      "label": "GNSS",
+      "id": "champ",
+      "label": "仪器/CHAMP",
       "category": "instrument_data",
+      "aliases": [
+        "CHAMP",
+        "卫星/CHAMP"
+      ],
+      "patterns": [
+        "\\bchamp\\b"
+      ]
+    },
+    {
+      "id": "grace",
+      "label": "仪器/GRACE",
+      "category": "instrument_data",
+      "aliases": [
+        "GRACE",
+        "卫星/GRACE"
+      ],
+      "patterns": [
+        "\\bgrace\\b",
+        "gravity recovery and climate experiment"
+      ]
+    },
+    {
+      "id": "grace_fo",
+      "label": "仪器/GRACE-FO",
+      "category": "instrument_data",
+      "aliases": [
+        "GRACE-FO",
+        "卫星/GRACE-FO"
+      ],
+      "patterns": [
+        "\\bgrace-fo\\b",
+        "grace follow-on"
+      ]
+    },
+    {
+      "id": "gnss",
+      "label": "仪器/GNSS",
+      "category": "instrument_data",
+      "aliases": [
+        "GNSS"
+      ],
       "patterns": [
         "\\bgnss\\b",
         "\\bgps\\b",
@@ -362,49 +829,165 @@
       ]
     },
     {
-      "id": "gnss_roti",
-      "label": "GNSS/ROTI",
+      "id": "mms",
+      "label": "仪器/MMS",
       "category": "instrument_data",
+      "aliases": [
+        "MMS"
+      ],
       "patterns": [
-        "gnss/?roti",
-        "\\broti\\b",
-        "roti data"
+        "magnetospheric multi-scale",
+        "\\bmms\\b"
       ]
     },
     {
-      "id": "glm",
-      "label": "GLM",
+      "id": "dmsp",
+      "label": "仪器/DMSP",
       "category": "instrument_data",
+      "aliases": [
+        "DMSP"
+      ],
       "patterns": [
-        "广义线性模型",
-        "generalized linear model",
-        "\\bglm\\b"
+        "\\bdmsp\\b"
+      ]
+    },
+    {
+      "id": "icon",
+      "label": "仪器/ICON",
+      "category": "instrument_data",
+      "aliases": [
+        "ICON"
+      ],
+      "patterns": [
+        "\\bicon\\b",
+        "icon satellite"
+      ]
+    },
+    {
+      "id": "van_allen_probes",
+      "label": "仪器/VanAllenProbes",
+      "category": "instrument_data",
+      "aliases": [
+        "Van Allen Probes"
+      ],
+      "patterns": [
+        "van allen probes",
+        "van allen"
+      ]
+    },
+    {
+      "id": "nicer",
+      "label": "仪器/NICER",
+      "category": "instrument_data",
+      "aliases": [
+        "NICER"
+      ],
+      "patterns": [
+        "\\bnicer\\b"
+      ]
+    },
+    {
+      "id": "magnetometer",
+      "label": "仪器/磁强计",
+      "category": "instrument_data",
+      "aliases": [
+        "磁强计"
+      ],
+      "patterns": [
+        "magnetometer",
+        "magnetometers"
+      ]
+    },
+    {
+      "id": "ionosonde",
+      "label": "仪器/电离层测高仪",
+      "category": "instrument_data",
+      "aliases": [
+        "电离层测高仪"
+      ],
+      "patterns": [
+        "ionosonde",
+        "ionosonde doppler"
+      ]
+    },
+    {
+      "id": "radar",
+      "label": "仪器/雷达",
+      "category": "instrument_data",
+      "aliases": [
+        "雷达"
+      ],
+      "patterns": [
+        "\\bradar\\b",
+        "radars"
+      ]
+    },
+    {
+      "id": "auroral_imager",
+      "label": "仪器/极光图像",
+      "category": "instrument_data",
+      "aliases": [
+        "极光图像"
+      ],
+      "patterns": [
+        "auroral image",
+        "auroral images",
+        "auroral imager",
+        "auroral photograph",
+        "auroral photographs",
+        "auroralphotograph",
+        "auroralphotographs",
+        "all-sky image",
+        "all sky imager",
+        "all-sky camera",
+        "all sky camera",
+        "极光照片"
+      ]
+    },
+    {
+      "id": "reanalysis",
+      "label": "仪器/再分析资料",
+      "category": "instrument_data",
+      "aliases": [
+        "再分析资料"
+      ],
+      "patterns": [
+        "reanalysis",
+        "\\bera5\\b"
       ]
     },
     {
       "id": "radio_occultation",
-      "label": "射电掩星",
+      "label": "仪器/射电掩星",
       "category": "instrument_data",
+      "aliases": [
+        "射电掩星"
+      ],
       "patterns": [
-        "射电掩星",
         "radio occultation",
         "观测/?射电掩星"
       ]
     },
     {
       "id": "kplo",
-      "label": "KPLO",
+      "label": "仪器/KPLO",
       "category": "instrument_data",
+      "aliases": [
+        "KPLO"
+      ],
       "patterns": [
         "danuri",
-        "kplo",
+        "\\bkplo\\b",
         "korea pathfinder lunar orbiter"
       ]
     },
     {
       "id": "radio_s_band",
-      "label": "射电/S波段",
+      "label": "仪器/射电/S波段",
       "category": "instrument_data",
+      "aliases": [
+        "射电/S波段"
+      ],
       "patterns": [
         "s-band",
         "s波段",
@@ -412,43 +995,118 @@
       ]
     },
     {
-      "id": "auroral_images",
-      "label": "极光图像",
+      "id": "lunar_gravity_model",
+      "label": "仪器/月球重力场模型",
       "category": "instrument_data",
-      "patterns": [
-        "auroral image",
-        "auroral images",
-        "auroral photograph",
-        "aurora",
-        "极光图像",
-        "极光照片"
-      ]
-    },
-    {
-      "id": "magnetometer",
-      "label": "磁强计",
-      "category": "instrument_data",
-      "patterns": [
-        "magnetometer",
-        "magnetometers",
-        "磁强计"
-      ]
-    },
-    {
-      "id": "gravity_model_lunar",
-      "label": "月球/重力场",
-      "category": "instrument_data",
+      "aliases": [
+        "月球/重力场"
+      ],
       "patterns": [
         "月球重力场",
-        "重力场模型",
+        "lunar gravity",
         "gravity field model",
-        "lunar gravity"
+        "重力场模型"
       ]
     },
     {
-      "id": "orbit_determination",
-      "label": "轨道/重建",
+      "id": "omni",
+      "label": "仪器/OMNI",
       "category": "instrument_data",
+      "aliases": [
+        "OMNI"
+      ],
+      "patterns": [
+        "\\bomni\\b"
+      ]
+    },
+    {
+      "id": "machine_learning",
+      "label": "建模/机器学习",
+      "category": "model_method",
+      "patterns": [
+        "machine learning",
+        "机器学习"
+      ]
+    },
+    {
+      "id": "deep_learning",
+      "label": "深度学习",
+      "category": "model_method",
+      "aliases": [
+        "模型/深度学习",
+        "模型/残差网络",
+        "残差网络"
+      ],
+      "patterns": [
+        "deep learning",
+        "深度学习",
+        "residual network",
+        "\\bresnet\\b"
+      ]
+    },
+    {
+      "id": "glm",
+      "label": "建模/统计模型/GLM",
+      "category": "model_method",
+      "aliases": [
+        "GLM"
+      ],
+      "patterns": [
+        "generalized linear model",
+        "广义线性模型",
+        "\\bglm\\b"
+      ]
+    },
+    {
+      "id": "numerical_modeling",
+      "label": "建模/数值模拟",
+      "category": "model_method",
+      "aliases": [
+        "模式模拟"
+      ],
+      "patterns": [
+        "first-principles",
+        "first principles",
+        "physics-based model",
+        "general circulation model",
+        "mhd model",
+        "\\bgitm\\b",
+        "m-gitm",
+        "\\btie-gcm\\b",
+        "\\bwaccm-x\\b",
+        "\\bctipe\\b",
+        "\\bswmf\\b",
+        "\\bsami2\\b",
+        "\\bsami3\\b",
+        "\\bgaia\\b",
+        "\\bbats-r-us\\b"
+      ]
+    },
+    {
+      "id": "empirical_modeling",
+      "label": "建模/经验模型",
+      "category": "model_method",
+      "aliases": [
+        "经验模式",
+        "经验模型"
+      ],
+      "patterns": [
+        "empirical model",
+        "\\bmsis\\b",
+        "\\bnrlmsise\\b",
+        "\\bhasdm\\b",
+        "\\bhwm\\b",
+        "\\bjb2008\\b",
+        "\\biri\\b"
+      ]
+    },
+    {
+      "id": "orbit_reconstruction",
+      "label": "建模/轨道重建",
+      "category": "model_method",
+      "aliases": [
+        "轨道/重建"
+      ],
       "patterns": [
         "orbit reconstruction",
         "轨道重建",
@@ -456,53 +1114,147 @@
       ]
     },
     {
-      "id": "tec",
-      "label": "TEC",
-      "category": "physical_quantities",
+      "id": "auroral_intensity",
+      "label": "特征/极光强度",
+      "category": "result_feature",
+      "aliases": [
+        "极光强度"
+      ],
       "patterns": [
-        "total electron content",
-        "\\btec\\b",
-        "总电子含量"
+        "auroral intensity",
+        "auroral emission",
+        "auroral emissions"
       ]
     },
     {
       "id": "plasma_convection",
-      "label": "等离子体对流",
-      "category": "physical_quantities",
-      "patterns": [
-        "plasma convection",
-        "convection",
-        "drift",
+      "label": "特征/等离子体对流",
+      "category": "result_feature",
+      "aliases": [
         "等离子体对流"
+      ],
+      "patterns": [
+        "plasma convection"
       ]
     },
     {
-      "id": "auroral_intensity",
-      "label": "极光强度",
-      "category": "physical_quantities",
+      "id": "hemispheric_asymmetry",
+      "label": "特征/南北半球不对称性",
+      "category": "result_feature",
       "patterns": [
-        "auroral emission",
-        "auroral intensity",
-        "极光强度"
+        "hemispheric asymmetry",
+        "南北半球不对称"
       ]
     },
     {
-      "id": "electron_density",
-      "label": "电子密度",
-      "category": "physical_quantities",
+      "id": "day_night_asymmetry",
+      "label": "特征/昼夜不对称性",
+      "category": "result_feature",
       "patterns": [
-        "electron density",
-        "电子密度",
-        "物理量/?电子密度"
+        "day-night asymmetry",
+        "day night asymmetry",
+        "昼夜不对称"
       ]
     },
     {
-      "id": "electron_temperature",
-      "label": "电子温度",
-      "category": "physical_quantities",
+      "id": "dawn_dusk_asymmetry",
+      "label": "特征/晨昏不对称性",
+      "category": "result_feature",
       "patterns": [
-        "electron temperature",
-        "电子温度"
+        "dawn-dusk asymmetry",
+        "dawn dusk asymmetry",
+        "晨昏不对称"
+      ]
+    },
+    {
+      "id": "equatorial_mass_density_anomaly",
+      "label": "特征/赤道质量密度异常",
+      "category": "result_feature",
+      "aliases": [
+        "赤道/质量密度异常"
+      ],
+      "patterns": [
+        "equatorial mass density anomaly",
+        "equatorial thermosphere anomaly",
+        "赤道质量密度异常",
+        "赤道热层异常"
+      ]
+    },
+    {
+      "id": "space_weather",
+      "label": "空间天气",
+      "category": "application_impact",
+      "patterns": [
+        "space weather",
+        "空间天气"
+      ]
+    },
+    {
+      "id": "satellite_impact",
+      "label": "卫星影响",
+      "category": "application_impact",
+      "aliases": [
+        "卫星/阻力"
+      ],
+      "patterns": [
+        "satellite drag",
+        "satellite impact",
+        "orbital decay",
+        "orbit decay",
+        "轨道环境",
+        "轨道衰减",
+        "卫星影响",
+        "卫星阻力"
+      ]
+    },
+    {
+      "id": "operational_forecast",
+      "label": "业务化预报",
+      "category": "application_impact",
+      "patterns": [
+        "operational forecast",
+        "operational forecasting",
+        "forecast system",
+        "业务化预报",
+        "业务化"
+      ]
+    },
+    {
+      "id": "abstract_only",
+      "label": "信息来源/仅摘要",
+      "category": "status",
+      "aliases": [
+        "仅摘要",
+        "abstract-only"
+      ],
+      "patterns": [
+        "information source/abstract only"
+      ]
+    },
+    {
+      "id": "review",
+      "label": "综述",
+      "category": "status",
+      "patterns": [
+        "review article",
+        "review paper",
+        "综述"
+      ]
+    },
+    {
+      "id": "todo",
+      "label": "Todo",
+      "category": "status",
+      "patterns": [
+        "^todo$"
+      ]
+    },
+    {
+      "id": "important",
+      "label": "重要",
+      "category": "status",
+      "patterns": [
+        "^重要$"
       ]
     }
   ],
@@ -511,14 +1263,14 @@
       "doi": "10.1029/2025JA034386",
       "title": "Unusual Disturbed Thermospheric Wind Caused by Polar Convection at Mohe During 2025 New Year Storm",
       "selected_tags": [
+        "热层/风场",
+        "极区/对流边界",
         "磁暴",
-        "极区对流/边界",
-        "FPI",
-        "SuperDARN",
-        "极光图像",
-        "热层/风",
-        "等离子体对流",
-        "极光强度"
+        "仪器/FPI",
+        "仪器/SuperDARN",
+        "仪器/极光图像",
+        "特征/等离子体对流",
+        "特征/极光强度"
       ]
     },
     {
@@ -527,23 +1279,22 @@
       "selected_tags": [
         "电离层/低纬",
         "电离层/不规则体",
-        "空间天气",
-        "GNSS/ROTI",
-        "GLM",
-        "磁层"
+        "指数/ROTI",
+        "建模/统计模型/GLM",
+        "空间天气"
       ]
     },
     {
       "doi": "10.1029/2025JA034586",
       "title": "A Search for the Lunar Ionosphere With Danuri/Korea Pathfinder Lunar Orbiter (KPLO) Radio Occultations",
       "selected_tags": [
-        "电离层/月球",
-        "射电掩星",
-        "KPLO",
-        "射电/S波段",
-        "电子密度",
-        "月球/重力场",
-        "轨道/重建"
+        "电离层",
+        "其他行星/月球",
+        "仪器/KPLO",
+        "仪器/射电掩星",
+        "仪器/射电/S波段",
+        "仪器/月球重力场模型",
+        "建模/轨道重建"
       ]
     }
   ]

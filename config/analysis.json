@@ -3,17 +3,17 @@
   "article_summaries": {
     "enabled": true,
     "max_items_per_run": 0,
-    "fallback_to_rules": true
+    "reasoning_effort": "medium"
   },
   "report": {
     "enabled": true,
     "max_papers_in_prompt": 50,
-    "fallback_to_rules": true
+    "reasoning_effort": "medium"
   },
   "deep_reads": {
     "enabled": true,
     "max_input_chars": 28000,
-    "fallback_to_rules": false
+    "reasoning_effort": "high"
   },
   "codex_local": {
     "model": "",

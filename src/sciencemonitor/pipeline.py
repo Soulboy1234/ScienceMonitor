@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from .article_fetch import resolve_summary_source_material
 from .config import (
     article_summaries_root,
     data_root,
@@ -15,12 +16,11 @@ from .config import (
     load_topics,
     project_root,
     reports_root,
-    templates_root,
+    config_templates_root,
 )
 from .article_index import sync_out_library
 from .article_summaries import generate_article_summary_results, sync_summary_report_links
 from .crossref import CrossrefClient
-from .html_extract import extract_page_metadata
 from .http import HTTPClient
 from .llm import AnalysisEngine
 from .models import Paper, SourceConfig
@@ -160,6 +160,8 @@ class ScienceMonitor:
             summary_results,
             window_days=window_days,
             analysis_engine=self.analysis_engine,
+            root=self.root,
+            require_analysis=True,
         )
         report_path = write_report(reports_root(self.root), report_date, markdown)
         sync_summary_report_links(summary_results, report_path, root=self.root)
@@ -184,9 +186,12 @@ class ScienceMonitor:
         rows = [row for row in rows if not self._row_is_non_research(row)]
         return generate_article_summary_results(
             rows=rows,
-            template_path=templates_root(self.root) / "article_summary_template.md",
+            template_path=config_templates_root(self.root) / "article_summary_template.md",
             output_dir=article_summaries_root(self.root),
             analysis_engine=self.analysis_engine,
+            root=self.root,
+            enable_live_fetch=True,
+            require_analysis=True,
         )
 
     def sync_output_library(self):
@@ -308,18 +313,31 @@ class ScienceMonitor:
         return bool(topics) and all(topic == "methods_models" for topic in topics)
 
     def _hydrate_paper(self, paper: Paper) -> None:
-        if not paper.url:
+        if not paper.url and not paper.doi:
             return
         try:
-            html = self.http.get_text(paper.url)
-            page_title, abstract = extract_page_metadata(html)
+            material = resolve_summary_source_material(
+                doi=paper.doi,
+                url=paper.url,
+                title=paper.title,
+                journal=paper.source_name or paper.journal_title,
+                abstract=paper.abstract,
+                authors=paper.authors,
+                published_date=paper.published_date.isoformat(),
+                http=self.http,
+                crossref=self.crossref,
+            )
         except Exception:
             return
 
-        if abstract and (not paper.abstract or len(abstract) > len(paper.abstract)):
-            paper.abstract = clean_abstract_text(abstract)
-        if page_title and len(page_title) > len(paper.title) and len(page_title) < 240:
-            paper.title = page_title
+        if material.abstract and (not paper.abstract or len(material.abstract) > len(paper.abstract)):
+            paper.abstract = clean_abstract_text(material.abstract)
+        if material.title and len(material.title) > len(paper.title) and len(material.title) < 240:
+            paper.title = material.title
+        if material.url and not paper.url:
+            paper.url = material.url
+        if material.authors and not paper.authors:
+            paper.authors = list(material.authors)
         time.sleep(0.1)
 
     def _deduplicate(self, papers: list[Paper]) -> list[Paper]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from urllib.parse import quote
 
 from .http import HTTPClient
 from .models import Paper, SourceConfig
@@ -24,6 +25,48 @@ class CrossrefClient:
         payload = self.http.get_json(self.API_URL, params=params)
         items = payload.get("message", {}).get("items", [])
         return self._parse_items(source, items)
+
+    def lookup_work_by_doi(self, doi: str) -> dict | None:
+        clean_doi = (doi or "").strip()
+        if not clean_doi:
+            return None
+        payload = self.http.get_json(f"{self.API_URL}/{quote(clean_doi, safe='/')}")  # Crossref expects the slash to remain.
+        item = payload.get("message", {}) if isinstance(payload, dict) else {}
+        return self._parse_lookup_item(item)
+
+    def lookup_work_by_title(self, title: str) -> dict | None:
+        clean_title = clean_title_text(title)
+        if not clean_title:
+            return None
+        payload = self.http.get_json(
+            self.API_URL,
+            params={
+                "rows": "5",
+                "query.title": clean_title,
+                "select": ",".join(
+                    [
+                        "DOI",
+                        "URL",
+                        "resource",
+                        "link",
+                        "title",
+                        "container-title",
+                        "author",
+                        "published-online",
+                        "published-print",
+                        "published",
+                        "issued",
+                        "abstract",
+                    ]
+                ),
+            },
+        )
+        items = payload.get("message", {}).get("items", [])
+        for item in items:
+            parsed = self._parse_lookup_item(item)
+            if parsed and parsed.get("title"):
+                return parsed
+        return None
 
     def _build_query_params(
         self,
@@ -112,6 +155,41 @@ class CrossrefClient:
                 )
             )
         return results
+
+    def _parse_lookup_item(self, item: dict) -> dict | None:
+        title_list = item.get("title") or []
+        title = clean_title_text(title_list[0]) if title_list else ""
+        if not title:
+            return None
+
+        published = self._extract_date(item)
+        authors = self._parse_authors(item.get("author") or [])
+        container_titles = item.get("container-title") or []
+        journal = container_titles[0] if container_titles else ""
+        url = self._primary_url(item)
+        pdf_urls: list[str] = []
+        for link in item.get("link") or []:
+            candidate = str(link.get("URL", "") or "").strip()
+            if candidate and candidate not in pdf_urls:
+                pdf_urls.append(candidate)
+
+        return {
+            "doi": str(item.get("DOI", "") or ""),
+            "title": title,
+            "journal": clean_title_text(journal),
+            "url": url,
+            "authors": authors,
+            "published_date": published.isoformat() if published else "",
+            "abstract": clean_abstract_text(item.get("abstract", "") or ""),
+            "pdf_urls": pdf_urls,
+        }
+
+    def _primary_url(self, item: dict) -> str:
+        resource = item.get("resource") or {}
+        primary = resource.get("primary") or {}
+        if primary.get("URL"):
+            return str(primary["URL"])
+        return str(item.get("URL", "") or "")
 
     def _extract_date(self, item: dict) -> date | None:
         for field in ("published-online", "published-print", "published", "issued"):

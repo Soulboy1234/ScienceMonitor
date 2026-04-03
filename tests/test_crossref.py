@@ -87,6 +87,30 @@ class CrossrefClientTest(unittest.TestCase):
         self.assertNotIn("query.container-title", http.last_params)
         self.assertEqual(http.last_params["rows"], "15")
 
+    def test_lookup_work_by_doi_prefers_primary_resource_url_and_links(self) -> None:
+        payload = {
+            "message": {
+                "DOI": "10.1000/example",
+                "URL": "https://doi.org/10.1000/example",
+                "resource": {"primary": {"URL": "https://publisher.example.org/article"}},
+                "link": [{"URL": "https://publisher.example.org/article.pdf"}],
+                "title": ["Storm-time Electrodynamics"],
+                "container-title": ["Journal of Geophysical Research: Space Physics"],
+                "author": [{"given": "A", "family": "Author"}],
+                "issued": {"date-parts": [[2026, 3, 14]]},
+                "abstract": "<jats:p>Test abstract.</jats:p>",
+            }
+        }
+        client = CrossrefClient(http_client=FakeHTTPClient(payload))
+
+        result = client.lookup_work_by_doi("10.1000/example")
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["url"], "https://publisher.example.org/article")
+        self.assertEqual(result["pdf_urls"], ["https://publisher.example.org/article.pdf"])
+        self.assertEqual(result["published_date"], "2026-03-14")
+        self.assertEqual(result["abstract"], "Test abstract.")
+
 
 if __name__ == "__main__":
     unittest.main()

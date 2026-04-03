@@ -1,0 +1,68 @@
+{
+  "cases": [
+    {
+      "id": "2020_jgr_ine",
+      "title": "A Statistical Study on the Winter Ionospheric Nighttime Enhancement at Middle Latitudes in the Northern Hemisphere",
+      "journal": "Journal of Geophysical Research: Space Physics",
+      "doi": "10.1029/2020JA027950",
+      "url": "https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2020JA027950",
+      "asset_pdf": "assets/2020_jgr_ine.pdf"
+    },
+    {
+      "id": "2021_jgr_mohe_winds",
+      "title": "Variations of Thermospheric Winds Observed by a Fabry-Perot Interferometer at Mohe, China",
+      "journal": "Journal of Geophysical Research: Space Physics",
+      "doi": "10.1029/2020JA028655",
+      "url": "https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2020JA028655",
+      "asset_pdf": "assets/2021_jgr_mohe_winds.pdf"
+    },
+    {
+      "id": "2023_jgr_april_storm_coupling",
+      "title": "Multi-Instruments Observation of Ionospheric-Thermospheric Dynamic Coupling Over Mohe (53.5°N, 122.3°E) During the April 2023 Geomagnetic Storm",
+      "journal": "Journal of Geophysical Research: Space Physics",
+      "doi": "10.1029/2023JA032141",
+      "url": "https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2023JA032141",
+      "asset_pdf": "assets/2023_jgr_april_storm_coupling.pdf"
+    },
+    {
+      "id": "2023_sw_resnet_tmd",
+      "title": "Improving the Extraction Ability of Thermospheric Mass Density Variations From Observational Data by Deep Learning",
+      "journal": "Space Weather",
+      "doi": "10.1029/2022SW003376",
+      "url": "https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2022SW003376",
+      "asset_pdf": "assets/2023_sw_resnet_tmd.pdf"
+    },
+    {
+      "id": "2024_epp_superstorm_it_diff",
+      "title": "Interhemispheric and longitudinal differences in the ionosphere-thermosphere coupling process during the May 2024 superstorm",
+      "journal": "Earth and Planetary Physics",
+      "doi": "10.26464/epp2024073",
+      "url": "https://www.eppcgs.org/en/article/doi/10.26464/epp2024073",
+      "asset_pdf": "assets/2024_epp_superstorm_it_diff.pdf"
+    },
+    {
+      "id": "2024_sw_interplanetary_tmd_dl",
+      "title": "Interplanetary Influence on Thermospheric Mass Density: Insights From Deep Learning Analyses",
+      "journal": "Space Weather",
+      "doi": "10.1029/2024SW003952",
+      "url": "https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2024SW003952",
+      "asset_pdf": "assets/2024_sw_interplanetary_tmd_dl.pdf"
+    },
+    {
+      "id": "2026_jgr_polar_convection_mohe",
+      "title": "Unusual Disturbed Thermospheric Wind Caused by Polar Convection at Mohe During 2025 New Year Storm",
+      "journal": "Journal of Geophysical Research: Space Physics",
+      "doi": "10.1029/2025JA034386",
+      "url": "https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025JA034386",
+      "asset_pdf": "assets/2026_jgr_polar_convection_mohe.pdf"
+    },
+    {
+      "id": "2026_jgr_multiday_tmd_oscillation",
+      "title": "Spatial Feature of the Multi-Day Thermospheric Mass Density Oscillations Modulated by Interplanetary Environment Forcing",
+      "journal": "Journal of Geophysical Research: Space Physics",
+      "doi": "10.1029/2025JA034650",
+      "url": "https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025JA034650",
+      "asset_pdf": "assets/2026_jgr_multiday_tmd_oscillation.pdf"
+    }
+  ]
+}

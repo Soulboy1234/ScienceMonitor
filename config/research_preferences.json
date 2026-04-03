@@ -1,0 +1,34 @@
+{
+  "research_focus": [
+    "热层密度及其变化机制",
+    "空间环境对卫星运行、轨道衰减、阻力环境和任务安全的影响",
+    "空间天气对人类生产生活的影响",
+    "与应用相关的空间环境风险评估、预报和响应",
+    "热层风相关研究，但不再局限于漠河区域"
+  ],
+  "priority_alerts": [
+    "热层质量密度异常、长期变化、建模和数据同化",
+    "磁暴、亚暴、行星际环境变化对卫星阻力和轨道环境的影响",
+    "空间天气导致的卫星故障、通信导航受扰、轨道维持压力增加等应用问题",
+    "空间环境对低轨卫星星座、姿轨控和任务规划的影响",
+    "面向业务化或准业务化的预报模型、经验模型、机器学习模型",
+    "热层风与热层密度、卫星阻力、能量沉降之间的耦合关系"
+  ],
+  "priority_article_signals": [
+    "直接讨论 TMD、satellite drag、orbit decay、thermospheric forcing 的文章",
+    "讨论 space weather societal impacts、operational impacts、infrastructure impacts 的文章",
+    "讨论上游空间环境信息如何改善卫星环境建模和预报的文章"
+  ],
+  "monitoring_scope": {
+    "monitoring_domain": "space_physics",
+    "article_summary_domain": "space_physics",
+    "report_domain": "space_physics"
+  },
+  "deep_read_scope": {
+    "primary_domain": "space_physics",
+    "allow_related_disciplines": true,
+    "preferred_related_disciplines": [
+      "artificial_intelligence"
+    ]
+  }
+}

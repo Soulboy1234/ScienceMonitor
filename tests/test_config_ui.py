@@ -32,9 +32,9 @@ def _write_ui_project(root: pathlib.Path) -> None:
     )
     (root / "config" / "analysis.json").write_text(
         (
-            '{"provider":"codex_local","report":{"enabled":true,"max_papers_in_prompt":25,"fallback_to_rules":true},'
-            '"deep_reads":{"enabled":true,"max_input_chars":28000,"fallback_to_rules":false},'
-            '"article_summaries":{"enabled":true,"max_items_per_run":0,"fallback_to_rules":true},'
+            '{"provider":"codex_local","report":{"enabled":true,"max_papers_in_prompt":25,"reasoning_effort":"medium"},'
+            '"deep_reads":{"enabled":true,"max_input_chars":28000,"reasoning_effort":"high"},'
+            '"article_summaries":{"enabled":true,"max_items_per_run":0,"reasoning_effort":"medium"},'
             '"codex_local":{"model":"","executable":"","sandbox":"read-only","timeout_seconds":300},'
             '"openai_api":{"api_key":"","api_key_env":"SCIENCEMONITOR_OPENAI_API_KEY","model":"gpt-5-mini","base_url":"https://api.openai.com/v1/responses","timeout_seconds":120}}\n'
         ),

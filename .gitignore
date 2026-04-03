@@ -5,7 +5,11 @@ __pycache__/
 .DS_Store
 .venv/
 venv/
-/data/*.db
-/data/*.sqlite3
+/data/
 /out/
 /log/
+/tmp/
+/evals/real_cases/assets/
+/.obsidian/
+/启动操作面板.app/
+/关闭操作面板.app/

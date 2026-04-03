@@ -1,0 +1,20 @@
+{
+  "cases": [
+    {
+      "id": "2023_sw_resnet_tmd",
+      "title": "Improving the Extraction Ability of Thermospheric Mass Density Variations From Observational Data by Deep Learning",
+      "journal": "Space Weather",
+      "doi": "10.1029/2022SW003376",
+      "url": "https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2022SW003376",
+      "asset_pdf": "assets/2023_sw_resnet_tmd.pdf"
+    },
+    {
+      "id": "2026_jgr_polar_convection_mohe",
+      "title": "Unusual Disturbed Thermospheric Wind Caused by Polar Convection at Mohe During 2025 New Year Storm",
+      "journal": "Journal of Geophysical Research: Space Physics",
+      "doi": "10.1029/2025JA034386",
+      "url": "https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025JA034386",
+      "asset_pdf": "assets/2026_jgr_polar_convection_mohe.pdf"
+    }
+  ]
+}
