@@ -23,7 +23,7 @@ Tag: `v1.0.0`
 
 Snapshot commit:
 
-- 将在打 tag 后补记精确 commit
+- `1b16b4a3ebd2e1b310a5d8622b542d9fc1008c02`
 
 版本定位：
 
