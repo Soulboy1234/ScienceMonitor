@@ -15,11 +15,54 @@
 
 ## [Unreleased]
 
-- 预留给 `v1.0.0` 前的大清扫与归档工作
+- 暂无
+
+## [v1.0.0] - 2026-04-04
+
+Tag: `v1.0.0`
+
+Snapshot commit:
+
+- 将在打 tag 后补记精确 commit
+
+版本定位：
+
+- 以 harness engineering 理念完成重构后的首个正式版本
+- 目标是让项目在稳定性、输出治理、评测治理、维护治理和代码熵控制上进入可持续状态
+
+主要变化：
+
+- 完成 `v1.0.0` 前的结构清扫与归档：
+  - 新建根目录归档区 `no_need_for_v1.0.0/`
+  - 迁出旧 `docs/archive/` 历史材料和无引用配置 `config/codex_test_schema.json`
+  - 删除旧回退逻辑和一批死代码、旧引用、历史兼容转发
+- 完成面向维护的结构降熵：
+  - `cli.py` 收缩为薄入口，引入 `cli_support.py`
+  - 研究偏好逻辑拆入 `research_preferences.py`
+  - 全文科学文本清洗与证据抽取拆入 `article_source_text.py`
+  - 单篇总结、深度解读、真实案例输出、LLM prompt/schema 合同都拆出专门子模块
+- 完成代码级治理闭环：
+  - `entropy-check` 已覆盖模块行数、函数长度、包总行数、import cycle、unused import
+  - `maintenance-check` 已形成“审核-调整-测试-再审核”闭环
+  - `harness-check`、`golden-eval`、`real-eval` 已成为统一评测 gate
+- 完成项目治理入口收束：
+  - 新增 `docs/exec_plans/GovernanceBoard.md`
+  - 新增 `docs/user_guides/release_checklist.md`
+  - 明确计划、工程债、待办、维护日志、评测日志和版本记录的分层
+
+发版时状态：
+
+- `maintenance-check --auto-repair --max-passes 2` 通过
+- `harness-check --include-real-eval --real-case-ids 2023_sw_resnet_tmd,2026_jgr_polar_convection_mohe` 通过
+- `pytest -q` 通过
 
 ## [v0.1.0] - 2026-04-03
 
 Tag: `v0.1.0`
+
+Snapshot commit:
+
+- `8cf17236dab4e90ef51d58988fd6d9a1470a2a29`
 
 版本定位：
 

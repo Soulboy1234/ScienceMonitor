@@ -56,8 +56,8 @@
 
 ## 与普通文档的区别
 
-- `implementation plan.md` 是历史说明，不等于活跃 ExecPlan
-- `tasks.md` 是待办清单，不等于可恢复计划
+- `no_need_for_v1.0.0/docs_archive/user_guides/implementation plan.md` 是历史说明，不等于活跃 ExecPlan
+- `no_need_for_v1.0.0/docs_archive/user_guides/tasks.md` 是旧待办清单，不等于可恢复计划
 - ExecPlan 必须足够具体，让新的 agent 接手时不用回读整段聊天记录
 
 ## 什么是 source of truth

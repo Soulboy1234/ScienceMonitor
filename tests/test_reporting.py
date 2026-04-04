@@ -12,8 +12,8 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from sciencemonitor.reporting import _run_report_review_loop, build_report, write_report
-from sciencemonitor.article_summaries import ArticleSummaryResult
 from sciencemonitor.config import UserPreferenceProfile
+from sciencemonitor.models import ArticleSummaryResult
 
 
 class _FakeAnalysisEngine:

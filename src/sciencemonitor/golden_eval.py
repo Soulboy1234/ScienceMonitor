@@ -11,10 +11,11 @@ from unittest import mock
 
 from reportlab.pdfgen import canvas
 
-from .article_summaries import ArticleSummaryResult, generate_article_summaries
+from .article_summaries import generate_article_summaries
 from .config import logs_root, project_root
 from .deep_reads import run_deep_read
 from .llm import AnalysisEngine, ArticleAnalysis, DeepReadAnalysis, ReportAnalysis
+from .models import ArticleSummaryResult
 from .reporting import build_report
 from .storage import Storage
 

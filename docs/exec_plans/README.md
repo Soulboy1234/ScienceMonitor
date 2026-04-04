@@ -2,6 +2,7 @@
 
 这里存放 `ScienceMonitor` 的复杂任务计划。
 
+- `GovernanceBoard.md`：统一治理总览，串联版本目标、阻塞项、计划、日志与评测状态
 - `active/`：正在执行的计划
 - `completed/`：完成后的归档
 - `Todo.md`：已明确但暂未立项的近期待办

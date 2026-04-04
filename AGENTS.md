@@ -20,7 +20,8 @@
 2. [ARCHITECTURE.md](ARCHITECTURE.md)
 3. [PLANS.md](PLANS.md)
 4. [PROJECT_CONFIG.md](PROJECT_CONFIG.md)
-5. [docs/README.md](docs/README.md)
+5. [docs/exec_plans/GovernanceBoard.md](docs/exec_plans/GovernanceBoard.md)
+6. [docs/README.md](docs/README.md)
 
 如果任务涉及输出风格、标签、研究偏好，再继续读：
 
@@ -39,6 +40,7 @@
 - 统一 harness gate：`./scripts/run_science_monitor.sh harness-check`
 - Golden eval：`./scripts/run_science_monitor.sh golden-eval`
 - 真实案例评测：`./scripts/run_science_monitor.sh real-eval`
+- 发版前清单：`docs/user_guides/release_checklist.md`
 - 列出期刊：`./scripts/run_science_monitor.sh sources`
 - 跑测试：`./.venv/bin/python -m pytest -q`
 - 本地运行：`./scripts/run_science_monitor.sh <command>`
@@ -54,6 +56,7 @@
 - 统一 harness gate：`src/sciencemonitor/harness.py`
 - Golden eval：`src/sciencemonitor/golden_eval.py`
 - 真实案例评测：`src/sciencemonitor/real_case_eval.py`
+- 治理总览：`docs/exec_plans/GovernanceBoard.md`
 - 抓取：`src/sciencemonitor/crossref.py`
 - 网页全文/摘要抓取：`src/sciencemonitor/article_fetch.py`
 - 配置：`src/sciencemonitor/config.py`

@@ -23,8 +23,5 @@
 - 历史输出迁移：
   等代码和审核规则稳定后，再统一把旧的单篇总结、周报、深度解读输出迁移到当前命名和格式体系。
 
-- 大文件拆分：
-  `article_summaries.py`、`reporting.py`、`deep_reads.py`、`llm.py`、`article_index.py` 仍然偏大，后续要继续拆分模块职责。
-
 - `codex_local` 首轮全文分析时延优化：
   当前缓存命中后已较稳定，但首轮全文级分析仍偏慢。

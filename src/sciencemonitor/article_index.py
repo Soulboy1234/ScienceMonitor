@@ -2,20 +2,42 @@ from __future__ import annotations
 
 import re
 import sqlite3
-import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
+from .article_index_paths import (
+    format_wikilink,
+    iter_auto_note_paths,
+    iter_library_note_paths,
+    iter_manual_planet_note_paths,
+    iter_output_markdown_files,
+    obsidian_asset_target,
+    obsidian_note_target,
+    prefix_lookup_key,
+    resolve_note_target_path,
+    split_anchor,
+    sub_index_target,
+)
+from .article_index_rules import (
+    OTHER_PLANET_TAG_RE,
+    build_display_alias,
+    dedupe,
+    detect_other_planet,
+    extract_year_from_link,
+    infer_planetary_pages,
+    is_earth_specific_page,
+    link_stem,
+    normalize_asset_lookup_key,
+    normalize_doi,
+    normalize_haystack,
+    prettify_display_label,
+    prune_parent_pages,
+)
 from .config import (
     article_index_root,
     article_sub_index_root,
-    article_summaries_root,
     data_root,
-    deep_reads_root,
-    manual_notes_root,
-    obsidian_target as configured_obsidian_target,
     output_root,
-    output_relative_path,
     project_root,
 )
 
@@ -24,7 +46,6 @@ WIKILINK_RE = re.compile(r"(!)?\[\[(.+?)(?:\|([^\]]+))?\]\]")
 NUMBERED_LINK_RE = re.compile(r"^(\d+)\.\s+(\[\[[^\]]+\]\])\s*$")
 ORPHAN_NUMBER_RE = re.compile(r"^\d+\.\s*$")
 DOI_URL_RE = re.compile(r"https://doi\.org/([^\s_)]+)", re.IGNORECASE)
-OTHER_PLANET_TAG_RE = re.compile(r"(?<!\w)#其他行星/[^\s#]+")
 ASSET_EXTENSIONS = {
     ".pdf",
     ".png",
@@ -46,8 +67,6 @@ ASSET_EXTENSIONS = {
     ".txt",
 }
 PLANETARY_ROOT_PAGE = "6 - 其他行星"
-PLANETARY_FOCUS_PAGES = {"7 - 太阳与日球层", "8 - 波粒相互作用", "9 - 高能粒子与辐射带"}
-EARTH_SECTION_PREFIXES = ("1", "2", "3", "4")
 
 INDEX_TREE: list[tuple[str, list]] = [
     ("1 - 空间环境", ["1.1 - 行星际磁场影响", "1.2 - 空间环境指数", "1.3 - 应用"]),
@@ -129,20 +148,6 @@ PLANET_PAGE_MAP = {
 
 PLANET_TAG_MAP = {planet: f"其他行星/{planet}" for planet in PLANET_PAGE_MAP}
 PLANETARY_PAGE_NAMES = set(PLANET_PAGE_MAP.values()) | {"6.4.1 - 行星际环境的影响"}
-DISPLAY_STATUS_SUFFIX_RE = re.compile(r"\s*-\s*(重要|Todo|TODO|待读|待读|待整理|可做)$")
-
-PLANET_KEYWORDS = {
-    "月球": ["研究星球/月球", " lunar ", " moon ", "月球", "danuri", "kplo", "chang’e", "chang'e"],
-    "水星": ["研究星球/水星", " mercury ", " mercurian ", "水星"],
-    "金星": ["研究星球/金星", " venus ", " venusian ", "金星"],
-    "火星": ["研究星球/火星", " mars ", " martian ", "火星", "nozomi"],
-    "木星": ["研究星球/木星", " jupiter ", " jovian ", "木星", "ganymede", "木卫三", "europa", "木卫二"],
-    "土星": ["研究星球/土星", " saturn ", " saturnian ", "土星", "titan", "土卫六", "enceladus", "土卫二"],
-    "天王星": ["研究星球/天王星", " uranus ", " uranian ", "天王星"],
-    "海王星": ["研究星球/海王星", " neptune ", " neptunian ", "海王星"],
-}
-
-PLANETARY_GENERIC_KEYWORDS = ["研究星球/行星综合", "多行星", "multi-planet", "multi planet", "行星比较", "行星综合"]
 
 KEYWORD_PAGE_RULES: list[tuple[str, list[str]]] = [
     ("9 - 高能粒子与辐射带", ["radiation belt", "辐射带", "solar energetic particle", "太阳高能粒子", "gcr", "energetic particle", "高能粒子", "俘获电子", "俘获质子"]),
@@ -189,14 +194,6 @@ TOPIC_FALLBACK_PAGES = {
     "行星空间环境": "6.9 - 行星综合",
 }
 
-PARENT_PAGE_RULES = {
-    "2 - 热层电离层耦合系统": "2.",
-    "4 - 磁层": "4.",
-    "3 - 临近空间": "3.",
-    PLANETARY_ROOT_PAGE: "6.",
-    "6.4 - 火星": "6.4.",
-}
-
 
 @dataclass(frozen=True)
 class LibrarySyncResult:
@@ -239,7 +236,7 @@ def sync_out_library(root: Path | None = None) -> LibrarySyncResult:
     for page_path in sorted(article_sub_index_root(project).glob("*.md")):
         remove_auto_links(page_path, project)
 
-    remove_planet_links_from_earth_sections(project, note_map)
+    remove_planet_links_from_earth_sections(project)
     remove_misplaced_note_links_from_planet_pages(project)
 
     indexed_notes = 0
@@ -416,38 +413,6 @@ def build_asset_map(root: Path) -> dict[str, Path]:
     return assets
 
 
-def iter_output_markdown_files(root: Path) -> list[Path]:
-    return sorted(output_root(root).rglob("*.md"))
-
-
-def iter_auto_note_paths(root: Path) -> list[Path]:
-    paths: list[Path] = []
-    for folder in (article_summaries_root(root), deep_reads_root(root)):
-        if folder.exists():
-            paths.extend(sorted(folder.glob("*.md")))
-    return paths
-
-
-def iter_library_note_paths(root: Path) -> list[Path]:
-    paths: list[Path] = []
-    for folder in (manual_notes_root(root), article_summaries_root(root), deep_reads_root(root)):
-        if folder.exists():
-            paths.extend(sorted(folder.glob("*.md")))
-    return paths
-
-
-def iter_manual_planet_note_paths(root: Path) -> list[Path]:
-    result: list[Path] = []
-    folder = manual_notes_root(root)
-    if not folder.exists():
-        return result
-    for path in sorted(folder.glob("*.md")):
-        text = path.read_text(encoding="utf-8", errors="ignore")
-        if detect_other_planet(path.stem, text):
-            result.append(path)
-    return result
-
-
 def repair_markdown_links(
     markdown: str,
     note_map: dict[str, Path],
@@ -520,22 +485,6 @@ def normalize_other_planet_tag(note_path: Path) -> bool:
     return True
 
 
-def detect_other_planet(note_title: str, text: str) -> str | None:
-    haystack = build_planet_detection_haystack(note_title, text)
-    matches = []
-    for planet, keywords in PLANET_KEYWORDS.items():
-        if any(keyword.lower() in haystack for keyword in keywords):
-            matches.append(planet)
-    matches = dedupe(matches)
-    if len(matches) > 1:
-        return "行星综合"
-    if len(matches) == 1:
-        return matches[0]
-    if any(keyword.lower() in haystack for keyword in PLANETARY_GENERIC_KEYWORDS):
-        return "行星综合"
-    return None
-
-
 def infer_sub_index_pages(note_path: Path, root: Path) -> list[str]:
     text = note_path.read_text(encoding="utf-8", errors="ignore")
     planet = detect_other_planet(note_path.stem, text)
@@ -563,24 +512,6 @@ def infer_sub_index_pages(note_path: Path, root: Path) -> list[str]:
 
     pages = prune_parent_pages(dedupe(pages))
     return pages[:3]
-
-
-def infer_planetary_pages(note_title: str, text: str, planet: str) -> list[str]:
-    haystack = normalize_haystack(f"{note_title}\n{text}")
-    pages = [PLANET_PAGE_MAP[planet]]
-
-    if planet == "火星" and any(keyword in haystack for keyword in ["interplanetary", "行星际", "solar wind", "太阳风"]):
-        pages.append("6.4.1 - 行星际环境的影响")
-    if any(keyword.lower() in haystack for keyword in ["radiation belt", "辐射带", "solar energetic particle", "太阳高能粒子", "gcr", "高能粒子"]):
-        pages.append("9 - 高能粒子与辐射带")
-    if any(keyword.lower() in haystack for keyword in ["wave-particle", "波粒相互作用", "chorus", "whistler", "ulf wave", "electron conic"]):
-        pages.append("8 - 波粒相互作用")
-    if any(keyword.lower() in haystack for keyword in ["solar wind", "太阳风", "interplanetary", "行星际", "heliosphere", "日球层", "icme", "cme"]):
-        pages.append("7 - 太阳与日球层")
-    if planet == "行星综合":
-        pages.append("6.9 - 行星综合")
-
-    return dedupe(pages)[:3]
 
 
 def load_doi_topics(root: Path) -> dict[str, list[str]]:
@@ -644,7 +575,7 @@ def remove_auto_links(page_path: Path, root: Path) -> None:
     )
 
 
-def remove_planet_links_from_earth_sections(root: Path, note_map: dict[str, Path]) -> None:
+def remove_planet_links_from_earth_sections(root: Path) -> None:
     for page_path in sorted(article_sub_index_root(root).glob("*.md")):
         page_name = page_path.stem
         if not is_earth_specific_page(page_name):
@@ -757,158 +688,3 @@ def renumber_link_blocks(lines: list[str]) -> str:
     if block:
         rewritten.extend(f"{index}. {item}" for index, item in enumerate(block, start=1))
     return "\n".join(rewritten).rstrip() + "\n"
-
-
-def prune_parent_pages(page_names: list[str]) -> list[str]:
-    refined = list(page_names)
-    for parent, prefix in PARENT_PAGE_RULES.items():
-        if parent in refined and any(item != parent and item.startswith(prefix) for item in refined):
-            refined.remove(parent)
-    return refined
-
-
-def is_earth_specific_page(page_name: str) -> bool:
-    return page_name.split(" - ", 1)[0].split(".", 1)[0] in EARTH_SECTION_PREFIXES
-
-
-def obsidian_note_target(path: Path, root: Path) -> str:
-    return configured_obsidian_target(path, root=root, keep_suffix=False)
-
-
-def obsidian_asset_target(path: Path, root: Path) -> str:
-    return configured_obsidian_target(path, root=root, keep_suffix=True)
-
-
-def split_anchor(target: str) -> tuple[str, str]:
-    if "#" not in target:
-        return target, ""
-    base, anchor = target.split("#", 1)
-    return base, f"#{anchor}"
-
-
-def format_wikilink(target: str, alias: str | None, bang: str = "") -> str:
-    if alias:
-        return f"{bang}[[{target}|{alias}]]"
-    return f"{bang}[[{target}]]"
-
-
-def build_display_alias(target: str, alias: str | None) -> str | None:
-    if "/" not in target and alias is None:
-        return None
-    label = alias or link_stem(target)
-    return prettify_display_label(label)
-
-
-def prettify_display_label(label: str) -> str:
-    cleaned = DISPLAY_STATUS_SUFFIX_RE.sub("", label.strip())
-    return re.sub(r"\s{2,}", " ", cleaned).strip()
-
-
-def build_planet_detection_haystack(note_title: str, text: str) -> str:
-    selected = [note_title]
-    kept = 0
-    for raw_line in text.replace("\x00", "").splitlines():
-        line = raw_line.strip()
-        if not line or line == "----":
-            continue
-        if line.startswith("记录时间戳"):
-            break
-        if "「补充信息」" in line:
-            break
-        line = OTHER_PLANET_TAG_RE.sub("", line)
-        line = re.sub(r"\[\[[^\]]+\]\]", " ", line)
-        selected.append(line)
-        kept += 1
-        if kept >= 4:
-            break
-    return normalize_haystack("\n".join(selected))
-
-
-def normalize_haystack(text: str) -> str:
-    compact = re.sub(r"\s+", " ", text or "")
-    return f" {compact.lower()} "
-
-
-def normalize_asset_lookup_key(value: str) -> str:
-    normalized = unicodedata.normalize("NFKC", value or "").lower()
-    normalized = (
-        normalized.replace("–", "-")
-        .replace("—", "-")
-        .replace("‐", "-")
-        .replace("‑", "-")
-        .replace("−", "-")
-        .replace("“", '"')
-        .replace("”", '"')
-        .replace("’", "'")
-        .replace("‘", "'")
-        .replace("[r-qucik]", "[r-quick]")
-        .replace("_withmarginnotes", "")
-        .replace("withmarginnotes", "")
-        .replace("[", "")
-        .replace("]", "")
-    )
-    normalized = re.sub(r"\s+", " ", normalized)
-    normalized = re.sub(r"\s+\.", ".", normalized)
-    return normalized.strip()
-
-
-def normalize_doi(value: str) -> str:
-    return re.sub(r"\s+", "", str(value or "")).strip().lower().rstrip(").,;")
-
-
-def extract_year(text: str) -> int:
-    match = re.search(r"\b(19|20)\d{2}\b", text)
-    return int(match.group(0)) if match else 9999
-
-
-def extract_year_from_link(link: str) -> int:
-    match = WIKILINK_RE.search(link)
-    if not match:
-        return 9999
-    alias = match.group(3) or link_stem(match.group(2))
-    return extract_year(alias)
-
-
-def dedupe(items: list[str]) -> list[str]:
-    seen: set[str] = set()
-    unique: list[str] = []
-    for item in items:
-        if item and item not in seen:
-            unique.append(item)
-            seen.add(item)
-    return unique
-
-
-def link_stem(target: str) -> str:
-    name = Path(target).name
-    return name[:-3] if name.lower().endswith(".md") else name
-
-
-def prefix_lookup_key(stem: str) -> str:
-    parts = stem.split(" - ", 2)
-    if len(parts) < 3:
-        return ""
-    return f"prefix::{parts[0]} - {parts[1]}"
-
-
-def resolve_note_target_path(target: str, library_root: Path) -> Path | None:
-    candidate = library_root / target
-    if target.lower().endswith(".md"):
-        normalized = candidate
-    else:
-        normalized = Path(f"{candidate.as_posix()}.md")
-    if normalized.exists():
-        return normalized
-    return None
-
-
-def sub_index_target(page_name: str) -> str:
-    return f"article_index/sub_index/{page_name}"
-
-
-def is_relative_to(path: Path, other: Path) -> bool:
-    try:
-        path.resolve().relative_to(other.resolve())
-        return True
-    except ValueError:
-        return False

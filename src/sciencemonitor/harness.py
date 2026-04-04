@@ -5,10 +5,10 @@ from pathlib import Path
 
 from .doctor import run_doctor
 from .golden_eval import GoldenEvalCaseResult, render_golden_eval_summary, run_golden_eval
+from .real_case_outputs import render_real_case_fixture_summary
 from .real_case_eval import (
     RealCaseEvalResult,
     RealCaseFixtureCheckResult,
-    render_real_case_fixture_summary,
     run_real_case_fixture_eval,
 )
 

@@ -23,6 +23,7 @@ def _entropy_report(passed: bool) -> EntropyCheckReport:
         module_line_counts={"a.py": 1},
         function_lengths={"a.py::f": 1},
         import_cycles=[],
+        unused_imports={},
         issues=[] if passed else [],
         budget_path=ROOT / "config" / "maintenance_budget.json",
     )
@@ -87,6 +88,7 @@ class MaintenanceCycleTest(unittest.TestCase):
                 module_line_counts={"a.py": 100},
                 function_lengths={"a.py::f": 90},
                 import_cycles=[],
+                unused_imports={},
                 issues=[],
                 budget_path=ROOT / "config" / "maintenance_budget.json",
             )

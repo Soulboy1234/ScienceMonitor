@@ -166,3 +166,14 @@ fixture 位置：
 - `golden eval` 适合进 CI，因为它稳定、便宜、无外部依赖
 - `real eval` 默认不进 CI，因为它依赖真实来源和真实 LLM，成本更高
 - 深度解读真实基线是否纳入 fixture，应按额度和样例成熟度逐步推进
+
+## 7. 记录要求
+
+评测治理相关信息按下面方式记录：
+
+- 基线定义：`evals/golden/`、`evals/real_cases/fixtures/`
+- 单次运行产物：`log/golden_eval/`、`log/real_case_eval/`
+- 当前项目治理状态：`docs/exec_plans/GovernanceBoard.md`
+- 长期评测方向问题：`docs/exec_plans/tech_debt_tracker.md`
+
+只有在“基线策略、真实案例范围、发布阻塞项”发生变化时，才更新 `GovernanceBoard.md`。

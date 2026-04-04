@@ -15,9 +15,11 @@
 - `evals/`
   放 golden eval 基线样例和真实论文集成评测清单
 - `docs/`
-  放项目内部规范、用户说明、执行计划和历史归档
+  放项目内部规范、用户说明和执行计划
+- `no_need_for_v1.0.0/`
+  放 `v1.0.0` 前清扫时移出的历史材料和无用配置
 
-当前目录按职责分成四层：
+当前目录按职责分成三层：
 
 - [workflow_specs](workflow_specs)
   - 输出规范、风格指南、标签参考、prompt 契约和 source-of-truth 说明
@@ -25,8 +27,6 @@
   - 面向用户阅读的说明文档
 - [exec_plans](exec_plans)
   - 复杂任务的执行计划、迁移记录和工程债追踪
-- [archive](archive)
-  - 已失去当前控制面职责、但仍值得保留的历史文档
 
 运行时直接读取的关键文件不再放在 `docs/` 下：
 
@@ -49,6 +49,8 @@
 8. [workflow_specs/rules.md](workflow_specs/rules.md)
 9. [user_guides/llm_analysis_readme.md](user_guides/llm_analysis_readme.md)
 10. [exec_plans/README.md](exec_plans/README.md)
+11. [exec_plans/GovernanceBoard.md](exec_plans/GovernanceBoard.md)
+12. [user_guides/release_checklist.md](user_guides/release_checklist.md)
 
 ## 目录说明
 
@@ -72,15 +74,17 @@
 - [llm_analysis_readme.md](user_guides/llm_analysis_readme.md)
 - [eval_governance_runbook.md](user_guides/eval_governance_runbook.md)
 - [maintenance_governance_runbook.md](user_guides/maintenance_governance_runbook.md)
+- [release_checklist.md](user_guides/release_checklist.md)
 - [python_module_map.md](user_guides/python_module_map.md)
 
 ### Exec Plans
 
 - [README.md](exec_plans/README.md)
+- [GovernanceBoard.md](exec_plans/GovernanceBoard.md)
 - [tech_debt_tracker.md](exec_plans/tech_debt_tracker.md)
 - [active](exec_plans/active)
 - [completed](exec_plans/completed)
 
-### Archive
+### Cleanup Archive
 
-- [README.md](archive/README.md)
+- [../no_need_for_v1.0.0/README.md](../no_need_for_v1.0.0/README.md)

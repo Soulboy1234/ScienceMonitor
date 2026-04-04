@@ -67,3 +67,18 @@ class Paper:
             self.fetched_at,
             "\n".join(self.notes),
         )
+
+
+@dataclass(frozen=True)
+class ArticleSummaryResult:
+    row: Any
+    analysis: Any
+    output_path: Any
+    note_title: str
+    chinese_title: str
+    tags: list[str]
+    body: str
+    supplement: str
+    recommendation: str
+    one_sentence: str
+    rendered_markdown: str

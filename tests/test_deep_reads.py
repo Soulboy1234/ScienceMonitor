@@ -15,19 +15,17 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from sciencemonitor.deep_reads import (
+from sciencemonitor.deep_read_markdown import (
     _audit_deep_read_markdown,
-    _normalize_deep_read_analysis,
     _normalize_key_results_text,
     _normalize_relation_to_my_work_text,
     _normalize_structured_deep_read_text,
-    _render_deep_read_markdown,
-    _resolve_metadata,
     _run_deep_read_review_loop,
     _validate_deep_read_markdown,
-    run_deep_read,
 )
-from sciencemonitor.llm import DeepReadAnalysis, _extract_introduction_excerpt
+from sciencemonitor.deep_reads import _normalize_deep_read_analysis, _render_deep_read_markdown, _resolve_metadata, run_deep_read
+from sciencemonitor.llm import DeepReadAnalysis
+from sciencemonitor.llm_contracts import _extract_introduction_excerpt
 from sciencemonitor.storage import Storage
 
 
@@ -239,12 +237,7 @@ class DeepReadTest(unittest.TestCase):
                     "",
                 ]
             )
-            reviewed, issues = _run_deep_read_review_loop(
-                root,
-                markdown,
-                note_path=note_path,
-                tags=["热层/风场", "极区/对流边界"],
-            )
+            reviewed, issues = _run_deep_read_review_loop(markdown, tags=["热层/风场", "极区/对流边界"])
         self.assertFalse(issues)
         self.assertIn("作者要解决的问题是：边界区站点是否会被极区过程直接控制。", reviewed)
         self.assertNotIn("不是“磁暴会不会扰动热层风”", reviewed)
@@ -372,11 +365,7 @@ class DeepReadTest(unittest.TestCase):
             note_path = root / "log" / "real_case_eval" / "case_a" / "deep_reads" / "deep_read.md"
             note_path.parent.mkdir(parents=True, exist_ok=True)
             issues = _audit_deep_read_markdown(markdown, tags=["热层/风场"])
-            validation = _validate_deep_read_markdown(
-                markdown,
-                project=root,
-                note_path=note_path,
-            )
+            validation = _validate_deep_read_markdown(markdown, is_output_note=False)
         self.assertFalse(issues)
         self.assertIn("评测输出仍使用了生产态 Obsidian 链接", validation)
 

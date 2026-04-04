@@ -160,8 +160,19 @@ Phase 6 只允许低风险、确定性的自动调整。
 ./scripts/run_science_monitor.sh maintenance-check --include-real-eval --real-case-ids 2023_sw_resnet_tmd,2026_jgr_polar_convection_mohe
 ```
 
-## 8. 当前约束
+## 8. 记录要求
+
+维护流程相关信息按下面方式记录：
+
+- 单次运行结果：`log/maintenance/latest.md`
+- 长期维护规则：本 runbook
+- 当前项目治理状态：`docs/exec_plans/GovernanceBoard.md`
+- 长期工程债：`docs/exec_plans/tech_debt_tracker.md`
+
+只有在“治理状态发生变化”时才更新 `GovernanceBoard.md`，不要把每次成功运行都写进去。
+
+## 9. 当前约束
 
 - 维护循环不是自动重构器，它只负责发现问题、做低风险修补并验证
-- 当前 import cycle allowlist 里仍有一个历史循环：`article_summaries <-> llm`
-- 当前大文件仍然存在，但已经进入预算控制，后续不能继续无限增长
+- 当前 `allowed_import_cycles` 为空；新增 import cycle 会直接被 `entropy-check` 拦下
+- 当前仍有若干预算内热点模块，但都已进入 `maintenance_budget.json` 控制；后续重点是防止反弹和重复绕路，不是为了拆分而拆分

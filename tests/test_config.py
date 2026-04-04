@@ -253,29 +253,6 @@ class ConfigOverrideTest(unittest.TestCase):
             self.assertIn("卫星影响", profile.priority_alerts)
             self.assertIn("orbit decay", profile.priority_alerts)
 
-    def test_load_master_plan_preferences_falls_back_to_legacy_markdown(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            root = pathlib.Path(tmpdir) / "project"
-            (root / "config").mkdir(parents=True)
-            (root / "config" / "research_preferences.md").write_text(
-                "\n".join(
-                    [
-                        "# Research Preferences",
-                        "",
-                        "## 当前用户研究重心",
-                        "- 热层密度",
-                        "",
-                        "## 文献调研中的特别提醒策略",
-                        "- 卫星影响",
-                    ]
-                )
-                + "\n",
-                encoding="utf-8",
-            )
-            profile = load_master_plan_preferences(root)
-            self.assertIn("热层密度", profile.research_focus)
-            self.assertIn("卫星影响", profile.priority_alerts)
-
     def test_collect_project_config_sync_drift_detects_research_preferences_drift(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = pathlib.Path(tmpdir) / "project"

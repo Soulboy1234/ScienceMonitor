@@ -16,15 +16,10 @@ from sciencemonitor.article_fetch import SummarySourceMaterial
 from sciencemonitor.article_summaries import (
     _run_article_summary_review_loop,
     _validate_article_summary_markdown,
-    abbreviate_journal_name,
     generate_article_summaries,
-    get_focus_tags,
-    get_override,
-    infer_method,
-    infer_tags_from_text,
-    sanitize_tags,
-    validate_summary_fields,
 )
+from sciencemonitor.article_summary_meta import abbreviate_journal_name, get_override
+from sciencemonitor.article_summary_text import get_focus_tags, infer_method, infer_tags_from_text, sanitize_tags, validate_summary_fields
 from sciencemonitor.llm import ArticleAnalysis
 
 

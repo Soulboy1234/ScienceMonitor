@@ -219,7 +219,7 @@
 ### 一致的部分
 
 - [rules.md](rules.md) 中“单篇总结模板必须保持科研笔记风格”“标签必须简洁、可统计、适配 Obsidian”“引用统一使用 APA”的原则，与本指南完全一致
-- 历史设计说明已移到 `docs/archive/`，其中关于“单篇卡片强调中文概括、标签、APA 引用、正文摘要”的思路与本指南一致
+- 历史设计说明已移到根目录 `no_need_for_v1.0.0/docs_archive/`，其中关于“单篇卡片强调中文概括、标签、APA 引用、正文摘要”的思路与本指南一致
 - [literature_directory_integration_guide.md](../user_guides/literature_directory_integration_guide.md) 则补上了“笔记写完后如何进入目录系统”的约束
 
 ### 需要融合修正的部分

@@ -19,7 +19,8 @@ from .config import (
     config_templates_root,
 )
 from .article_index import sync_out_library
-from .article_summaries import generate_article_summary_results, sync_summary_report_links
+from .article_summaries import generate_article_summary_results
+from .article_summary_markdown import sync_summary_report_links
 from .crossref import CrossrefClient
 from .http import HTTPClient
 from .llm import AnalysisEngine
