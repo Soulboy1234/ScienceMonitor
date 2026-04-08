@@ -66,4 +66,6 @@ Prepare a local `v1.2.0` release candidate by consolidating recent harness impro
 - Current UI changes were deferred and recorded in `Todo.md`.
 - Existing UI feature remains in the project; only the new unsatisfactory UI edits were excluded from `v1.2.0`.
 - Final validation passed.
-- Commit, tag, and push are pending.
+- Release commit created: `154053d11f2bb31450896464291f3b5e0a4e5223`
+- Tag created: `v1.2.0`
+- GitHub push is pending.
