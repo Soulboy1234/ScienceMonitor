@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from datetime import date
 
+from .chatgpt_web_manual import (
+    import_manual_response,
+    import_manual_response_from_recommended_file,
+    list_manual_requests,
+    render_manual_request_status,
+)
 from .config import article_index_root, article_summaries_root, output_root, reports_root
 from .config_ui import serve_config_ui
 from .deep_reads import run_deep_read
@@ -34,6 +41,8 @@ def dispatch_command(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
         "sources": _handle_sources,
         "doctor": _handle_doctor,
         "config-ui": _handle_config_ui,
+        "manual-llm-status": _handle_manual_llm_status,
+        "manual-llm-import": _handle_manual_llm_import,
         "index": _handle_index,
         "deep-read": _handle_deep_read,
         "tag-candidates": _handle_tag_candidates,
@@ -138,6 +147,16 @@ def _add_support_commands(subparsers: argparse._SubParsersAction) -> None:
     config_ui.add_argument("--host", default="127.0.0.1", help="Host to bind the local config UI.")
     config_ui.add_argument("--port", type=int, default=8765, help="Port to bind the local config UI.")
     config_ui.add_argument("--no-browser", action="store_true", help="Do not auto-open the browser.")
+    manual_status = subparsers.add_parser("manual-llm-status", help="List chatgpt_web_manual request bundles and their current status.")
+    manual_status.add_argument("--limit", type=int, default=50, help="Maximum number of requests to show. Use 0 for all.")
+    manual_status.add_argument("--pending-only", action="store_true", help="Only show requests still waiting for imported responses.")
+    manual_import = subparsers.add_parser("manual-llm-import", help="Import a ChatGPT web response into a pending request bundle.")
+    manual_import.add_argument("--request-id", required=True, help="Request id shown in manual-llm-status or the pending error message.")
+    manual_import.add_argument(
+        "--response-file",
+        default="",
+        help="Optional path to a text/markdown file containing the ChatGPT response. Use - to read from stdin. If omitted, uses the request's recommended file under data/chatgpt_web_manual/responses/.",
+    )
     subparsers.add_parser("sources", help="List configured journal sources.")
     subparsers.add_parser("index", help="Repair Obsidian links and sync article index pages under the configured output root.")
     doctor = subparsers.add_parser("doctor", help="Check environment, paths, PDF tools, and control-plane consistency.")
@@ -176,6 +195,10 @@ def _handle_doctor(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
     print(f"openai_model={report['provider_status']['openai_model']}")
     print(f"openai_api_key_present={report['provider_status']['openai_api_key_present']}")
     print(f"openai_api_key_source={report['provider_status']['openai_api_key_source'] or 'NONE'}")
+    print(f"chatgpt_web_manual_root={report['provider_status']['chatgpt_web_manual_root']}")
+    print(f"chatgpt_web_manual_pending={report['provider_status']['chatgpt_web_manual_pending']}")
+    print(f"chatgpt_web_manual_ready={report['provider_status']['chatgpt_web_manual_ready']}")
+    print(f"chatgpt_web_manual_stale={report['provider_status']['chatgpt_web_manual_stale']}")
     print(f"skills_runtime_dependency={report['skills_runtime_dependency']}")
     for check in report.get("consistency_checks", []):
         print(f"check.{check['id']}={check['status']}")
@@ -190,6 +213,34 @@ def _handle_doctor(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
 
 def _handle_config_ui(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
     serve_config_ui(monitor.root, host=args.host, port=args.port, open_browser=not args.no_browser)
+    return 0
+
+
+def _handle_manual_llm_status(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
+    statuses = list_manual_requests(monitor.root, limit=args.limit, pending_only=bool(args.pending_only))
+    print(render_manual_request_status(statuses))
+    return 0
+
+
+def _handle_manual_llm_import(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
+    if not args.response_file:
+        result = import_manual_response_from_recommended_file(
+            monitor.root,
+            request_id=args.request_id,
+        )
+        print(f"Imported response for {result.request_id} ({result.request_kind or 'analysis'}) -> {result.response_json_path}")
+        return 0
+    if args.response_file == "-":
+        response_text = sys.stdin.read()
+    else:
+        with open(args.response_file, "r", encoding="utf-8") as handle:
+            response_text = handle.read()
+    result = import_manual_response(
+        monitor.root,
+        request_id=args.request_id,
+        response_text=response_text,
+    )
+    print(f"Imported response for {result.request_id} ({result.request_kind or 'analysis'}) -> {result.response_json_path}")
     return 0
 
 

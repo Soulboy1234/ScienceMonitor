@@ -61,6 +61,8 @@ LEGACY_DEEP_READ_PATTERNS = [
     (r"证据范围", "不应继续把证据范围作为正式报告区块"),
 ]
 DEEP_READ_REVIEW_MAX_PASSES = 3
+KEY_RESULT_LABELS = ("硬结论", "次级结论", "合理推论", "需进一步研究讨论的结论")
+NUMBERED_MARKER_RE = r"(?:\d+[．、)）]|\d+\.(?!\d))"
 
 DEEP_READ_TEXT_REPLACEMENTS: list[tuple[str, str]] = [
     (r"\bday-to-day thermosphere variability\b", "热层日际变化"),
@@ -180,21 +182,51 @@ def _normalize_goal_text(value: str, *, tags: list[str]) -> str:
 
 def _normalize_key_results_text(value: str) -> str:
     text = _normalize_structured_deep_read_text(value)
-    lines = []
+    label_pattern = "|".join(re.escape(label) for label in KEY_RESULT_LABELS)
+    text = re.sub(rf"(?m)^#+\s*({label_pattern})\s*$", r"\1：", text)
+    text = re.sub(rf"(?m)^({label_pattern})[:：]\s*(?=\S)", r"\1：\n", text)
+
+    sections: dict[str, list[str]] = {label: [] for label in KEY_RESULT_LABELS}
+    unassigned: list[str] = []
+    current_label: str | None = None
     for raw_line in text.splitlines():
         stripped = raw_line.strip()
-        heading_candidate = re.sub(r"^#+\s*", "", stripped)
-        if re.fullmatch(r"(硬结论|次级结论|合理推论|需进一步研究讨论的结论)[:：]?", heading_candidate):
-            label = heading_candidate.rstrip("：:")
-            lines.append(f"#### {label}")
+        if not stripped:
             continue
-        lines.append(stripped)
-    return "\n".join(line for line in lines if line).strip()
+        label_match = re.fullmatch(rf"(?:#+\s*)?({label_pattern})[:：]?", stripped)
+        if label_match:
+            current_label = label_match.group(1)
+            continue
+        if current_label:
+            sections[current_label].append(stripped)
+        else:
+            unassigned.append(stripped)
+
+    if unassigned:
+        sections[KEY_RESULT_LABELS[0]] = unassigned + sections[KEY_RESULT_LABELS[0]]
+
+    blocks = []
+    for label in KEY_RESULT_LABELS:
+        body = "\n".join(sections[label])
+        blocks.append(f"#### {label}\n{_format_key_result_items(body)}")
+    return "\n\n".join(blocks).strip()
+
+
+def _format_key_result_items(value: str) -> str:
+    text = _normalize_structured_deep_read_text(value)
+    items = _extract_numbered_items(text)
+    if not items:
+        fallback = " ".join(line.strip() for line in text.splitlines() if line.strip()).strip()
+        items = [fallback or "未提取到明确条目。"]
+    return _render_numbered_items(items)
 
 
 def _normalize_contribution_text(value: str) -> str:
     text = _normalize_structured_deep_read_text(value)
-    if "不是" in text and "而是" in text and re.match(r"^(这篇文章|文章|作者)[^。！？\n]{0,100}", text):
+    if "不在于" in text and "而在于" in text:
+        after = text.split("而在于", 1)[1].strip().lstrip("：:，, ")
+        text = f"这篇文章的新意与贡献在于{after}"
+    elif "不是" in text and "而是" in text and re.match(r"^(这篇文章|文章|作者)[^。！？\n]{0,100}", text):
         after = text.split("而是", 1)[1].strip().lstrip("：:，, ")
         text = f"这篇文章的新意与贡献在于{after}"
     return text.strip()
@@ -210,17 +242,19 @@ def _normalize_structured_deep_read_text(value: str) -> str:
     text = text.replace("需要进一步讨论/证明:", "需进一步研究讨论的结论：")
     text = text.replace("仍需保留的部分：", "需进一步研究讨论的结论：")
     text = text.replace("仍需保留的部分:", "需进一步研究讨论的结论：")
+    text = re.sub(rf"(?<!^)(?<!\n)({'|'.join(KEY_RESULT_LABELS)})[:：]", r"\n\1：", text)
+    text = re.sub(rf"(?:(?<=^)|(?<=\n))({'|'.join(KEY_RESULT_LABELS)})[:：]\s*(?={NUMBERED_MARKER_RE})", r"\1：\n", text)
     text = re.sub(r"(?<=[。；])(?=(?:硬结论|次级结论|合理推论|需进一步研究讨论的结论)[:：])", "\n", text)
-    text = re.sub(r"(?<=[。！？；：])(?=(?:\d+[.．、)](?:\s+|$)))", "\n", text)
-    text = re.sub(r"([。；：])\s+(?=(?:\d+[.．、)]|[-*])\s+)", r"\1\n", text)
-    text = re.sub(r"(?:(?<=^)|(?<=\n))(\d+[.．、)])(?=\S)", r"\1 ", text)
+    text = re.sub(rf"(?<=[。！？；：])(?={NUMBERED_MARKER_RE})", "\n", text)
+    text = re.sub(rf"([。；：])\s+(?=(?:{NUMBERED_MARKER_RE}|[-*])\s*)", r"\1\n", text)
+    text = re.sub(r"(?:(?<=^)|(?<=\n))(\d+)(?:[．、)）]|\.(?!\d))\s*", r"\1. ", text)
     text = re.sub(r"(?<=[。！？；])(?=(?:整体看|总体看))", "\n", text)
     lines = [line.rstrip() for line in text.splitlines()]
     normalized_lines: list[str] = []
     previous_was_list = False
     for line in lines:
         stripped = line.strip()
-        is_list_item = bool(re.match(r"^(?:\d+[.．、)]\s+|[-*]\s+)", stripped))
+        is_list_item = bool(re.match(r"^(?:(?:\d+[．、)）]|\d+\.(?!\d))\s+|[-*]\s+)", stripped))
         if not stripped:
             continue
         if not is_list_item and previous_was_list and normalized_lines and normalized_lines[-1] != "":
@@ -287,7 +321,7 @@ def _drop_downstream_sentences(text: str) -> str:
             if kept_lines and kept_lines[-1] != "":
                 kept_lines.append("")
             continue
-        prefix_match = re.match(r"^(\d+[.．、)]\s+|[-*]\s+)", stripped)
+        prefix_match = re.match(r"^((?:\d+[．、)）]|\d+\.(?!\d))\s+|[-*]\s+)", stripped)
         prefix = prefix_match.group(1) if prefix_match else ""
         body = stripped[len(prefix):] if prefix else stripped
         pieces = re.split(r"(?<=[。！？])\s*", body)
@@ -334,10 +368,10 @@ def _extract_numbered_items(text: str) -> list[str]:
         stripped = raw_line.strip()
         if not stripped:
             continue
-        if re.match(r"^\d+[.、)]\s+", stripped):
+        if re.match(r"^(?:\d+[．、)）]|\d+\.(?!\d))\s+", stripped):
             if current:
                 items.append(" ".join(current).strip())
-            current = [re.sub(r"^\d+[.、)]\s+", "", stripped, count=1).strip()]
+            current = [re.sub(r"^(?:\d+[．、)）]|\d+\.(?!\d))\s+", "", stripped, count=1).strip()]
             continue
         if current:
             current.append(stripped)
@@ -431,6 +465,21 @@ def _audit_deep_read_markdown(markdown: str, *, tags: list[str]) -> list[str]:
     key_results = _extract_section_body(markdown, "### 关键结果", next_heading="### 新意与贡献")
     if key_results and re.search(r"(?m)^###\s+(硬结论|次级结论|合理推论|需进一步研究讨论的结论)\s*$", key_results):
         issues.append("“关键结果”中的次级标题层级仍然过高")
+    for label in KEY_RESULT_LABELS:
+        if key_results and f"#### {label}" not in key_results:
+            issues.append(f"“关键结果”缺少四级标题：{label}")
+    if key_results and re.search(rf"(?m)^####[ \t]+(?:{'|'.join(KEY_RESULT_LABELS)})[ \t]*{NUMBERED_MARKER_RE}", key_results):
+        issues.append("“关键结果”四级标题后的编号未换行")
+    if key_results and re.search(rf"[。！？；：](?={NUMBERED_MARKER_RE})", key_results):
+        issues.append("“关键结果”中的编号列表未换行")
+    contribution = _extract_section_body(markdown, "### 新意与贡献", next_heading="### 局限性")
+    if ("不是" in contribution and "而是" in contribution) or ("不在于" in contribution and "而在于" in contribution):
+        issues.append("“新意与贡献”仍包含否定转折式表述")
+    supplement = _extract_section_body(markdown, "### 补充信息", next_heading=None)
+    if supplement and re.search(r"(?m)^- [^\n]+：[ \t]*\S", supplement):
+        issues.append("“补充信息”中的小标题后正文未换行")
+    if supplement and re.search(rf"[。；：](?={NUMBERED_MARKER_RE})", supplement):
+        issues.append("“补充信息”中的编号列表未换行")
     return issues
 
 

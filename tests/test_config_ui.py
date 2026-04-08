@@ -75,6 +75,7 @@ class ConfigUITest(unittest.TestCase):
         self.assertIn("关闭面板服务", html)
         self.assertIn('action="/run-report"', html)
         self.assertIn('action="/run-deep-read"', html)
+        self.assertIn("chatgpt_web_manual", html)
 
     def test_run_report_action_uses_monitor_daily_pipeline(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

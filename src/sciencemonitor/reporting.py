@@ -8,6 +8,7 @@ from .article_summary_markdown import obsidian_link
 from .article_summary_meta import build_doi_url, display_title, get_override
 from .article_summary_text import article_summary_quality_score
 from .config import UserPreferenceProfile, load_master_plan_preferences, project_root, templates_root
+from .chatgpt_web_manual import ManualResponsePending
 from .llm import AnalysisEngine, ReportAnalysis
 from .models import ArticleSummaryResult
 from .reporting_template import (
@@ -439,5 +440,7 @@ def resolve_report_analysis(
         return None
     try:
         return analysis_engine.analyze_report(report_date, summaries)
+    except ManualResponsePending:
+        raise
     except Exception:
         return None

@@ -9,6 +9,13 @@
 - 什么情况下应该更新 fixture
 - 什么情况下应该修代码而不是更新 fixture
 
+适用边界：
+
+- `golden-eval` 始终可以作为稳定回归 gate 使用
+- `real-eval` 适合自动 provider（`codex_local`、`openai_api`）或人工校准
+- 如果当前 `provider=chatgpt_web_manual`，`real-eval` 会生成请求包并等待人工导入，不是无人值守 gate
+- 因此，CI 和默认 `harness-check` 不应依赖 `chatgpt_web_manual` 自动跑完真实案例
+
 ## 1. 两类评测的分工
 
 ### Golden Eval

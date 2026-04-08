@@ -66,6 +66,8 @@ def _render_hero_section(project: Path, runtime: dict, analysis: dict, paths: di
         provider = "codex_local"
     codex_model = str(analysis.get("codex_local", {}).get("model", "") or "").strip()
     effective_model = codex_model or "由本机 codex 默认模型决定"
+    if provider == "chatgpt_web_manual":
+        effective_model = "ChatGPT 网页人工中转"
     return f"""
   <section class="hero">
     <h1>ScienceMonitor 控制台</h1>
@@ -232,7 +234,7 @@ def _render_llm_card(analysis: dict, provider: str) -> str:
     return f"""
       <section class="card">
         <h2>LLM 总体配置</h2>
-        {_select("provider", provider, [("codex_local", "codex_local"), ("openai_api", "openai_api")], "分析后端")}
+        {_select("provider", provider, [("codex_local", "codex_local"), ("openai_api", "openai_api"), ("chatgpt_web_manual", "chatgpt_web_manual")], "分析后端")}
         <div class="row">
           {_checkbox("article_summaries_enabled", analysis.get("article_summaries", {}).get("enabled", True), "启用单篇总结 LLM")}
           {_checkbox("report_enabled", analysis.get("report", {}).get("enabled", True), "启用周报 LLM 分析")}
@@ -245,7 +247,7 @@ def _render_llm_card(analysis: dict, provider: str) -> str:
           {_select("article_summaries_reasoning_effort", analysis.get("article_summaries", {}).get("reasoning_effort", "medium"), [("low", "low"), ("medium", "medium"), ("high", "high"), ("xhigh", "xhigh")], "单篇总结推理强度")}
           {_select("report_reasoning_effort", analysis.get("report", {}).get("reasoning_effort", "medium"), [("low", "low"), ("medium", "medium"), ("high", "high"), ("xhigh", "xhigh")], "周报推理强度")}
         </div>
-        <p class="muted">当前已不再支持规则法兜底。单篇总结、周报和深度解读都需要有效的 LLM 分析结果。推理强度设置仅对 codex_local 生效。</p>
+        <p class="muted">当前已不再支持规则法兜底。单篇总结、周报和深度解读都需要有效的 LLM 分析结果。推理强度设置仅对 codex_local 生效；如果选择 chatgpt_web_manual，程序会写出请求包，等待你在 ChatGPT 网页完成后再导入响应。</p>
       </section>"""
 
 

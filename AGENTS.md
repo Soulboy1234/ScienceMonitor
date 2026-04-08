@@ -40,6 +40,8 @@
 - 统一 harness gate：`./scripts/run_science_monitor.sh harness-check`
 - Golden eval：`./scripts/run_science_monitor.sh golden-eval`
 - 真实案例评测：`./scripts/run_science_monitor.sh real-eval`
+- 人工中转请求状态：`./scripts/run_science_monitor.sh manual-llm-status`
+- 人工中转响应导入：`./scripts/run_science_monitor.sh manual-llm-import --request-id <id>`，必要时追加 `--response-file /path/to/response.txt`
 - 发版前清单：`docs/user_guides/release_checklist.md`
 - 列出期刊：`./scripts/run_science_monitor.sh sources`
 - 跑测试：`./.venv/bin/python -m pytest -q`
@@ -61,6 +63,7 @@
 - 网页全文/摘要抓取：`src/sciencemonitor/article_fetch.py`
 - 配置：`src/sciencemonitor/config.py`
 - 本地配置面板：`src/sciencemonitor/config_ui.py`
+- ChatGPT 网页人工中转：`src/sciencemonitor/chatgpt_web_manual.py`
 - 单篇总结：`src/sciencemonitor/article_summaries.py`
 - 周报：`src/sciencemonitor/reporting.py`
 - 深读：`src/sciencemonitor/deep_reads.py`
@@ -87,6 +90,12 @@
 - 当前无 PDF 策略：
   - `src/sciencemonitor/article_summaries.py` 会优先尝试网页全文，失败则退回摘要，并为仅摘要总结打 `#信息来源/仅摘要`
   - `src/sciencemonitor/deep_reads.py` 只做简单网页搜索；没有可用全文时直接提示用户提供 PDF
+- 当前支持 `chatgpt_web_manual` 人工中转模式：
+  - 程序会在 `data/chatgpt_web_manual/requests/` 下生成请求包
+  - 固定工作流是上传 `prompt.md`，深度解读可按需额外上传原始 PDF，再把网页端 JSON 放到 `responses/`
+  - 用户在 ChatGPT 网页完成分析后，用 `manual-llm-import` 导入响应
+  - 重新执行原命令后，结果继续走现有缓存、审核和输出链路
+  - 深度解读不继承单篇总结的 `信息来源/*` 状态标签；这类标签只描述单篇总结自身的证据边界
 - 现阶段真实输出行为由“运行时模板 + Python 逻辑”共同决定：
   - `src/sciencemonitor/reporting.py` 仍负责周报的筛选逻辑、统计、块级内容生成和模板渲染
   - `src/sciencemonitor/deep_reads.py` 仍负责深度解读的 schema 落地、归一化和模板渲染

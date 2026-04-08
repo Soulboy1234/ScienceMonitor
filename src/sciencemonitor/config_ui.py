@@ -125,6 +125,7 @@ def _save_from_form(project: Path, form: dict[str, list[str]]) -> None:
     analysis.setdefault("deep_reads", {})
     analysis.setdefault("codex_local", {})
     analysis.setdefault("openai_api", {})
+    analysis.setdefault("chatgpt_web_manual", {})
     analysis["article_summaries"].pop("fallback_to_rules", None)
     analysis["report"].pop("fallback_to_rules", None)
     analysis["deep_reads"].pop("fallback_to_rules", None)

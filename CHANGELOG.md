@@ -15,7 +15,24 @@
 
 ## [Unreleased]
 
-- 暂无
+- 新增 `chatgpt_web_manual` 人工中转 provider：
+  - 程序会在 `data/chatgpt_web_manual/requests/` 下生成请求包
+  - 用户可通过 `manual-llm-status` 查看状态，通过 `manual-llm-import` 导入 ChatGPT 网页响应
+  - 单篇总结、周报、深度解读都已接入同一套 bundle + import + validation 机制
+  - 请求包已收敛为轻量结构，默认只保留 `prompt.md`、`request.md`、`metadata.json`
+  - prompt 已改为最小定位信息 + 严格 JSON-only 输出要求，不再默认复制全文整理稿、摘要整理稿或 PDF
+  - 响应文件名已改为稳定可识别格式，并支持把标准 JSON 直接放入 `responses/`
+  - 人工中转固定工作流已确定为“上传 `prompt.md`，深度解读按需上传原始 PDF，导入网页 JSON 后继续走本地审核”
+  - 深度解读导入后会继续走本地报告审核闭环，已稳定 `关键结果` 四级标题、编号换行、补充信息分行，并清理否定转折式贡献表述
+  - 深度解读不再继承单篇总结的 `信息来源/*` 状态标签，避免把单篇总结的摘要级证据边界误写到深读报告上
+  - 标签推断已收紧 `亚暴` 的触发范围，避免背景或参考文献提及造成无关标签
+- 配置和治理已同步更新：
+  - `PROJECT_CONFIG.md`、`config-ui`、`doctor`
+  - README、AGENTS、LLM 说明和专门工作流文档
+  - maintenance / eval / release runbook 已注明 manual provider 的适用边界
+- 维护 gate 已同步纳入这轮新边界：
+  - `pytest -q` -> `127 passed`
+  - `doctor --consistency-only`、`entropy-check`、`maintenance-check --auto-repair --max-passes 2` 通过
 
 ## [v1.0.0] - 2026-04-04
 

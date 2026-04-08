@@ -98,6 +98,16 @@ class DeepReadTest(unittest.TestCase):
         self.assertIn("#### 需进一步研究讨论的结论\n1. 第四条。", text)
         self.assertNotRegex(text, r"(?m)^###\s+硬结论$")
 
+    def test_key_results_breaks_chinese_numbered_items_under_level_four_subheadings(self) -> None:
+        text = _normalize_key_results_text(
+            "硬结论：1）第一条。2）第二条。次级结论：1）第三条。合理推论：1）第四条。需进一步研究讨论的结论：1）第五条。"
+        )
+        self.assertIn("#### 硬结论\n1. 第一条。\n2. 第二条。", text)
+        self.assertIn("#### 次级结论\n1. 第三条。", text)
+        self.assertIn("#### 合理推论\n1. 第四条。", text)
+        self.assertIn("#### 需进一步研究讨论的结论\n1. 第五条。", text)
+        self.assertNotRegex(text, r"#### 硬结论\s*1[）)]")
+
     def test_structured_text_renames_legacy_discussion_label(self) -> None:
         text = _normalize_structured_deep_read_text("合理解释：1. 第一条。仍需保留的部分：1. 第二条。")
         self.assertIn("合理推论：", text)
@@ -244,6 +254,75 @@ class DeepReadTest(unittest.TestCase):
         self.assertIn("主要有三层原因。\n1. 第一层原因。\n2. 第二层原因。", reviewed)
         self.assertIn("#### 硬结论\n1. 第一条。", reviewed)
 
+    def test_review_loop_fixes_manual_web_deep_read_format_regressions(self) -> None:
+        markdown = "\n".join(
+            [
+                "# 论文深度阅读报告",
+                "----",
+                "- [PDF](../deep_reads_pdf/example.pdf) #热层/密度 #行星际环境/多日振荡",
+                "- _Citation_",
+                "",
+                "## 论文信息",
+                "- **题目**：Example Paper",
+                "- **作者**：A Author",
+                "- **期刊**：JGR: Space Physics",
+                "- **年份**：2026",
+                "- **论文类型**：研究论文",
+                "",
+                "### 一句话总述",
+                "这篇文章的目标是说明格式审核有效。",
+                "",
+                "## 论文详解",
+                "### 为什么做",
+                "作者要解决的问题是：多日振荡如何被行星际环境调制。",
+                "",
+                "### 如何做",
+                "作者通过消融实验推进结论。",
+                "",
+                "### 关键结果",
+                "硬结论：1）第一条。2）第二条。次级结论：1）第三条。合理推论：1）第四条。需进一步研究讨论的结论：1）第五条。",
+                "",
+                "### 新意与贡献",
+                "这篇论文的核心贡献不在于再一次报告 TMD 存在 9 天或 27 天振荡，而在于把驱动分解和空间结构识别结合起来。",
+                "",
+                "### 局限性",
+                "局限明确。",
+                "",
+                "### 可复现性",
+                "基本可复现。",
+                "",
+                "### 与已有工作的关系",
+                "与现有工作相关。",
+                "",
+                "## 总结",
+                "### 最终结论",
+                "结论成立。",
+                "",
+                "### 补充信息",
+                "- 和我已有工作的关系：",
+                "关系说明。",
+                "",
+                "- 后续值得追踪的问题：",
+                "1）问题一？2）问题二？",
+                "",
+                "- 需要人工复核的点：",
+                "无需复核。",
+                "",
+                "- Obsidian 索引挂接：",
+                "当前为评测输出，未写入 output_root，未生成 article_index 索引链接。",
+                "",
+                "----",
+                "记录时间戳: 2026-04-08 10:00",
+            ]
+        )
+        reviewed, issues = _run_deep_read_review_loop(markdown, tags=["热层/密度", "行星际环境/多日振荡"])
+        self.assertFalse(issues)
+        self.assertIn("#### 硬结论\n1. 第一条。\n2. 第二条。", reviewed)
+        self.assertIn("#### 次级结论\n1. 第三条。", reviewed)
+        self.assertIn("这篇文章的新意与贡献在于把驱动分解和空间结构识别结合起来。", reviewed)
+        self.assertNotIn("不在于", reviewed)
+        self.assertIn("- 后续值得追踪的问题：\n1. 问题一？\n2. 问题二？", reviewed)
+
     def test_render_deep_read_markdown_uses_relative_links_for_eval_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = pathlib.Path(tmpdir)
@@ -326,6 +405,12 @@ class DeepReadTest(unittest.TestCase):
                 "### 关键结果",
                 "#### 硬结论\n1. 测试。",
                 "",
+                "#### 次级结论\n1. 测试。",
+                "",
+                "#### 合理推论\n1. 测试。",
+                "",
+                "#### 需进一步研究讨论的结论\n1. 测试。",
+                "",
                 "### 新意与贡献",
                 "测试。",
                 "",
@@ -398,6 +483,42 @@ class DeepReadTest(unittest.TestCase):
                 full_text="Auroral photographs and FPI observations were used together with SuperDARN convection maps.",
             )
         self.assertIn("仪器/极光图像", normalized.tags)
+
+    def test_deep_read_does_not_inherit_abstract_only_source_status_from_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            _write_minimal_project(root)
+            related_summary = root / "out" / "article_summaries" / "summary.md"
+            related_summary.parent.mkdir(parents=True, exist_ok=True)
+            related_summary.write_text("- #热层/密度 #信息来源/仅摘要\n", encoding="utf-8")
+            analysis = DeepReadAnalysis(
+                chinese_title="测试",
+                tags=["热层/密度"],
+                paper_type="研究论文",
+                one_sentence_overview="这篇文章的目标是测试。",
+                why="作者要解决的问题是：测试。",
+                how="测试。",
+                key_results="测试。",
+                contribution="测试。",
+                limitations="测试。",
+                reproducibility="测试。",
+                relation="测试。",
+                final_conclusion="测试。",
+                relation_to_my_work="测试。",
+                follow_up_questions="测试。",
+                needs_manual_review="测试。",
+                knowledge_position="测试。",
+            )
+            normalized = _normalize_deep_read_analysis(
+                root,
+                analysis,
+                metadata_title="Thermospheric density test",
+                full_text="Full text for deep reading.",
+                related_summary=related_summary,
+            )
+
+        self.assertIn("热层/密度", normalized.tags)
+        self.assertNotIn("信息来源/仅摘要", normalized.tags)
 
     def test_extract_introduction_excerpt_prefers_introduction_section(self) -> None:
         excerpt = _extract_introduction_excerpt(

@@ -36,6 +36,11 @@
 ./scripts/run_science_monitor.sh harness-check --include-real-eval --real-case-ids 2023_sw_resnet_tmd,2026_jgr_polar_convection_mohe
 ```
 
+注意：
+
+- 如果当前 `provider=chatgpt_web_manual`，真实案例链路会进入人工中转，不适合作为无人值守发版 gate
+- 这种情况下，发版前如需跑真实案例，应临时切回 `codex_local` 或 `openai_api`
+
 ### 全量测试
 
 ```bash

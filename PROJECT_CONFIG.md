@@ -19,8 +19,8 @@
 
 ## 你通常会调的设置
 
-- 切换 LLM 模式：修改 `provider` 为 `codex_local` 或 `openai_api`
-- 切换模型：修改 `codex_local.model` 或 `openai_api.model`
+- 切换 LLM 模式：修改 `provider` 为 `codex_local`、`openai_api` 或 `chatgpt_web_manual`
+- 切换模型：修改 `codex_local.model` 或 `openai_api.model`；`chatgpt_web_manual` 不需要配置 API key 或模型名
 - 调整 Codex 推理强度：修改 `article_summaries.reasoning_effort`、`report.reasoning_effort`、`deep_reads.reasoning_effort`
 - 配置 API key：优先使用环境变量；也可写入 `openai_api.api_key`
 - 调整单篇总结走 LLM 的数量：修改 `article_summaries.max_items_per_run`
@@ -104,12 +104,13 @@
     "model": "gpt-5-mini",
     "base_url": "https://api.openai.com/v1/responses",
     "timeout_seconds": 120
-  }
+  },
+  "chatgpt_web_manual": {}
 }
 ```
 
 说明：
-- `provider`：当前分析后端，可选 `codex_local`、`openai_api`
+- `provider`：当前分析后端，可选 `codex_local`、`openai_api`、`chatgpt_web_manual`
 - `article_summaries.enabled`：是否启用单篇总结的 LLM 分析
 - `article_summaries.max_items_per_run`：每次运行最多多少篇走 LLM；`0` 表示不设上限
 - `article_summaries.reasoning_effort`：单篇总结使用 codex_local 时的推理强度
@@ -122,6 +123,7 @@
 - `codex_local.executable`：手动指定 `codex` 可执行文件路径
 - `openai_api.api_key_env`：优先读取的 API key 环境变量名
 - `openai_api.base_url`：兼容接口地址，默认是 OpenAI Responses API
+- `chatgpt_web_manual`：人工中转模式。运行时会在 `data/chatgpt_web_manual/` 生成请求包，等待你在 ChatGPT 网页完成后导入响应
 
 ## Sync: config/paths.json
 ```json
@@ -175,11 +177,22 @@
 - `report.enabled`：`true`
 - `openai_api.api_key_env`：推荐保留为 `SCIENCEMONITOR_OPENAI_API_KEY`
 
+### 配置档 E：ChatGPT 网页人工中转
+
+适合减少本地 Codex 或 API 消耗，把高成本分析转到 ChatGPT 网页人工处理中转。
+
+- `provider`：`chatgpt_web_manual`
+- `article_summaries.enabled`：`true`
+- `report.enabled`：`true`
+- `deep_reads.enabled`：`true`
+- 运行后按提示处理 `data/chatgpt_web_manual/requests/` 下的请求包，再用 `manual-llm-import` 导入响应
+
 ## 建议的模型策略
 
 - `codex_local.model` 留空：使用本机 Codex 默认模型，最省心，但不同机器上不一定完全一致。
 - `codex_local.model` 写死：结果更稳定，更适合长期运行和多机部署。
 - `openai_api.model`：适合需要跨机器一致、且明确控制外部接口模型的情况。
+- `chatgpt_web_manual`：适合把高消耗分析分流到 ChatGPT 网页人工处理中转，代价是需要人工导入响应，不能全自动跑完。
 
 ## 其他可配置文件
 

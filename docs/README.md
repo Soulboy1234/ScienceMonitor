@@ -72,6 +72,7 @@
 
 - [literature_directory_integration_guide.md](user_guides/literature_directory_integration_guide.md)
 - [llm_analysis_readme.md](user_guides/llm_analysis_readme.md)
+- [chatgpt_web_manual_workflow.md](user_guides/chatgpt_web_manual_workflow.md)
 - [eval_governance_runbook.md](user_guides/eval_governance_runbook.md)
 - [maintenance_governance_runbook.md](user_guides/maintenance_governance_runbook.md)
 - [release_checklist.md](user_guides/release_checklist.md)

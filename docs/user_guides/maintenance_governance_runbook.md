@@ -40,10 +40,11 @@
 
 它当前审的内容：
 
-- 模块行数预算
+- 模块有效代码行预算，不把空行和纯注释计入体量，避免为了过预算而压缩可读性
 - 函数长度预算
-- 包总行数预算
+- 包总有效代码行预算
 - import cycle allowlist
+- unused import
 
 预算文件：
 
@@ -74,6 +75,12 @@
 ```bash
 ./scripts/run_science_monitor.sh maintenance-check --include-real-eval --real-case-ids 2023_sw_resnet_tmd
 ```
+
+如果当前 `provider=chatgpt_web_manual`：
+
+- `maintenance-check` 仍然可以做 `doctor`、`entropy-check`、`pytest` 和默认 `harness-check`
+- 但任何依赖真实自动分析完成的检查都不应假设它能无人值守通过
+- 需要真实案例自动完成时，应临时切回 `codex_local` 或 `openai_api`
 
 ## 3. 当前自动调整范围
 

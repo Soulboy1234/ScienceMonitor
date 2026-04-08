@@ -10,10 +10,21 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from sciencemonitor.entropy import _collect_unused_imports
+from sciencemonitor.entropy import _collect_module_line_counts, _collect_unused_imports
 
 
 class EntropyUnusedImportTest(unittest.TestCase):
+    def test_module_line_counts_ignore_blank_and_comment_lines(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_root = pathlib.Path(tmpdir)
+            (source_root / "module_a.py").write_text(
+                "import io\n\n# note\n\ndef hello():\n    return 'ok'\n",
+                encoding="utf-8",
+            )
+            counts = _collect_module_line_counts(source_root)
+
+        self.assertEqual(counts, {"module_a.py": 3})
+
     def test_collect_unused_imports_reports_plain_unused_import(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source_root = pathlib.Path(tmpdir)

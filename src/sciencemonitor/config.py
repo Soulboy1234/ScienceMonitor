@@ -270,6 +270,18 @@ def llm_cache_root(root: Path | None = None) -> Path:
     return data_root(root) / "llm_cache"
 
 
+def chatgpt_web_manual_root(root: Path | None = None) -> Path:
+    return data_root(root) / "chatgpt_web_manual"
+
+
+def chatgpt_web_manual_requests_root(root: Path | None = None) -> Path:
+    return chatgpt_web_manual_root(root) / "requests"
+
+
+def chatgpt_web_manual_responses_root(root: Path | None = None) -> Path:
+    return chatgpt_web_manual_root(root) / "responses"
+
+
 def config_ui_state_path(root: Path | None = None) -> Path:
     override = _resolve_override_path(os.environ.get("SCIENCEMONITOR_CONFIG_UI_STATE_PATH"))
     if override is not None:

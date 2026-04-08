@@ -14,7 +14,18 @@ from sqlite3 import Row
 from urllib import request
 from urllib.parse import urlparse
 
-from .config import llm_cache_root, llm_tmp_root, load_master_plan_preferences
+from .chatgpt_web_manual import (
+    ManualResponsePending,
+    load_manual_response,
+    manual_status_counts,
+    prepare_manual_request_bundle,
+)
+from .config import (
+    chatgpt_web_manual_root,
+    llm_cache_root,
+    llm_tmp_root,
+    load_master_plan_preferences,
+)
 from .http import DEFAULT_HEADERS
 from .llm_contracts import (
     _prepare_article_source_text_for_prompt,
@@ -22,15 +33,18 @@ from .llm_contracts import (
     build_article_schema,
     build_deep_read_prompt,
     build_deep_read_schema,
+    build_manual_article_prompt,
+    build_manual_deep_read_prompt,
+    build_manual_report_prompt,
     build_report_prompt,
     build_report_schema,
 )
 from .models import ArticleSummaryResult
 from .tags import normalize_tags as normalize_project_tags
-from .utils import clean_abstract_text
+from .utils import clean_abstract_text, clean_title_text
 
 
-SUPPORTED_ANALYSIS_PROVIDERS = ("codex_local", "openai_api")
+SUPPORTED_ANALYSIS_PROVIDERS = ("codex_local", "openai_api", "chatgpt_web_manual")
 SUPPORTED_REASONING_EFFORTS = ("low", "medium", "high", "xhigh")
 
 
@@ -64,6 +78,7 @@ DEFAULT_ANALYSIS_CONFIG = {
         "base_url": "https://api.openai.com/v1/responses",
         "timeout_seconds": 120,
     },
+    "chatgpt_web_manual": {},
 }
 
 FALLBACK_TAG_NORMALIZATION_RULES = [
@@ -231,13 +246,14 @@ class AnalysisEngine:
                 one_sentence=str(cached["one_sentence"]).strip(),
             )
 
-        prompt = self._build_article_prompt(row)
+        prompt = self._build_manual_article_prompt(row) if self.provider == "chatgpt_web_manual" else self._build_article_prompt(row)
         schema = self._article_schema()
         payload = self._run_structured(
             prompt,
             schema,
             f"article_{cache_key}",
             reasoning_effort=self._analysis_reasoning_effort("article_summaries"),
+            manual_context=self._manual_context_for_article(row),
         )
         result = ArticleAnalysis(
             chinese_title=str(payload["chinese_title"]).strip(),
@@ -282,13 +298,18 @@ class AnalysisEngine:
         if cached:
             return self._report_from_payload(cached)
 
-        prompt = self._build_report_prompt(report_date, selected_summaries)
+        prompt = (
+            self._build_manual_report_prompt(report_date, selected_summaries)
+            if self.provider == "chatgpt_web_manual"
+            else self._build_report_prompt(report_date, selected_summaries)
+        )
         schema = self._report_schema(selected_summaries)
         payload = self._run_structured(
             prompt,
             schema,
             f"report_{cache_key}",
             reasoning_effort=self._analysis_reasoning_effort("report"),
+            manual_context=self._manual_context_for_report(report_date, selected_summaries),
         )
         self._write_json_cache("reports", cache_key, payload)
         return self._report_from_payload(payload)
@@ -298,16 +319,17 @@ class AnalysisEngine:
         metadata: dict[str, str],
         full_text: str,
         related_summary: dict[str, str] | None = None,
+        manual_context: dict | None = None,
     ) -> DeepReadAnalysis | None:
         if not self.deep_read_enabled():
             return None
         self._ensure_supported_provider()
 
         normalized_full_text = clean_abstract_text(full_text)
-        if not normalized_full_text:
+        if self.provider != "chatgpt_web_manual" and not normalized_full_text:
             return None
         max_chars = max(self.deep_read_max_input_chars(), 4000)
-        if len(normalized_full_text) > max_chars:
+        if self.provider != "chatgpt_web_manual" and len(normalized_full_text) > max_chars:
             normalized_full_text = normalized_full_text[:max_chars].rsplit(" ", 1)[0].strip() + " ..."
 
         cache_basis = "|".join(
@@ -316,7 +338,7 @@ class AnalysisEngine:
                 str(metadata.get("doi", "")),
                 str(metadata.get("title", "")),
                 str(metadata.get("journal", "")),
-                hashlib.sha1(normalized_full_text.encode("utf-8")).hexdigest()[:16],
+                hashlib.sha1(normalized_full_text.encode("utf-8")).hexdigest()[:16] if normalized_full_text else "manual_web_search",
                 self._analysis_signature("deep_reads"),
             ]
         )
@@ -325,13 +347,18 @@ class AnalysisEngine:
         if cached:
             return self._deep_read_from_payload(cached)
 
-        prompt = self._build_deep_read_prompt(metadata, normalized_full_text, related_summary)
+        prompt = (
+            self._build_manual_deep_read_prompt(metadata, related_summary)
+            if self.provider == "chatgpt_web_manual"
+            else self._build_deep_read_prompt(metadata, normalized_full_text, related_summary)
+        )
         schema = self._deep_read_schema()
         payload = self._run_structured(
             prompt,
             schema,
             f"deep_read_{cache_key}",
             reasoning_effort=self._analysis_reasoning_effort("deep_reads"),
+            manual_context=manual_context or self._manual_context_for_deep_read(metadata, normalized_full_text),
         )
         self._write_json_cache("deep_reads", cache_key, payload)
         return self._deep_read_from_payload(payload)
@@ -372,11 +399,27 @@ class AnalysisEngine:
             knowledge_position=str(payload.get("knowledge_position", "")).strip(),
         )
 
-    def _run_structured(self, prompt: str, schema: dict, name: str, *, reasoning_effort: str = "") -> dict:
+    def _run_structured(
+        self,
+        prompt: str,
+        schema: dict,
+        name: str,
+        *,
+        reasoning_effort: str = "",
+        manual_context: dict | None = None,
+    ) -> dict:
         if self.provider == "codex_local":
             return self._run_codex_structured(prompt, schema, name, reasoning_effort=reasoning_effort)
         if self.provider == "openai_api":
             return self._run_openai_structured(prompt, schema)
+        if self.provider == "chatgpt_web_manual":
+            return self._run_chatgpt_web_manual_structured(
+                prompt,
+                schema,
+                name,
+                reasoning_effort=reasoning_effort,
+                manual_context=manual_context,
+            )
         raise RuntimeError(f"Unsupported analysis provider: {self.provider}")
 
     def _run_codex_structured(self, prompt: str, schema: dict, name: str, *, reasoning_effort: str = "") -> dict:
@@ -499,11 +542,43 @@ class AnalysisEngine:
             raise RuntimeError("OpenAI response did not include output_text")
         return json.loads(output_text)
 
+    def _run_chatgpt_web_manual_structured(
+        self,
+        prompt: str,
+        schema: dict,
+        name: str,
+        *,
+        reasoning_effort: str = "",
+        manual_context: dict | None = None,
+    ) -> dict:
+        title = str((manual_context or {}).get("title", "") or name)
+        request_kind = str((manual_context or {}).get("request_kind", "") or "analysis")
+        bundle = prepare_manual_request_bundle(
+            self.root,
+            request_id=name,
+            request_kind=request_kind,
+            title=title,
+            prompt=prompt,
+            schema=schema,
+            reasoning_effort=reasoning_effort,
+            context=manual_context,
+        )
+        payload = load_manual_response(
+            self.root,
+            request_id=name,
+            prompt_signature=bundle.prompt_signature,
+            schema=schema,
+        )
+        if payload is not None:
+            return payload
+        raise ManualResponsePending(bundle)
+
     def provider_status(self) -> dict:
         codex_settings = self.config.get("codex_local", {})
         openai_settings = self.config.get("openai_api", {})
         codex_executable = self._resolve_codex_executable(codex_settings, strict=False)
         api_key = self._resolve_openai_api_key(openai_settings)
+        manual_counts = manual_status_counts(self.root)
         return {
             "provider": self.provider,
             "provider_supported": self.provider in SUPPORTED_ANALYSIS_PROVIDERS,
@@ -518,13 +593,23 @@ class AnalysisEngine:
             "openai_api_key_present": bool(api_key),
             "openai_api_key_source": self._resolve_openai_api_key_source(openai_settings),
             "openai_model": str(openai_settings.get("model", "gpt-5-mini") or "gpt-5-mini"),
+            "chatgpt_web_manual_root": str(chatgpt_web_manual_root(self.root)),
+            "chatgpt_web_manual_pending": int(manual_counts.get("pending", 0)),
+            "chatgpt_web_manual_ready": int(manual_counts.get("ready", 0)),
+            "chatgpt_web_manual_stale": int(manual_counts.get("stale", 0)),
         }
 
     def _build_article_prompt(self, row: Row) -> str:
         return build_article_prompt(row, self.user_preferences)
 
+    def _build_manual_article_prompt(self, row: Row) -> str:
+        return build_manual_article_prompt(row)
+
     def _build_report_prompt(self, report_date: date, summaries: list[ArticleSummaryResult]) -> str:
         return build_report_prompt(report_date, summaries, self.user_preferences)
+
+    def _build_manual_report_prompt(self, report_date: date, summaries: list[ArticleSummaryResult]) -> str:
+        return build_manual_report_prompt(report_date, summaries)
 
     def _build_deep_read_prompt(
         self,
@@ -533,6 +618,13 @@ class AnalysisEngine:
         related_summary: dict[str, str] | None = None,
     ) -> str:
         return build_deep_read_prompt(metadata, full_text, related_summary, self.user_preferences)
+
+    def _build_manual_deep_read_prompt(
+        self,
+        metadata: dict[str, str],
+        related_summary: dict[str, str] | None = None,
+    ) -> str:
+        return build_manual_deep_read_prompt(metadata, related_summary)
 
     def _deep_read_schema(self) -> dict:
         return build_deep_read_schema()
@@ -574,6 +666,8 @@ class AnalysisEngine:
         if self.provider == "openai_api":
             openai_settings = self.config.get("openai_api", {})
             model = str(openai_settings.get("model", "gpt-5-mini") or "gpt-5-mini").strip() or "gpt-5-mini"
+        elif self.provider == "chatgpt_web_manual":
+            model = "chatgpt_web_manual"
         else:
             codex_settings = self.config.get("codex_local", {})
             model = str(codex_settings.get("model", "") or "").strip() or "default"
@@ -628,7 +722,7 @@ class AnalysisEngine:
         if self.provider in SUPPORTED_ANALYSIS_PROVIDERS:
             return
         raise RuntimeError(
-            "当前 analysis provider 已不再支持。现在只支持 codex_local 或 openai_api。"
+            "当前 analysis provider 已不再支持。现在只支持 codex_local、openai_api 或 chatgpt_web_manual。"
         )
 
     def _resolve_codex_executable(self, settings: dict, strict: bool = True) -> str:
@@ -723,3 +817,67 @@ class AnalysisEngine:
                 continue
             refined.append(tag)
         return refined
+
+    def _manual_context_for_article(self, row: Row) -> dict:
+        title = clean_title_text(str(row["title"] or ""))
+        source_kind = str(row["summary_source_kind"] or "").strip() if "summary_source_kind" in row.keys() else ""
+        return {
+            "request_kind": "article_summary",
+            "title": title or str(row["doi"] or row["fingerprint"] or "article"),
+            "request_label": self._manual_request_label(
+                str(row["doi"] or ""),
+                str(row["fingerprint"] or ""),
+                title,
+            ),
+            "resource_hints": {
+                "title": title,
+                "doi": str(row["doi"] or ""),
+                "url": str(row["url"] or ""),
+                "journal": str(row["source_name"] or ""),
+                "published_date": str(row["published_date"] or ""),
+                "authors": str(row["authors"] or "").replace("\n", ", "),
+                "topic_labels": str(row["topic_labels"] or "").replace("\n", "、"),
+            },
+            "source_kind": source_kind,
+        }
+
+    def _manual_context_for_report(
+        self,
+        report_date: date,
+        summaries: list[ArticleSummaryResult],
+    ) -> dict:
+        return {
+            "request_kind": "weekly_report",
+            "title": f"{report_date.isoformat()} 周报",
+            "request_label": f"{report_date.isoformat()}_weekly_report",
+            "resource_hints": {
+                "report_date": report_date.isoformat(),
+                "paper_count": str(len(summaries)),
+                "paper_titles": "；".join(clean_title_text(str(item.row["title"] or "")) for item in summaries[:12]),
+            },
+        }
+
+    def _manual_context_for_deep_read(self, metadata: dict[str, str], full_text: str) -> dict:
+        return {
+            "request_kind": "deep_read",
+            "title": clean_title_text(str(metadata.get("title", "") or "")) or str(metadata.get("doi", "") or "deep_read"),
+            "request_label": self._manual_request_label(
+                str(metadata.get("doi", "") or ""),
+                str(metadata.get("title", "") or ""),
+            ),
+            "resource_hints": {
+                "title": str(metadata.get("title", "") or ""),
+                "doi": str(metadata.get("doi", "") or ""),
+                "url": str(metadata.get("url", "") or ""),
+                "journal": str(metadata.get("journal", "") or ""),
+                "published_date": str(metadata.get("published_date", "") or ""),
+                "authors": str(metadata.get("authors", "") or ""),
+            },
+        }
+
+    def _manual_request_label(self, *values: str) -> str:
+        for value in values:
+            clean = re.sub(r"[^0-9A-Za-z]+", "_", str(value or "").strip().lower()).strip("_")
+            if clean:
+                return clean[:64]
+        return "request"

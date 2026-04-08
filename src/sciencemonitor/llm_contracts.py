@@ -178,6 +178,71 @@ def build_report_prompt(
     return "\n".join(blocks)
 
 
+def build_manual_article_prompt(row: Row) -> str:
+    cleaned_title = clean_title_text(str(row["title"] or ""))
+    topic_line = row["topic_labels"].replace(chr(10), "、")
+    lines = [
+        "任务：为这篇论文生成单篇中文文献卡片。",
+        "你需要先自行尝试通过 DOI、网页或题目检索论文。",
+        "如果本轮用户另外上传了 PDF，请优先以 PDF 为准。",
+        "如果拿不到全文，允许退回摘要级总结，但必须在 supplement 中明确写出“仅基于摘要/元数据整理”，并在 tags 中加入“信息来源/仅摘要”。",
+        "不要编造正文中不存在的机制、应用价值或定量结果。",
+        "",
+        "检索线索：",
+        f"- 题目：{cleaned_title or '未提供'}",
+        f"- DOI：{row['doi'] or '未提供'}",
+        f"- 网页：{row['url'] or '未提供'}",
+        f"- 期刊：{row['source_name'] or '未提供'}",
+        f"- 日期：{row['published_date'] or '未提供'}",
+        f"- 作者：{row['authors'].replace(chr(10), ', ') or '未提供'}",
+        f"- 主题标签：{topic_line or '未提供'}",
+        "",
+        "输出要求补充：",
+        "1. chinese_title 用简洁中文研究笔记风格，不直译。",
+        "2. tags 用短标签，优先层级名词；没有合适标签时可以谨慎新造。",
+        "3. body 直接写研究对象、数据/方法和关键结果，不先写泛泛背景。",
+        "4. recommendation 只给与阅读价值直接相关的建议，不扩写到无证据的应用前景。",
+    ]
+    return "\n".join(lines)
+
+
+def build_manual_report_prompt(
+    report_date: date,
+    summaries: list[ArticleSummaryResult],
+) -> str:
+    lines = [
+        "任务：基于下面这批论文生成一份中文科研周报。",
+        "你需要优先根据 DOI、网页或题目自行检索论文；不要假设本地还有别的上下文。",
+        "如果个别论文拿不到全文，可以结合摘要和公开元数据，但不要编造细节。",
+        "",
+        f"报告日期：{report_date.isoformat()}",
+        f"论文数：{len(summaries)}",
+        "",
+        "论文清单：",
+    ]
+    for index, summary in enumerate(summaries, start=1):
+        row = summary.row
+        lines.extend(
+            [
+                f"[{index}] 题目：{clean_title_text(str(row['title'] or '')) or '未提供'}",
+                f"    DOI：{row['doi'] or '未提供'}",
+                f"    网页：{row['url'] or '未提供'}",
+                f"    期刊：{row['source_name'] or '未提供'}",
+                f"    日期：{row['published_date'] or '未提供'}",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "输出要求补充：",
+            "1. 周报只根据你实际查到的内容写，不要把单篇不存在的结果扩成趋势。",
+            "2. 重点关注真正重复出现的研究主题、事件、仪器、方法和现象。",
+            "3. overview_bullets 和 daily_suggestions 用简洁可执行表述。",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def build_deep_read_prompt(
     metadata: dict[str, str],
     full_text: str,
@@ -226,6 +291,38 @@ def build_deep_read_prompt(
             full_text,
         ]
     )
+
+
+def build_manual_deep_read_prompt(
+    metadata: dict[str, str],
+    related_summary: dict[str, str] | None,
+) -> str:
+    lines = [
+        "任务：为这篇论文生成中文深度解读。",
+        "你需要优先通过 DOI、网页或题目自行检索全文；如果本轮用户另外上传了 PDF，请优先以 PDF 为准。",
+        "如果无法可靠获得全文，不要假装完成深读。请在相关字段中明确写出“未能可靠获取全文，需用户提供 PDF 后再继续”。",
+        "关键结果字段内部固定分成四段：硬结论、次级结论、合理推论、需进一步研究讨论的结论。",
+        "“为什么做”直接写作者要解决的问题和引言中的空白，不要写“不是……而是……”。",
+        "",
+        "检索线索：",
+        f"- 题目：{metadata.get('title', '') or '未提供'}",
+        f"- DOI：{metadata.get('doi', '') or '未提供'}",
+        f"- 网页：{metadata.get('url', '') or '未提供'}",
+        f"- 期刊：{metadata.get('journal', '') or '未提供'}",
+        f"- 日期：{metadata.get('published_date', '') or '未提供'}",
+        f"- 作者：{metadata.get('authors', '') or '未提供'}",
+    ]
+    if related_summary:
+        lines.extend(
+            [
+                "",
+                "已有单篇总结可作为辅助线索，但不能替代你自己查全文：",
+                f"- 中文概括：{related_summary.get('chinese_title', '') or '未提供'}",
+                f"- 标签：{related_summary.get('tags', '') or '未提供'}",
+                f"- 一句话总结：{related_summary.get('one_sentence', '') or '未提供'}",
+            ]
+        )
+    return "\n".join(lines)
 
 
 def build_deep_read_schema() -> dict:

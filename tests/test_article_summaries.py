@@ -503,6 +503,37 @@ class ArticleSummariesTest(unittest.TestCase):
         self.assertIn("程序已读取并缓存全文", supplement)
         self.assertNotIn("结果片段", supplement)
 
+    def test_validate_summary_fields_respects_manual_abstract_only_claim_even_with_cached_pdf(self) -> None:
+        row = {
+            "fingerprint": "abcdef123456",
+            "source_id": "jgr_space_physics",
+            "source_name": "Journal of Geophysical Research: Space Physics",
+            "title": "Spatial Feature of the Multi-Day Thermospheric Mass Density Oscillations",
+            "abstract": "Abstract: multi-day thermospheric mass density oscillations are studied.",
+            "published_date": "2026-03-29",
+            "doi": "10.1029/2025JA034650",
+            "url": "https://example.org",
+            "authors": "Wenbo Li",
+            "topic_labels": "",
+            "relevance_score": 9.0,
+            "notes": "",
+            "summary_source_kind": "local_pdf_full_text",
+        }
+
+        _, tags, _, supplement, _, _ = validate_summary_fields(
+            row,
+            "示例标题",
+            ["热层/密度"],
+            "示例正文",
+            "仅基于论文题目页可获取的摘要与元数据整理，未获取到可靠的全文内容。",
+            "示例建议",
+            "示例一句话",
+            root=ROOT,
+        )
+        self.assertIn("信息来源/仅摘要", tags)
+        self.assertIn("当前总结仅基于摘要和元数据生成", supplement)
+        self.assertNotIn("程序已读取并缓存全文", supplement)
+
     def test_infer_method_distinguishes_machine_learning_and_empirical_models_from_numerical_simulation(self) -> None:
         row = {
             "title": "Improving thermospheric density estimation by deep learning",

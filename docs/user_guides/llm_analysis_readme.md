@@ -11,7 +11,7 @@
 配置文件在 [config/analysis.json](../config/analysis.json)。
 
 核心字段：
-- `provider`：选择分析后端，可选 `codex_local`、`openai_api`
+- `provider`：选择分析后端，可选 `codex_local`、`openai_api`、`chatgpt_web_manual`
 - `article_summaries.enabled`：是否开启单篇总结的 LLM 分析
 - `article_summaries.max_items_per_run`：每次运行最多让多少篇单篇总结走 LLM
 - `report.enabled`：是否开启周报 LLM 分析
@@ -85,6 +85,29 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 ./scripts/run_science_monitor.sh daily --date 2026-03-31 --days-back 7 --max-per-source 100
 ```
 
+## 使用 ChatGPT 网页人工中转
+
+如果你想减少本地 Codex 或 API 消耗，可以把 `provider` 设成 `chatgpt_web_manual`。
+
+这个模式不会自动调浏览器，而是：
+
+1. 运行原命令
+2. 程序写出请求包到 `data/chatgpt_web_manual/requests/`
+3. 默认只需要把 `prompt.md` 发给 ChatGPT 网页；如你自己手头有 PDF，可额外上传原始 PDF
+4. 用 `manual-llm-import` 导回响应
+5. 重新运行原命令
+
+当前 manual 请求包默认不再复制全文整理稿、摘要整理稿、related summary 或 PDF。推荐按 `request.md` 里给出的文件名保存网页返回的 JSON。
+
+常用命令：
+
+```bash
+./scripts/run_science_monitor.sh manual-llm-status --pending-only
+./scripts/run_science_monitor.sh manual-llm-import --request-id <request_id> --response-file /path/to/response.txt
+```
+
+详细工作流见 [chatgpt_web_manual_workflow.md](chatgpt_web_manual_workflow.md)。
+
 ## 当前实现范围
 
 当前 LLM 层已经接入到：
@@ -126,9 +149,10 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 
 ## 注意事项
 
-- 目前的 LLM 分析仍然基于标题、摘要和元数据，不是全文理解。
+- 单篇总结和深度解读现在会尽量复用全文整理稿、摘要包或人工中转请求包，不再只看原始摘要。
 - `codex_local` 更适合演示和本机使用。
 - `openai_api` 更适合脱离 Codex 的独立部署。
+- `chatgpt_web_manual` 更适合高成本分析的人工作业流，不适合完全无人值守运行。
 - `openai_api.base_url` 默认要求使用 `https`；只有本地 `localhost` 调试接口允许 `http`
 - 当前项目运行并不依赖 Codex skills；skills 只影响我在当前会话里的工作方式，不影响你把程序部署到其他电脑
 - 如果要进一步提升质量，下一步最值得做的是让更多单篇总结直接走 LLM，并继续优化提示词。

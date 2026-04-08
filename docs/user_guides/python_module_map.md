@@ -45,12 +45,15 @@
 - [config_ui_page.py](../../src/sciencemonitor/config_ui_page.py)
   配置面板渲染层。负责配置 UI 的页面布局、状态条、操作卡片和表单 HTML 片段。
 
+- [chatgpt_web_manual.py](../../src/sciencemonitor/chatgpt_web_manual.py)
+  ChatGPT 网页人工中转层。负责生成请求包、保存 prompt/schema/template、导入人工响应、校验 JSON 结构并维护请求状态。
+
 - [doctor.py](../../src/sciencemonitor/doctor.py)
   环境和运行一致性自检。负责检查 `.venv`、PDF 工具、LLM provider、`PROJECT_CONFIG.md` 同步段、研究偏好落地文件、运行时模板和标签配置。  
   `./scripts/run_science_monitor.sh doctor` 调的就是它。
 
 - [entropy.py](../../src/sciencemonitor/entropy.py)
-  代码熵审计层。负责检查模块行数预算、超长函数和 import cycle 是否继续恶化。
+  代码熵审计层。负责检查模块有效代码行预算、超长函数、import cycle 和 unused import 是否继续恶化。
 
 - [maintenance.py](../../src/sciencemonitor/maintenance.py)
   代码维护循环。负责执行“审核 -> 调整 -> 测试 -> 再审核”，并输出维护报告。
@@ -116,7 +119,7 @@
   深度解读 Markdown 工具层。负责深读模板契约、文本规范化、结构化后处理和“生成后审核-自动修正-再审核”闭环。
 
 - [llm.py](../../src/sciencemonitor/llm.py)
-  LLM 分析主流程。负责 provider 选择、缓存、结构化执行和 LLM 返回结果标准化。
+  LLM 分析主流程。负责 provider 选择、缓存、结构化执行和 LLM 返回结果标准化。现在也负责把 `chatgpt_web_manual` 接到现有分析链路。
 
 - [llm_contracts.py](../../src/sciencemonitor/llm_contracts.py)
   LLM 合同层。负责单篇总结、周报、深度解读的 prompt 约束、schema 构造和输入文本整理工具。
@@ -172,6 +175,9 @@
 
 - [test_crossref.py](../../tests/test_crossref.py)
   测试 Crossref 抓取与解析逻辑。
+
+- [test_chatgpt_web_manual.py](../../tests/test_chatgpt_web_manual.py)
+  测试人工中转请求包生成、响应导入和状态流转。
 
 - [test_deep_reads.py](../../tests/test_deep_reads.py)
   测试深度解读模板、渲染和校验逻辑。

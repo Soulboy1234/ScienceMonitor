@@ -13,6 +13,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from sciencemonitor.llm import AnalysisEngine
+from sciencemonitor.tags import infer_preferred_tags_from_text
 
 
 class LLMTagNormalizationTest(unittest.TestCase):
@@ -133,6 +134,25 @@ class LLMTagNormalizationTest(unittest.TestCase):
 
             self.assertNotIn("研究星球/地球", tags)
             self.assertIn("其他行星/月球", tags)
+
+    def test_substorm_is_not_inferred_from_background_or_references_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            (root / "config").mkdir()
+            (root / "data").mkdir()
+            (root / "log").mkdir()
+            (root / "config" / "focus_tags.json").write_text(
+                (ROOT / "config" / "focus_tags.json").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+            tags = infer_preferred_tags_from_text(
+                title_text="Spatial Feature of the Multi-Day Thermospheric Mass Density Oscillations",
+                body_text="Typical space weather events such as geomagnetic storms and substorms can drive thermospheric circulation. Ohtani et al. studied storm-substorm relationship.",
+                root=root,
+                max_tags=20,
+            )
+            self.assertNotIn("亚暴", tags)
 
 
 class LLMProviderResolutionTest(unittest.TestCase):

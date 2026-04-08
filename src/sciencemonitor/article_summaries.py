@@ -42,11 +42,13 @@ from .article_summary_text import (
     parse_authors,
     sanitize_generation_text,
     sanitize_tags,
+    supplement_claims_abstract_only,
     validate_summary_fields,
 )
 from .crossref import CrossrefClient
 from .http import HTTPClient
 from .llm import AnalysisEngine, ArticleAnalysis
+from .chatgpt_web_manual import ManualResponsePending, render_manual_pending_message
 from .models import ArticleSummaryResult
 
 ARTICLE_SUMMARY_REVIEW_MAX_PASSES = 3
@@ -103,6 +105,7 @@ def generate_article_summary_results(
     existing_files = index_existing_summary_files(output_dir)
     http = HTTPClient(timeout=20) if enable_live_fetch else None
     crossref = CrossrefClient(http) if http is not None else None
+    pending_manual_requests = []
 
     for index, row in enumerate(rows):
         existing = load_existing_summary_result(existing_files, row, template_text=template_text, root=project)
@@ -130,12 +133,16 @@ def generate_article_summary_results(
             )
             effective_row = apply_summary_source_material(row, source_material)
 
-        analysis = resolve_article_analysis(
-            effective_row,
-            analysis_engine,
-            index,
-            raise_on_error=require_analysis,
-        )
+        try:
+            analysis = resolve_article_analysis(
+                effective_row,
+                analysis_engine,
+                index,
+                raise_on_error=require_analysis,
+            )
+        except ManualResponsePending as exc:
+            pending_manual_requests.append(exc.bundle)
+            continue
         if require_analysis and analysis is None and not get_override(effective_row):
             if analysis_engine is None:
                 raise RuntimeError(
@@ -219,6 +226,8 @@ def generate_article_summary_results(
             )
         )
 
+    if pending_manual_requests:
+        raise RuntimeError(render_manual_pending_message(pending_manual_requests))
     return results
 
 
@@ -402,7 +411,7 @@ def _autofix_article_summary_markdown(
     supplement = extract_numbered_line(markdown, "- 「补充信息」") or build_supplement_text(row, analysis=analysis, root=root)
     supplement = normalize_summary_supplement(row, supplement)
     source_kind = str(row.get("summary_source_kind", "") or "").strip().lower()
-    if source_kind and source_kind not in FULL_TEXT_SOURCE_KINDS:
+    if (source_kind and source_kind not in FULL_TEXT_SOURCE_KINDS) or supplement_claims_abstract_only(supplement):
         tags = sanitize_tags(tags + [ABSTRACT_ONLY_TAG], root=root, context="article_summary_review")
         supplement = annotate_abstract_only_supplement(supplement)
     elif source_kind in FULL_TEXT_SOURCE_KINDS:
@@ -452,12 +461,13 @@ def _validate_article_summary_markdown(markdown: str, *, row: Row) -> list[str]:
     if "结果片段" in supplement:
         issues.append("单篇总结补充信息仍包含“结果片段”旧表述")
     source_kind = str(row.get("summary_source_kind", "") or "").strip().lower()
-    if source_kind and source_kind not in FULL_TEXT_SOURCE_KINDS:
+    abstract_only_supplement = supplement_claims_abstract_only(supplement)
+    if (source_kind and source_kind not in FULL_TEXT_SOURCE_KINDS) or abstract_only_supplement:
         if ABSTRACT_ONLY_TAG not in tags:
             issues.append("摘要级单篇总结缺少“信息来源/仅摘要”标签")
         if "当前总结仅基于摘要和元数据生成" not in supplement:
             issues.append("摘要级单篇总结缺少摘要来源说明")
-    if source_kind in FULL_TEXT_SOURCE_KINDS and ABSTRACT_ONLY_TAG in tags:
+    if source_kind in FULL_TEXT_SOURCE_KINDS and ABSTRACT_ONLY_TAG in tags and not abstract_only_supplement:
         issues.append("全文级单篇总结不应保留“信息来源/仅摘要”标签")
     return issues
 

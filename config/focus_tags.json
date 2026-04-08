@@ -655,7 +655,8 @@
         "substorm",
         "substorms",
         "亚暴"
-      ]
+      ],
+      "inference_scope": "title"
     },
     {
       "id": "magnetic_reconnection",

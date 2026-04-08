@@ -6,6 +6,15 @@
       "journal": "Space Weather",
       "doi": "10.1029/2022SW003376",
       "url": "https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2022SW003376",
+      "published_date": "2023-07-10",
+      "authors": [
+        "Wenbo Li",
+        "Libo Liu",
+        "Yiding Chen",
+        "Zhuowei Xiao",
+        "Huijun Le",
+        "Ruilong Zhang"
+      ],
       "asset_pdf": "assets/2023_sw_resnet_tmd.pdf"
     },
     {
@@ -14,6 +23,19 @@
       "journal": "Journal of Geophysical Research: Space Physics",
       "doi": "10.1029/2025JA034386",
       "url": "https://agupubs.onlinelibrary.wiley.com/doi/10.1029/2025JA034386",
+      "published_date": "2026-03-03",
+      "authors": [
+        "Wenbo Li",
+        "Libo Liu",
+        "Jiaojiao Zhang",
+        "Xiukuan Zhao",
+        "Jianfeng Dai",
+        "Ruilong Zhang",
+        "Yuyan Yang",
+        "Bowei Liu",
+        "Yiding Chen",
+        "Huijun Le"
+      ],
       "asset_pdf": "assets/2026_jgr_polar_convection_mohe.pdf"
     }
   ]

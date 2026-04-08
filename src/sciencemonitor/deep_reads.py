@@ -57,10 +57,13 @@ from .deep_read_markdown import (
     _validate_deep_read_markdown,
 )
 from .http import HTTPClient
+from .chatgpt_web_manual import ManualResponsePending
 from .llm import AnalysisEngine, DeepReadAnalysis
 from .storage import Storage
 from .tags import infer_preferred_tags_from_text, normalize_tags
 from .utils import clean_abstract_text, clean_title_text
+
+DEEP_READ_EXCLUDED_SUMMARY_TAG_PREFIXES = ("信息来源/",)
 
 
 @dataclass(frozen=True)
@@ -105,24 +108,56 @@ def run_deep_read(
     if not analysis_engine.deep_read_enabled():
         return DeepReadResult(False, "深度解读功能当前已关闭。请在配置界面或 PROJECT_CONFIG.md 中开启后再运行。")
     if not analysis_engine.provider_status().get("provider_supported", False):
-        return DeepReadResult(False, "当前 analysis provider 不再受支持。请切换到 codex_local 或 openai_api。")
+        return DeepReadResult(False, "当前 analysis provider 不再受支持。请切换到 codex_local、openai_api 或 chatgpt_web_manual。")
 
     metadata = _resolve_metadata(storage, doi=doi, title=title, journal=journal, url=url)
     if not metadata.get("title"):
         return DeepReadResult(False, "深度解读需要至少提供 DOI 或题目，且最好能在数据库或 Crossref 中找到论文元数据。")
 
-    resolution = _resolve_full_text(
-        project,
-        metadata=metadata,
-        explicit_pdf=Path(pdf_path).expanduser() if pdf_path else None,
-        runtime=runtime,
-    )
-    if not resolution.success:
-        return DeepReadResult(False, resolution.message, source_kind=resolution.source_kind)
+    explicit_pdf = Path(pdf_path).expanduser() if pdf_path else None
+    if analysis_engine.provider == "chatgpt_web_manual":
+        resolution = FullTextResolution(
+            success=True,
+            source_kind="chatgpt_web_manual_search",
+            full_text="",
+            pdf_path=explicit_pdf if explicit_pdf and explicit_pdf.exists() else None,
+            source_url=str(metadata.get("url", "") or url or ""),
+        )
+    else:
+        resolution = _resolve_full_text(
+            project,
+            metadata=metadata,
+            explicit_pdf=explicit_pdf,
+            runtime=runtime,
+        )
+        if not resolution.success:
+            return DeepReadResult(False, resolution.message, source_kind=resolution.source_kind)
 
     related_summary = related_summary_override or _find_related_summary(project, metadata.get("doi", ""))
     related_summary_payload = _summary_payload(related_summary) if related_summary else None
-    analysis = analysis_engine.analyze_deep_read(metadata, resolution.full_text, related_summary_payload)
+    manual_context = {
+        "request_kind": "deep_read",
+        "title": clean_title_text(str(metadata.get("title", "") or "")) or str(metadata.get("doi", "") or "deep_read"),
+        "request_label": _manual_deep_read_label(metadata, explicit_pdf),
+        "resource_hints": {
+            "title": str(metadata.get("title", "") or ""),
+            "doi": str(metadata.get("doi", "") or ""),
+            "url": str(metadata.get("url", "") or url or ""),
+            "journal": str(metadata.get("journal", "") or ""),
+            "published_date": str(metadata.get("published_date", "") or ""),
+            "authors": str(metadata.get("authors", "") or ""),
+        },
+        "pdf_hint_path": str(explicit_pdf) if explicit_pdf else "",
+    }
+    try:
+        analysis = analysis_engine.analyze_deep_read(
+            metadata,
+            resolution.full_text,
+            related_summary_payload,
+            manual_context=manual_context,
+        )
+    except ManualResponsePending as exc:
+        return DeepReadResult(False, str(exc), source_kind=resolution.source_kind)
     if analysis is None:
         return DeepReadResult(False, "深度解读分析未生成结果。请检查当前 provider、额度或输入文本长度。", source_kind=resolution.source_kind)
     analysis = _normalize_deep_read_analysis(
@@ -254,6 +289,19 @@ def _resolve_metadata(
         "published_date": "",
         "raw_authors": "",
     }
+
+
+def _manual_deep_read_label(metadata: dict[str, object], explicit_pdf: Path | None) -> str:
+    candidates = [
+        explicit_pdf.stem if explicit_pdf else "",
+        str(metadata.get("doi", "") or ""),
+        str(metadata.get("title", "") or ""),
+    ]
+    for value in candidates:
+        clean = sanitize_filename(str(value or "")).replace(" ", "_").strip("._")
+        if clean:
+            return clean[:64]
+    return "deep_read"
 
 
 def _search_crossref_by_doi(doi: str) -> dict[str, object] | None:
@@ -572,6 +620,7 @@ def _normalize_deep_read_analysis(
     for tag in inferred_tags:
         if tag.startswith("仪器/") and tag not in merged_tags:
             merged_tags.append(tag)
+    merged_tags = _filter_deep_read_source_status_tags(merged_tags)
     normalized_tags = _filter_deep_read_tags(
         project,
         metadata_title=metadata_title,
@@ -613,6 +662,14 @@ def _load_related_summary_tags(summary_path: Path | None) -> list[str]:
     except Exception:
         return []
     return extract_summary_tags(text)
+
+
+def _filter_deep_read_source_status_tags(tags: list[str]) -> list[str]:
+    return [
+        tag
+        for tag in tags
+        if not any(tag.startswith(prefix) for prefix in DEEP_READ_EXCLUDED_SUMMARY_TAG_PREFIXES)
+    ]
 
 
 def _infer_additional_deep_read_tags(project: Path, *, metadata_title: str, full_text: str) -> list[str]:

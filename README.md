@@ -12,7 +12,7 @@ Space Physics 文献监测、单篇总结、深度解读与周报生成工具。
 - 监控多个 Space Physics 相关期刊与高影响力观察哨期刊
 - 抓取标题、摘要、DOI、发表日期等元数据
 - 生成单篇文献总结、深度解读和周报
-- 支持 `codex_local`、`openai_api` 两种分析后端
+- 支持 `codex_local`、`openai_api`、`chatgpt_web_manual` 三种分析后端
 - 支持 Obsidian wiki link、article index 和双向链接
 - 支持 PDF 工具链自检与项目环境自检
 
@@ -46,6 +46,7 @@ ScienceMonitor/
 可选环境：
 - 本地 `codex` CLI：只有使用 `codex_local` 时才需要
 - OpenAI 兼容 API：如果使用 `openai_api`
+- ChatGPT 网页：如果使用 `chatgpt_web_manual`
 - `poppler`：如果系统已安装，项目会优先复用；如果没有，项目会回退到本地 PDF 包装器
 
 当前项目不是打包发布形态，没有 `pyproject.toml`。默认通过虚拟环境 + `scripts/requirements/requirements-local.txt` 运行。
@@ -54,6 +55,7 @@ ScienceMonitor/
 
 - 如果选择 `openai_api`，只要提供可用模型和 API key，就可以脱离 Codex 环境运行
 - 只有 `codex_local` provider 才依赖本地 `codex` CLI
+- 如果选择 `chatgpt_web_manual`，程序本身不调用外部 API，但需要人工把请求包交给 ChatGPT 网页并导回响应
 
 ## 依赖包
 
@@ -140,6 +142,7 @@ python3 -m venv .venv
 可选模式：
 - `codex_local`：调用本地 Codex
 - `openai_api`：调用外部 API
+- `chatgpt_web_manual`：生成人工中转请求包，由你在 ChatGPT 网页完成分析后再导回结果
 
 说明：
 - 单篇总结、周报和深度解读已不再支持规则法文本生成
@@ -156,6 +159,7 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 ```
 
 详细说明见 [docs/user_guides/llm_analysis_readme.md](docs/user_guides/llm_analysis_readme.md)。
+如果使用 `chatgpt_web_manual`，工作流说明见 [docs/user_guides/chatgpt_web_manual_workflow.md](docs/user_guides/chatgpt_web_manual_workflow.md)。
 
 如果你的目标是“脱离 Codex 环境独立运行”，推荐直接用：
 
@@ -163,6 +167,12 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 - 正确的 `SCIENCEMONITOR_OPENAI_API_KEY`
 - 可访问的 `openai_api.base_url`
 - 已安装好的 Python 依赖和 PDF 工具链
+
+如果你的目标是“尽量减少 Codex 与 API 消耗”，可以改用：
+
+- `provider=chatgpt_web_manual`
+- 运行现有命令后处理 `data/chatgpt_web_manual/requests/` 下的请求包
+- 用 `manual-llm-import` 导入响应，再重新执行原命令
 
 ### 5. 运行自检
 
@@ -196,6 +206,7 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 ./scripts/run_science_monitor.sh doctor
 ./scripts/run_science_monitor.sh entropy-check
 ./scripts/run_science_monitor.sh maintenance-check --auto-repair
+./scripts/run_science_monitor.sh manual-llm-status
 ./scripts/run_science_monitor.sh config-ui
 ./scripts/run_science_monitor.sh update --date 2026-03-31 --days-back 7 --max-per-source 100
 ./scripts/run_science_monitor.sh summaries --date 2026-03-31 --window-days 7
@@ -206,6 +217,13 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 ./scripts/run_science_monitor.sh tag-candidates --min-count 2 --limit 50
 ./scripts/run_science_monitor.sh real-eval --case-ids 2024_epp_superstorm_it_diff
 ./scripts/run_science_monitor.sh index
+```
+
+人工中转常用命令：
+
+```bash
+./scripts/run_science_monitor.sh manual-llm-status --pending-only
+./scripts/run_science_monitor.sh manual-llm-import --request-id <request_id>
 ```
 
 ## 输出与路径

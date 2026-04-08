@@ -33,6 +33,8 @@ GENERIC_SENTENCE_FRAGMENTS = (
     "摘要显示，该研究给出了与上述问题相关的主要结果和解释",
 )
 ABSTRACT_ONLY_TAG = "信息来源/仅摘要"
+ABSTRACT_ONLY_NOTICE = "当前总结仅基于摘要和元数据生成，未获得全文，结论需按摘要级别理解。"
+ABSTRACT_ONLY_RE = re.compile(r"仅基于摘要|仅基于论文题目页|仅基于题目页|仅基于元数据|未获取到可靠的全文|未获得全文")
 
 TOPIC_TO_TAG = {
     "电离层": "电离层",
@@ -157,6 +159,8 @@ def validate_summary_fields(
     if not cleaned_supplement:
         cleaned_supplement = build_supplement_text(row, analysis=None, root=root)
     cleaned_supplement = normalize_summary_supplement(row, cleaned_supplement)
+    if supplement_claims_abstract_only(cleaned_supplement):
+        cleaned_tags = sanitize_tags(cleaned_tags + [ABSTRACT_ONLY_TAG], root=root, context=candidate_context, record_candidates=bool(root))
 
     cleaned_recommendation = sanitize_generation_text(recommendation)
     if is_generic_sentence(cleaned_recommendation):
@@ -367,6 +371,10 @@ def normalize_summary_supplement(row: Row, supplement: str) -> str:
     clean_supplement = sanitize_generation_text(supplement)
     clean_supplement = clean_supplement.replace("结果片段", "相关内容")
     clean_supplement = clean_supplement.replace("关键章节", "相关内容")
+    if supplement_claims_abstract_only(clean_supplement):
+        if ABSTRACT_ONLY_NOTICE in clean_supplement:
+            return clean_supplement
+        return f"{ABSTRACT_ONLY_NOTICE} {clean_supplement}".strip()
     source_kind = str(row.get("summary_source_kind", "") or "").strip().lower()
     if source_kind not in FULL_TEXT_SOURCE_KINDS:
         return clean_supplement
@@ -394,6 +402,10 @@ def normalize_summary_supplement(row: Row, supplement: str) -> str:
     if not cleaned_remainder:
         return normalized_prefix
     return f"{normalized_prefix} {cleaned_remainder}"
+
+
+def supplement_claims_abstract_only(supplement: str) -> bool:
+    return bool(ABSTRACT_ONLY_RE.search(sanitize_generation_text(supplement)))
 
 
 def build_recommendation(row: Row, analysis: ArticleAnalysis | None = None, root: Path | None = None) -> str:

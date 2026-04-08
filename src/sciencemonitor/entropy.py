@@ -101,7 +101,11 @@ def render_entropy_check_summary(report: EntropyCheckReport) -> str:
 def _collect_module_line_counts(source_root: Path) -> dict[str, int]:
     counts: dict[str, int] = {}
     for path in sorted(source_root.glob("*.py")):
-        counts[path.name] = sum(1 for _ in path.open("r", encoding="utf-8"))
+        counts[path.name] = sum(
+            1
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        )
     return counts
 
 

@@ -17,8 +17,11 @@
 - `config-ui` 接入研究偏好同步段：
   让用户不必手改 `PROJECT_CONFIG.md` 中的研究偏好块。
 
-- `chatgpt_web_manual` 人工中转模式：
-  程序生成标准化 prompt 包，用户在 ChatGPT 网页执行后回填结果，作为高成本深读和校准的备用后端。
+- `chatgpt_web_manual` 的 UI 化导入与状态面板：
+  当前人工中转已经可以通过 CLI 使用，但 `config-ui` 还没有提供请求状态浏览、响应导入和一键重跑入口。
+
+- `chatgpt_web_manual` 请求 id 稳定性：
+  本次 `2026_jgr_multiday_tmd_oscillation` 测试中，初始单篇请求和真实评测运行请求产生了不同 id，需要后续把 manual article request id 进一步稳定到 DOI/任务类型级别，减少重复导入。
 
 - 历史输出迁移：
   等代码和审核规则稳定后，再统一把旧的单篇总结、周报、深度解读输出迁移到当前命名和格式体系。

@@ -212,10 +212,10 @@ def run_real_case_eval(
 
             abstract_text = clean_abstract_text(str(summary.row.get("abstract", "") or ""))
             passed = source_kind != "missing" and bool(abstract_text) and deep_read_success
-            if source_kind in {"html_full_text", "local_pdf_full_text"}:
+            if abstract_only:
+                message = "未获得全文，已退回摘要生成单篇总结和周报。" if include_report else "未获得全文，已退回摘要生成单篇总结。"
+            elif source_kind in {"html_full_text", "local_pdf_full_text"}:
                 message = "全文级材料获取成功。"
-            elif abstract_only:
-                message = "未获得全文，已退回摘要生成单篇总结和周报。"
             else:
                 message = "未识别到明确的数据来源。"
             if include_deep_read:
