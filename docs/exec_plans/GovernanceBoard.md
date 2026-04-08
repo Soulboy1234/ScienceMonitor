@@ -6,9 +6,9 @@
 
 ## 当前状态
 
-- 当前目标版本：`v1.1.0（未发布）`
-- 当前备份版本：`v1.0.0`
-- 当前结构治理状态：Phase 1 到 Phase 11 已完成；`chatgpt_web_manual` 计划与轻量化 cleanup 已完成
+- 当前目标版本：`v1.2.0（待规划）`
+- 当前备份版本：`v1.1.0`
+- 当前结构治理状态：Phase 1 到 Phase 11 已完成；`chatgpt_web_manual` 工作流已完成并记录为 `v1.1.0`
 - 当前 `docs/exec_plans/active/`：无进行中的计划
 - 当前发布阻塞项：无
 

@@ -15,6 +15,23 @@
 
 ## [Unreleased]
 
+暂无。
+
+## [v1.1.0] - 2026-04-08
+
+Tag: `v1.1.0`
+
+Snapshot commit:
+
+- 待 tag 创建后补写
+
+版本定位：
+
+- `v1.0.0` 之后的首个功能版本
+- 目标是新增并固定 `chatgpt_web_manual` 人工网页中转模式，分流 `codex_local` 与 API 的 LLM 分析消耗
+
+主要变化：
+
 - 新增 `chatgpt_web_manual` 人工中转 provider：
   - 程序会在 `data/chatgpt_web_manual/requests/` 下生成请求包
   - 用户可通过 `manual-llm-status` 查看状态，通过 `manual-llm-import` 导入 ChatGPT 网页响应
@@ -33,6 +50,13 @@
 - 维护 gate 已同步纳入这轮新边界：
   - `pytest -q` -> `127 passed`
   - `doctor --consistency-only`、`entropy-check`、`maintenance-check --auto-repair --max-passes 2` 通过
+
+发版时状态：
+
+- `pytest -q` 通过，`128 passed`
+- `harness-check` 通过
+- `entropy-check` 通过
+- `maintenance-check --auto-repair --max-passes 2` 通过
 
 ## [v1.0.0] - 2026-04-04
 
