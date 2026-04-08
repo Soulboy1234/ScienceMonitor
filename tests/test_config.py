@@ -93,14 +93,12 @@ class ConfigOverrideTest(unittest.TestCase):
     def test_output_root_can_be_loaded_from_relative_paths_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = pathlib.Path(tmpdir)
-            root = workspace / "Documents" / "codex" / "ScienceMonitor"
-            configured_output = workspace / "Library" / "Mobile Documents" / "iCloud~md~obsidian" / "Documents" / "AI" / "ScienceMonitorOut"
+            root = workspace / "project" / "ScienceMonitor"
+            configured_output = root / "outputs" / "ScienceMonitorOut"
             (root / "config").mkdir(parents=True)
             (root / "config" / "paths.json").write_text(
                 json.dumps(
-                    {
-                        "output_root": "../../../Library/Mobile Documents/iCloud~md~obsidian/Documents/AI/ScienceMonitorOut"
-                    }
+                    {"output_root": "outputs/ScienceMonitorOut"}
                 ),
                 encoding="utf-8",
             )

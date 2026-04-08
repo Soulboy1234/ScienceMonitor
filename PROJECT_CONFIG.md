@@ -8,8 +8,8 @@
 
 ## 当前环境与说明
 
-- 项目根目录：`/Users/liwenbo/Documents/codex/ScienceMonitor`
-- 本地 Python：`/Users/liwenbo/Documents/codex/ScienceMonitor/.venv/bin/python`
+- 项目根目录：当前仓库根目录
+- 本地 Python：`./.venv/bin/python`
 - 默认入口脚本：`./scripts/run_science_monitor.sh`
 - 本地配置界面：`./scripts/run_science_monitor.sh config-ui`
 - PDF 工具：`pdftotext`、`pdfinfo`、`pdftoppm` 由项目环境优先提供
@@ -128,7 +128,7 @@
 ## Sync: config/paths.json
 ```json
 {
-  "output_root": "../../../Library/Mobile Documents/iCloud~md~obsidian/Documents/AI/ScienceMonitorOut"
+  "output_root": "out"
 }
 ```
 
@@ -246,4 +246,3 @@
 1. 日常运行参数、路径、LLM 后端：优先改这个文件里的三个 `## Sync:` 配置块。
 2. 学科知识和产出风格：改 `config/*.json` 的学科配置文件、`config/templates/*.md` 与相关 workflow specs。
 3. 用户偏好与重点提醒：改这个文件里的 `## Sync: config/research_preferences.json` 段。
-

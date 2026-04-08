@@ -4,8 +4,8 @@ Space Physics 文献监测、单篇总结、深度解读与周报生成工具。
 
 项目默认采用“本地代码仓库 + 独立输出仓库”的结构：
 - 当前仓库 `ScienceMonitor`：代码、配置、测试、虚拟环境、数据库、日志
-- 输出仓库 `ScienceMonitorOut`：Obsidian 使用的周报、单篇总结、深读、索引、个人工作区
-- 当前默认输出位置：`/Users/liwenbo/Library/Mobile Documents/iCloud~md~obsidian/Documents/AI/ScienceMonitorOut`
+- 输出目录：Obsidian 使用的周报、单篇总结、深读、索引、个人工作区
+- 当前默认输出位置：`out/`。如需接入 Obsidian vault，请在 [PROJECT_CONFIG.md](PROJECT_CONFIG.md) 中修改 `config/paths.json` 同步块。
 
 ## 功能概览
 

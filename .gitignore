@@ -3,6 +3,18 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .DS_Store
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+.env
+.env.*
+!.env.example
+*.log
+*.sqlite
+*.sqlite3
+*.db
 .venv/
 venv/
 /data/
@@ -10,6 +22,10 @@ venv/
 /log/
 /tmp/
 /evals/real_cases/assets/
+*.pdf
 /.obsidian/
 /启动操作面板.app/
 /关闭操作面板.app/
+
+# Local development archives are not part of the public project.
+/开发人工归档/

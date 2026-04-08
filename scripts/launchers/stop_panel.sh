@@ -1,7 +1,8 @@
 #!/bin/bash
 set -u
 
-PROJECT_ROOT="/Users/liwenbo/Documents/codex/ScienceMonitor"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SUPPORT_ROOT="$HOME/Library/Application Support/ScienceMonitorLauncher"
 LOG_PATH="$SUPPORT_ROOT/config_ui_launcher.log"
 STATE_PATH="$SUPPORT_ROOT/config_ui_state.json"
