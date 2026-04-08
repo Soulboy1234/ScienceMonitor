@@ -5,7 +5,7 @@ Space Physics 文献监测、单篇总结、深度解读与周报生成工具。
 项目默认采用“本地代码仓库 + 独立输出仓库”的结构：
 - 当前仓库 `ScienceMonitor`：代码、配置、测试、虚拟环境、数据库、日志
 - 输出目录：Obsidian 使用的周报、单篇总结、深读、索引、个人工作区
-- 当前默认输出位置：`out/`。如需接入 Obsidian vault，请在 [PROJECT_CONFIG.md](PROJECT_CONFIG.md) 中修改 `config/paths.json` 同步块。
+- 当前公开默认输出位置：`out/`。如需在本机接入私人 Obsidian vault，请复制 [config/local.paths.example.json](config/local.paths.example.json) 为 `config/local.paths.json` 并修改其中的 `output_root`；该本地文件不会上传 GitHub。
 
 ## 功能概览
 
@@ -125,6 +125,22 @@ python3 -m venv .venv
 - LLM provider 和模型
 - 输出目录 `output_root`
 
+公开仓库不要写入个人路径。本机私人输出目录使用：
+
+```bash
+cp config/local.paths.example.json config/local.paths.json
+```
+
+然后编辑 `config/local.paths.json`：
+
+```json
+{
+  "output_root": "/absolute/path/to/your/Obsidian/ScienceMonitorOut"
+}
+```
+
+程序解析优先级是：`SCIENCEMONITOR_OUTPUT_ROOT` 环境变量 > `config/local.paths.json` > `config/paths.json` > `out`。
+
 高级配置仍然直接编辑这些文件：
 - [config/sources.json](config/sources.json)
 - [config/topics.json](config/topics.json)
@@ -228,7 +244,7 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 
 ## 输出与路径
 
-输出根目录由 [config/paths.json](config/paths.json) 中的 `output_root` 决定。
+输出根目录默认由 [config/paths.json](config/paths.json) 中的 `output_root` 决定。本机私人路径可以用不会上传 GitHub 的 `config/local.paths.json` 覆盖。
 
 默认输出结构：
 - `research_reports/`：周报与 `latest.md`
@@ -280,8 +296,8 @@ export SCIENCEMONITOR_LOG_ROOT="$HOME/Library/Application Support/ScienceMonitor
 - 周报功能开关
 - 深度解读功能开关
 - 缺少 PDF 时是否自动搜索全文
-- `codex_local / openai_api`
-- `codex_local.model`、超时、输出路径等
+- `codex_local / openai_api / chatgpt_web_manual`
+- `codex_local.model`、超时、公开默认输出路径和本机私有输出路径等
 
 注意：
 - 这个文件里的 `## Sync:` JSON 代码块必须保持合法 JSON
@@ -387,6 +403,6 @@ export SCIENCEMONITOR_LOG_ROOT="$HOME/Library/Application Support/ScienceMonitor
 
 1. `./scripts/bootstrap_local_env.sh` 是否成功创建 `.venv`
 2. `./scripts/run_science_monitor.sh doctor` 是否无告警
-3. [PROJECT_CONFIG.md](PROJECT_CONFIG.md) 里的 `output_root` 是否指向正确的输出仓库
+3. `config/local.paths.json` 或 [PROJECT_CONFIG.md](PROJECT_CONFIG.md) 里的 `output_root` 是否指向正确的输出仓库
 4. LLM provider 是否符合新电脑环境
 5. PDF 工具是否能正常用

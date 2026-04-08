@@ -12,6 +12,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from sciencemonitor import llm as llm_module
 from sciencemonitor.llm import AnalysisEngine
 from sciencemonitor.tags import infer_preferred_tags_from_text
 
@@ -183,6 +184,22 @@ class LLMProviderResolutionTest(unittest.TestCase):
             ):
                 self.assertEqual(engine._resolve_openai_api_key(settings), "env-token")
                 self.assertEqual(engine._resolve_openai_api_key_source(settings), "SCIENCEMONITOR_OPENAI_API_KEY")
+
+    def test_codex_executable_falls_back_to_codex_app_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = self._prepare_root(tmpdir)
+            fallback = pathlib.Path(tmpdir) / "Codex.app" / "Contents" / "Resources" / "codex"
+            fallback.parent.mkdir(parents=True)
+            fallback.write_text("#!/bin/sh\n", encoding="utf-8")
+            fallback.chmod(0o755)
+
+            engine = AnalysisEngine(root)
+            with mock.patch("sciencemonitor.llm.shutil.which", return_value=None), mock.patch.object(
+                llm_module,
+                "DEFAULT_CODEX_EXECUTABLE_CANDIDATES",
+                (fallback,),
+            ):
+                self.assertEqual(engine._resolve_codex_executable({}, strict=False), str(fallback))
 
     def test_openai_api_key_falls_back_to_openai_env_var(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

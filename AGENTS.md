@@ -30,7 +30,12 @@
 - [docs/workflow_specs/rules.md](docs/workflow_specs/rules.md)
 - [docs/workflow_specs/llm_prompt_contracts.md](docs/workflow_specs/llm_prompt_contracts.md)
 - [docs/workflow_specs/literature_note_style_guide.md](docs/workflow_specs/literature_note_style_guide.md)
+- [docs/workflow_specs/report_review_rules.md](docs/workflow_specs/report_review_rules.md)
 - [docs/workflow_specs/source_of_truth_matrix.md](docs/workflow_specs/source_of_truth_matrix.md)
+
+如果任务涉及网页正文抽取或 Obsidian vault 操作，再读：
+
+- [docs/user_guides/agent_skill_usage.md](docs/user_guides/agent_skill_usage.md)
 
 ## 标准命令
 
@@ -72,10 +77,28 @@
 - 输出索引：`src/sciencemonitor/article_index.py`
 - 来源审计：`src/sciencemonitor/source_audit.py`
 - 全量 Python 文件说明：`docs/user_guides/python_module_map.md`
+- Agent skill 使用规则：`docs/user_guides/agent_skill_usage.md`
+
+## Skill 使用规则
+
+当前 agent 应主动使用以下四个 skill：
+
+- `defuddle`：用户给网页 URL 并要求读取或分析网页正文时使用，优先于直接抓取杂乱网页正文
+- `obsidian-cli`：用户要求直接搜索、读取、创建或管理 Obsidian vault 内容时使用
+- `obsidian-bases`：创建或修改 `.base` 文件、表格/卡片视图、过滤器、公式和 summary 时使用
+- `obsidian-markdown`：创建或修改 Obsidian 特有 Markdown 语法时使用，包括 wikilinks、embeds、callouts、frontmatter 和 tags
+
+边界：
+
+- skill 是工具，不是项目 source of truth
+- skill 不覆盖 `PROJECT_CONFIG.md`、`config/*.json`、运行时模板和 `docs/workflow_specs/source_of_truth_matrix.md`
+- skill 不可用时，说明缺口并使用本地命令或项目内逻辑兜底
+- 使用 skill 后如果改了代码、模板、配置或输出格式，仍然按本项目 harness 规则运行对应检查
 
 ## 当前 source of truth
 
-- 运行参数与路径：`PROJECT_CONFIG.md` 和 `config/*.json`
+- 运行参数与公开默认路径：`PROJECT_CONFIG.md` 和 `config/*.json`
+- 本机私人路径覆盖：`config/local.paths.json`，该文件不会上传 GitHub；公开示例见 `config/local.paths.example.json`
 - 维护预算：`config/maintenance_budget.json`
 - 用户研究偏好：`PROJECT_CONFIG.md` 的研究偏好同步段，运行时落地到 `config/research_preferences.json`
 - 标签归一化：`config/focus_tags.json`
@@ -87,6 +110,7 @@
 - `config/templates/daily_report_template.md` 现在是周报展示层的 source of truth。
 - `config/templates/deep_reading_report_template.md` 现在是深度解读展示层的 source of truth。
 - 模板、提示词、规则文档和 Python 实现的优先级，以 `docs/workflow_specs/source_of_truth_matrix.md` 为准。
+- 报告生成后的格式审核规则，以 `docs/workflow_specs/report_review_rules.md` 为准；人工网页中转结果也必须走本地审核层。
 - 当前无 PDF 策略：
   - `src/sciencemonitor/article_summaries.py` 会优先尝试网页全文，失败则退回摘要，并为仅摘要总结打 `#信息来源/仅摘要`
   - `src/sciencemonitor/deep_reads.py` 只做简单网页搜索；没有可用全文时直接提示用户提供 PDF

@@ -17,6 +17,46 @@
 
 暂无。
 
+## [v1.2.0] - 2026-04-08
+
+Tag: `v1.2.0`
+
+Snapshot commit:
+
+- 待 tag 创建后补充
+
+版本定位：
+
+- `v1.1.0` 之后的 harness 维护版本
+- 目标是固定 agent skill 使用规范、本机私有路径覆盖和报告格式审核治理，同时把不满意的 UI 改动延后，不纳入本版本
+
+主要变化：
+
+- 新增 agent skill 使用规范：
+  - 固定 `defuddle`、`obsidian-cli`、`obsidian-bases`、`obsidian-markdown` 的触发条件和边界
+  - 在 `AGENTS.md` 中增加 skill 使用入口
+  - 新增 `docs/user_guides/agent_skill_usage.md` 作为 harness 化 skill runbook
+- 新增本机私有路径覆盖：
+  - `config/local.paths.json` 可保存私人 Obsidian 输出目录，且不会上传 GitHub
+  - `config/local.paths.example.json` 提供公开示例
+  - 路径解析优先级为环境变量、`config/local.paths.json`、`config/paths.json`、默认 `out`
+- 新增报告格式审核治理规范：
+  - `docs/workflow_specs/report_review_rules.md` 统一记录单篇总结、周报和深度解读的生成后审核规则
+  - 明确模板只控制静态展示骨架，编号换行、否定转折清理、摘要级来源说明和 eval 链接语义等动态规则由 Python 审核层强制执行
+  - 模板 guide、source-of-truth 矩阵和 agent 入口已同步引用这份规则
+- 增强本机运行鲁棒性：
+  - `codex_local` 解析会在 `PATH` 不完整时回退到 macOS `Codex.app` 内置可执行文件，避免后台服务误报找不到 `codex`
+- 版本边界：
+  - 新的 `config-ui` 改动未纳入本版本
+  - UI 重新设计与同步已记录到 `docs/exec_plans/Todo.md`
+
+发版时状态：
+
+- `pytest -q` 通过，`130 passed`
+- `harness-check` 通过
+- `entropy-check` 通过
+- `maintenance-check --auto-repair --max-passes 2` 通过
+
 ## [v1.1.0] - 2026-04-08
 
 Tag: `v1.1.0`

@@ -73,6 +73,10 @@ def path_config_path(root: Path | None = None) -> Path:
     return (root or project_root()) / "config" / "paths.json"
 
 
+def local_path_config_path(root: Path | None = None) -> Path:
+    return (root or project_root()) / "config" / "local.paths.json"
+
+
 def runtime_config_path(root: Path | None = None) -> Path:
     return (root or project_root()) / "config" / "runtime.json"
 
@@ -82,12 +86,16 @@ def project_config_markdown_path(root: Path | None = None) -> Path:
 
 
 def load_path_overrides(root: Path | None = None) -> dict:
-    config_path = path_config_path(root)
-    if not config_path.exists():
-        return {}
-    with config_path.open("r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-    return payload if isinstance(payload, dict) else {}
+    project = root or project_root()
+    payload: dict = {}
+    for config_path in (path_config_path(project), local_path_config_path(project)):
+        if not config_path.exists():
+            continue
+        with config_path.open("r", encoding="utf-8") as handle:
+            current = json.load(handle)
+        if isinstance(current, dict):
+            payload.update(current)
+    return payload
 
 
 def load_runtime_config(root: Path | None = None) -> dict:

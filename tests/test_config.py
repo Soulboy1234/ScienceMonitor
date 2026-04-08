@@ -16,6 +16,7 @@ from sciencemonitor.config import (
     data_root,
     llm_cache_root,
     load_master_plan_preferences,
+    load_path_overrides,
     load_research_preferences_config,
     logs_root,
     output_root,
@@ -123,6 +124,24 @@ class ConfigOverrideTest(unittest.TestCase):
                     os.environ.pop("SCIENCEMONITOR_OUTPUT_ROOT", None)
                 else:
                     os.environ["SCIENCEMONITOR_OUTPUT_ROOT"] = old_output
+
+    def test_local_paths_config_overrides_public_paths_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir) / "project"
+            public_output = "public-out"
+            private_output = pathlib.Path(tmpdir) / "Private Obsidian Out"
+            (root / "config").mkdir(parents=True)
+            (root / "config" / "paths.json").write_text(
+                json.dumps({"output_root": public_output}),
+                encoding="utf-8",
+            )
+            (root / "config" / "local.paths.json").write_text(
+                json.dumps({"output_root": str(private_output)}),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(load_path_overrides(root)["output_root"], str(private_output))
+            self.assertEqual(output_root(root), private_output.resolve())
 
     def test_load_runtime_config_creates_default_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

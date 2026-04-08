@@ -46,6 +46,9 @@ from .utils import clean_abstract_text, clean_title_text
 
 SUPPORTED_ANALYSIS_PROVIDERS = ("codex_local", "openai_api", "chatgpt_web_manual")
 SUPPORTED_REASONING_EFFORTS = ("low", "medium", "high", "xhigh")
+DEFAULT_CODEX_EXECUTABLE_CANDIDATES = (
+    Path("/Applications/Codex.app/Contents/Resources/codex"),
+)
 
 
 DEFAULT_ANALYSIS_CONFIG = {
@@ -741,6 +744,9 @@ class AnalysisEngine:
         resolved = shutil.which("codex")
         if resolved:
             return resolved
+        for fallback in DEFAULT_CODEX_EXECUTABLE_CANDIDATES:
+            if fallback.exists() and os.access(fallback, os.X_OK):
+                return str(fallback)
         if strict:
             raise RuntimeError("codex_local provider requires the codex CLI to be installed and on PATH.")
         return ""

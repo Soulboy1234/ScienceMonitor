@@ -16,8 +16,6 @@
   放 golden eval 基线样例和真实论文集成评测清单
 - `docs/`
   放项目内部规范、用户说明和执行计划
-- `no_need_for_v1.0.0/`
-  放 `v1.0.0` 前清扫时移出的历史材料和无用配置
 
 当前目录按职责分成三层：
 
@@ -60,6 +58,7 @@
 - [rules.md](workflow_specs/rules.md)
 - [literature_note_style_guide.md](workflow_specs/literature_note_style_guide.md)
 - [llm_prompt_contracts.md](workflow_specs/llm_prompt_contracts.md)
+- [report_review_rules.md](workflow_specs/report_review_rules.md)
 - [article_summary_template_guide.md](workflow_specs/article_summary_template_guide.md)
 - [daily_report_template_guide.md](workflow_specs/daily_report_template_guide.md)
 - [deep_reading_template_guide.md](workflow_specs/deep_reading_template_guide.md)
@@ -77,6 +76,7 @@
 - [maintenance_governance_runbook.md](user_guides/maintenance_governance_runbook.md)
 - [release_checklist.md](user_guides/release_checklist.md)
 - [python_module_map.md](user_guides/python_module_map.md)
+- [agent_skill_usage.md](user_guides/agent_skill_usage.md)
 
 ### Exec Plans
 
@@ -86,6 +86,6 @@
 - [active](exec_plans/active)
 - [completed](exec_plans/completed)
 
-### Cleanup Archive
+### Local Cleanup Archive
 
-- [../no_need_for_v1.0.0/README.md](../no_need_for_v1.0.0/README.md)
+`v1.0.0` 前清扫时移出的历史材料属于本地开发归档，不再作为公开仓库内容上传。

@@ -143,7 +143,7 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 - 深读 PDF 资源输出到输出根目录下的 `auto/deep_reads_pdf/`
   - 默认与对应深读笔记保持同名，仅扩展名不同，便于在 Obsidian 里按名字互相定位
 - 输出索引维护在输出根目录下的 `article_index/`
-- 输出根目录由 [../config/paths.json](../config/paths.json) 中的 `output_root` 指定
+- 公开默认输出根目录由 [../config/paths.json](../config/paths.json) 中的 `output_root` 指定；本机私人路径可用不会上传 GitHub 的 `config/local.paths.json` 覆盖
 - LLM 临时文件和源审计输出到 [../log](../log)
 - 长期缓存保留在 `data/llm_cache`
 

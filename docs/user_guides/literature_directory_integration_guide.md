@@ -17,7 +17,7 @@
 2. 专题目录层：`文件 - 目录/`
 3. 总目录层：`笔记目录.md`
 
-项目当前还有一套位于“输出根目录”的“输出侧索引”用于程序生成内容。输出根目录由 [../config/paths.json](../config/paths.json) 中的 `output_root` 指定：
+项目当前还有一套位于“输出根目录”的“输出侧索引”用于程序生成内容。输出根目录默认由 [../config/paths.json](../config/paths.json) 中的 `output_root` 指定；本机私人路径可用不会上传 GitHub 的 `config/local.paths.json` 覆盖：
 
 1. `manual/`：人工整理笔记副本
 2. `auto/article_summaries/`：自动单篇总结

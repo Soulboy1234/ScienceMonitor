@@ -10,6 +10,7 @@ from .config import (
     collect_project_config_sync_drift,
     data_root,
     load_path_overrides,
+    local_path_config_path,
     logs_root,
     output_root,
     project_root,
@@ -45,6 +46,7 @@ def run_doctor(root: Path | None = None, *, strict_runtime: bool = True) -> dict
         tools[tool] = resolved
 
     configured_paths = load_path_overrides(project)
+    local_paths = local_path_config_path(project)
     out_root = output_root(project)
     state_data_root = data_root(project)
     state_logs_root = logs_root(project)
@@ -67,7 +69,8 @@ def run_doctor(root: Path | None = None, *, strict_runtime: bool = True) -> dict
         if provider_status["provider"] == "openai_api" and not provider_status["openai_api_key_present"]:
             warnings.append("当前选择 openai_api，但没有检测到 API key。")
         if configured_paths.get("output_root") and not out_root.exists():
-            warnings.append("config/paths.json 指定的 output_root 当前不存在。首次部署前请确认路径。")
+            source = "config/local.paths.json" if local_paths.exists() else "config/paths.json"
+            warnings.append(f"{source} 指定的 output_root 当前不存在。首次部署前请确认路径。")
 
     consistency_checks = _run_consistency_checks(project)
     for check in consistency_checks:
@@ -87,6 +90,7 @@ def run_doctor(root: Path | None = None, *, strict_runtime: bool = True) -> dict
             "output_root": str(out_root),
             "data_root": str(state_data_root),
             "log_root": str(state_logs_root),
+            "local_paths_config": str(local_paths) if local_paths.exists() else "",
         },
         "provider_status": provider_status,
         "skills_runtime_dependency": False,

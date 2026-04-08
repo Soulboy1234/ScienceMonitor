@@ -23,6 +23,8 @@ venv/
 /tmp/
 /evals/real_cases/assets/
 *.pdf
+/config/local.*.json
+!/config/local.paths.example.json
 /.obsidian/
 /启动操作面板.app/
 /关闭操作面板.app/
