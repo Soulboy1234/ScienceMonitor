@@ -111,7 +111,7 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 
 ```bash
 ./scripts/run_science_monitor.sh manual-llm-status --pending-only
-./scripts/run_science_monitor.sh manual-llm-import --request-id <request_id> --response-file /path/to/response.txt
+./scripts/run_science_monitor.sh manual-llm-import --request-id <request_id>
 ```
 
 详细工作流见 [chatgpt_web_manual_workflow.md](chatgpt_web_manual_workflow.md)。

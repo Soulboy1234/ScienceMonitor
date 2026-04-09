@@ -11,6 +11,7 @@ from pathlib import Path
 from threading import Thread
 from urllib.parse import parse_qs, urlencode, urlparse, unquote
 
+from .analysis_providers import AUTOMATIC_ANALYSIS_PROVIDERS
 from .chatgpt_web_manual import (
     list_manual_requests,
 )
@@ -215,8 +216,9 @@ def _save_from_form(project: Path, form: dict[str, list[str]]) -> None:
     runtime["features"]["weekly_report_enabled"] = True
 
     analysis["provider"] = _text_field(form, "provider") or "codex_local"
-    if analysis["provider"] not in {"codex_local", "openai_api", "openrouter_api"}:
-        raise ValueError("provider 只支持：codex_local、openai_api、openrouter_api。人工中转请在“人工中转”页面执行。")
+    if analysis["provider"] not in AUTOMATIC_ANALYSIS_PROVIDERS:
+        choices = "、".join(AUTOMATIC_ANALYSIS_PROVIDERS)
+        raise ValueError(f"provider 只支持：{choices}。人工中转请在“人工中转”页面执行。")
     analysis["article_summaries"]["reasoning_effort"] = _text_field(form, "article_summaries_reasoning_effort") or str(analysis["article_summaries"].get("reasoning_effort", "medium") or "medium")
     analysis["report"]["reasoning_effort"] = _text_field(form, "report_reasoning_effort") or str(analysis["report"].get("reasoning_effort", "medium") or "medium")
     analysis["deep_reads"]["reasoning_effort"] = _text_field(form, "deep_reads_reasoning_effort") or str(analysis["deep_reads"].get("reasoning_effort", "high") or "high")

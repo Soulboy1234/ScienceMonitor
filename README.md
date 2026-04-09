@@ -12,7 +12,8 @@ Space Physics 文献监测、单篇总结、深度解读与周报生成工具。
 - 监控多个 Space Physics 相关期刊与高影响力观察哨期刊
 - 抓取标题、摘要、DOI、发表日期等元数据
 - 生成单篇文献总结、深度解读和周报
-- 支持 `codex_local`、`openai_api`、`chatgpt_web_manual` 三种分析后端
+- 支持 `codex_local`、`openai_api`、`openrouter_api` 三种自动分析后端
+- 支持 `chatgpt_web_manual` 人工中转工作流
 - 支持 Obsidian wiki link、article index 和双向链接
 - 支持 PDF 工具链自检与项目环境自检
 
@@ -46,16 +47,17 @@ ScienceMonitor/
 可选环境：
 - 本地 `codex` CLI：只有使用 `codex_local` 时才需要
 - OpenAI 兼容 API：如果使用 `openai_api`
-- ChatGPT 网页：如果使用 `chatgpt_web_manual`
+- OpenRouter 或兼容聚合 API：如果使用 `openrouter_api`
+- ChatGPT 网页：如果使用人工中转工作流
 - `poppler`：如果系统已安装，项目会优先复用；如果没有，项目会回退到本地 PDF 包装器
 
 当前项目不是打包发布形态，没有 `pyproject.toml`。默认通过虚拟环境 + `scripts/requirements/requirements-local.txt` 运行。
 
 项目不依赖 Codex desktop 或 Codex app 本身。
 
-- 如果选择 `openai_api`，只要提供可用模型和 API key，就可以脱离 Codex 环境运行
+- 如果选择 `openai_api` 或 `openrouter_api`，只要提供可用模型和 API key，就可以脱离 Codex 环境运行
 - 只有 `codex_local` provider 才依赖本地 `codex` CLI
-- 如果选择 `chatgpt_web_manual`，程序本身不调用外部 API，但需要人工把请求包交给 ChatGPT 网页并导回响应
+- `chatgpt_web_manual` 更适合作为独立人工中转工作流使用，而不是常规自动 provider
 
 ## 依赖包
 
@@ -155,9 +157,12 @@ cp config/local.paths.example.json config/local.paths.json
 
 当前默认配置是 `codex_local`，见 [config/analysis.json](config/analysis.json)。
 
-可选模式：
+可选自动模式：
 - `codex_local`：调用本地 Codex
-- `openai_api`：调用外部 API
+- `openai_api`：调用 OpenAI Responses API
+- `openrouter_api`：调用 OpenRouter 或兼容聚合 API
+
+人工中转模式：
 - `chatgpt_web_manual`：生成人工中转请求包，由你在 ChatGPT 网页完成分析后再导回结果
 
 说明：
@@ -175,6 +180,7 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 ```
 
 详细说明见 [docs/user_guides/llm_analysis_readme.md](docs/user_guides/llm_analysis_readme.md)。
+如果使用 `openrouter_api`，请在 `PROJECT_CONFIG.md` 或 `config/analysis.json` 中配置对应的 `model / base_url / api_key_env`。
 如果使用 `chatgpt_web_manual`，工作流说明见 [docs/user_guides/chatgpt_web_manual_workflow.md](docs/user_guides/chatgpt_web_manual_workflow.md)。
 如果你想整体理解当前项目的 harness 治理边界，见 [docs/user_guides/harness_governance_overview.md](docs/user_guides/harness_governance_overview.md)。
 
@@ -185,10 +191,10 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 - 可访问的 `openai_api.base_url`
 - 已安装好的 Python 依赖和 PDF 工具链
 
-如果你的目标是“尽量减少 Codex 与 API 消耗”，可以改用：
+如果你的目标是“尽量减少 Codex 与 API 消耗”，更推荐直接走人工中转工作流：
 
-- `provider=chatgpt_web_manual`
-- 运行现有命令后处理 `data/chatgpt_web_manual/requests/` 下的请求包
+- 保持常规自动 provider 不变，或按需切到 `codex_local / openai_api / openrouter_api`
+- 进入人工中转页面，或运行相关命令生成 `data/chatgpt_web_manual/requests/` 下的请求包
 - 用 `manual-llm-import` 导入响应，再重新执行原命令
 
 ### 5. 运行自检
@@ -206,6 +212,7 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 - 当前 LLM provider 是什么
 - `codex` 是否可用
 - `openai_api` 的 key 是否就绪
+- `openrouter_api` 的 key 是否就绪
 - 输出目录是否存在
 
 ### 6. 开始运行
@@ -296,11 +303,11 @@ export SCIENCEMONITOR_LOG_ROOT="$HOME/Library/Application Support/ScienceMonitor
 这个界面适合调整：
 - 默认时间窗口
 - 每个来源抓取上限
-- 周报功能开关
-- 深度解读功能开关
+- 周报生成参数
+- 深度解读任务参数
 - 缺少 PDF 时是否自动搜索全文
-- `codex_local / openai_api / chatgpt_web_manual`
-- `codex_local.model`、超时、公开默认输出路径和本机私有输出路径等
+- `codex_local / openai_api / openrouter_api`
+- 对应模型、超时和本机私有输出路径等
 
 注意：
 - 这个文件里的 `## Sync:` JSON 代码块必须保持合法 JSON
@@ -338,9 +345,9 @@ export SCIENCEMONITOR_LOG_ROOT="$HOME/Library/Application Support/ScienceMonitor
 ```
 
 说明：
-- `weekly_report_enabled` 是“是否生成周报文件”的功能开关
-- `report.enabled` 是“周报是否使用 LLM 分析”的开关，两者不是一回事
-- `deep_reads.enabled` 是“是否允许深度解读”的功能开关
+- `weekly_report_enabled` 目前是兼容保留字段；现有 UI 会固定保持开启，不建议再把它当作日常控制开关
+- 周报和深度解读是否可用，当前由分析后端 `provider` 决定；不再使用旧的 `report.enabled`、`deep_reads.enabled` 这类开关
+- 推理强度由 `config/analysis.json` 中 `article_summaries / report / deep_reads.reasoning_effort` 控制
 
 ## 测试
 

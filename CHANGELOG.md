@@ -15,7 +15,55 @@
 
 ## [Unreleased]
 
-- 当前为 `v1.3.0` 大检查与优化阶段，变化待收束后记录。
+- 下一轮变更待规划。
+
+## [v1.3.0] - 2026-04-09
+
+Tag: `v1.3.0`
+
+Snapshot commit:
+
+- `TO_BE_FILLED_AFTER_TAG`
+
+版本定位：
+
+- `v1.2.1` 之后的大检查与低风险优化版本
+- 目标是把当前累计的 UI、harness、文档治理和 provider 语义收束成一次系统性校验后的稳定版本
+
+主要变化：
+
+- 完成一次系统性大检查并通过完整 gate：
+  - `doctor --consistency-only`
+  - `entropy-check`
+  - `harness-check`
+  - `maintenance-check --auto-repair --max-passes 2`
+  - `pytest -q`
+  - `real-eval --check-fixtures`
+- 修复 provider 语义与文档口径漂移：
+  - `README.md` 已明确区分三种自动分析后端 `codex_local / openai_api / openrouter_api`
+  - `chatgpt_web_manual` 统一表述为人工中转工作流，而不是常规自动 provider
+  - `PROJECT_CONFIG.md`、`project_config_markdown.py`、`llm_analysis_readme.md` 已同步这套口径
+  - `doctor.py` 对不支持 provider 的警告已补齐 `openrouter_api`
+- 提升可读性与稳定性：
+  - 新增 `src/sciencemonitor/analysis_providers.py`，统一 provider 常量和显示标签，减少 UI、LLM 和文档层复制漂移
+  - `tests/test_config_ui.py` 不再把品牌版本号写死为 `v1.2.0`，避免版本升级时误报
+  - `tests/test_pipeline.py` 已补齐周报分析 mock，保证维护链路能完整覆盖周报路径
+- 加强 harness 对文档准确性的监管：
+  - `docs_review` 现在不仅检查说明文件是否放对目录
+  - 还会检查 `README.md` / `PROJECT_CONFIG.md` 是否缺少关键 provider 说明，或回退到旧表述
+  - 新增对应测试，防止根文档再次静默漂移
+- 完成本轮大检查计划并归档：
+  - `docs/exec_plans/active/` 已清空
+  - `2026-04-09_v1_2_1备份与v1_3_0大检查计划.md` 已转入 `completed/`
+
+发版时状态：
+
+- `doctor --consistency-only` 通过
+- `entropy-check` 通过
+- `harness-check` 通过
+- `maintenance-check --auto-repair --max-passes 2` 通过
+- `pytest -q` 通过，`149 passed`
+- `real-eval --check-fixtures` 通过
 
 ## [v1.2.1] - 2026-04-09
 

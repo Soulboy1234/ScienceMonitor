@@ -50,7 +50,8 @@
 - 人工中转请求状态：`./scripts/run_science_monitor.sh manual-llm-status`
 - 人工中转响应导入：`./scripts/run_science_monitor.sh manual-llm-import --request-id <id>`，必要时追加 `--response-file /path/to/response.txt`
 - 发版前清单：`docs/user_guides/release_checklist.md`
-- Harness 总览：`docs/user_guides/harness_governance_overview.md`- Harness 自监督会通过 `harness-audit` 评估当前治理覆盖面，并用 `harness-optimize` 做低风险修补
+- Harness 总览：`docs/user_guides/harness_governance_overview.md`
+- Harness 自监督：通过 `harness-audit` 评估当前治理覆盖面，并用 `harness-optimize` 做低风险修补
 
 - 列出期刊：`./scripts/run_science_monitor.sh sources`
 - 跑测试：`./.venv/bin/python -m pytest -q`

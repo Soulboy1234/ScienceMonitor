@@ -260,6 +260,9 @@ class PipelineTest(unittest.TestCase):
                 ), mock.patch(
                     "sciencemonitor.llm.AnalysisEngine.analyze_article",
                     side_effect=_fake_article_analysis,
+                ), mock.patch(
+                    "sciencemonitor.llm.AnalysisEngine.analyze_report",
+                    side_effect=_fake_report_analysis,
                 ):
                     update_result, report_path, stats = monitor.run_daily(
                         report_date=date(2026, 3, 14),

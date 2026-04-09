@@ -62,7 +62,7 @@ def run_doctor(root: Path | None = None, *, strict_runtime: bool = True) -> dict
             warnings.append(f"PDF 工具缺失：{', '.join(missing)}。")
         if not provider_status.get("provider_supported", False):
             warnings.append(
-                "当前 analysis provider 不再受支持。请将 config/analysis.json 中的 provider 改为 codex_local、openai_api 或 chatgpt_web_manual。"
+                "当前 analysis provider 不再受支持。请将 config/analysis.json 中的 provider 改为 codex_local、openai_api、openrouter_api 或 chatgpt_web_manual。"
             )
         if provider_status["provider"] == "codex_local" and not provider_status["codex_available"]:
             warnings.append("当前选择 codex_local，但没有找到 codex 可执行文件。")

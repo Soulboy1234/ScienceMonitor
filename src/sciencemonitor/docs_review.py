@@ -32,6 +32,26 @@ WORKFLOW_SPEC_FILES = {
     "source_of_truth_matrix.md",
 }
 
+ROOT_DOC_REQUIRED_SNIPPETS = {
+    "README.md": (
+        "openrouter_api",
+        "manual-llm-import",
+    ),
+    "PROJECT_CONFIG.md": (
+        "openrouter_api",
+        "chatgpt_web_manual",
+    ),
+}
+
+ROOT_DOC_BANNED_SNIPPETS = {
+    "README.md": (
+        "支持 `codex_local`、`openai_api`、`chatgpt_web_manual` 三种分析后端",
+    ),
+    "PROJECT_CONFIG.md": (
+        "- `provider`：当前分析后端，可选 `codex_local`、`openai_api`、`openrouter_api`、`chatgpt_web_manual`",
+    ),
+}
+
 
 @dataclass(frozen=True)
 class DocsReviewIssue:
@@ -54,6 +74,7 @@ def run_docs_review(root: Path | None = None) -> DocsReviewReport:
     issues.extend(_check_expected_locations(docs_root / "user_guides", USER_GUIDE_FILES, "user_guides"))
     issues.extend(_check_expected_locations(docs_root / "workflow_specs", WORKFLOW_SPEC_FILES, "workflow_specs"))
     issues.extend(_check_misplaced_known_docs(docs_root))
+    issues.extend(_check_root_doc_contracts(project))
 
     legacy_template = docs_root / "exec_plans" / "TEMPLATE.md"
     if legacy_template.exists():
@@ -129,4 +150,39 @@ def _check_misplaced_known_docs(docs_root: Path) -> list[DocsReviewIssue]:
                     message=f"`{filename}` 属于 workflow spec，不应放在 `user_guides/`。",
                 )
             )
+    return issues
+
+
+def _check_root_doc_contracts(project: Path) -> list[DocsReviewIssue]:
+    issues: list[DocsReviewIssue] = []
+    for filename, snippets in ROOT_DOC_REQUIRED_SNIPPETS.items():
+        path = project / filename
+        if not path.exists():
+            issues.append(
+                DocsReviewIssue(
+                    category="missing_root_doc",
+                    path=path,
+                    message=f"缺少根目录说明文件：`{filename}`。",
+                )
+            )
+            continue
+        text = path.read_text(encoding="utf-8")
+        for snippet in snippets:
+            if snippet not in text:
+                issues.append(
+                    DocsReviewIssue(
+                        category="root_doc_contract",
+                        path=path,
+                        message=f"`{filename}` 缺少关键说明片段：`{snippet}`。",
+                    )
+                )
+        for snippet in ROOT_DOC_BANNED_SNIPPETS.get(filename, ()):
+            if snippet in text:
+                issues.append(
+                    DocsReviewIssue(
+                        category="root_doc_contract",
+                        path=path,
+                        message=f"`{filename}` 仍包含过时表述：`{snippet}`。",
+                    )
+                )
     return issues

@@ -94,7 +94,7 @@ def _build_runtime_sync_section(runtime: dict) -> list[str]:
         "```",
         "",
         "说明：",
-        "- `features.weekly_report_enabled`：是否真正生成周报文件",
+        "- `features.weekly_report_enabled`：兼容保留字段；当前 UI 会固定保持开启，不建议作为日常控制开关",
         "- `daily_days_back`：`daily` 命令默认回看多少天",
         "- `update_days_back`：`update` 命令默认抓取多少天",
         "- `report_window_days`：`report` 命令默认汇总多少天",
@@ -116,14 +116,14 @@ def _build_analysis_sync_section(analysis: dict) -> list[str]:
         "```",
         "",
         "说明：",
-        "- `provider`：当前分析后端，可选 `codex_local`、`openai_api`、`openrouter_api`、`chatgpt_web_manual`",
+        "- `provider`：当前自动分析后端。常规设置只切 `codex_local`、`openai_api`、`openrouter_api`；底层配置仍兼容 `chatgpt_web_manual`。",
         "- `article_summaries.reasoning_effort`：单篇总结使用 codex_local 时的推理强度",
         "- `report.reasoning_effort`：周报使用 codex_local 时的推理强度",
         "- `deep_reads.reasoning_effort`：深度解读使用 codex_local 时的推理强度",
         "- `codex_local.executable`：手动指定 `codex` 可执行文件路径",
         "- `openai_api.*`：OpenAI Responses API 相关配置",
         "- `openrouter_api.*`：OpenRouter chat completions 兼容接口配置",
-        "- `chatgpt_web_manual`：人工中转模式。运行时会在 `data/chatgpt_web_manual/` 生成请求包，等待你在 ChatGPT 网页完成后导入响应",
+        "- `chatgpt_web_manual`：人工中转模式。底层仍支持，但常规使用建议进入“人工中转”页面或命令工作流生成请求包并导入响应",
         "",
     ]
 
@@ -185,8 +185,8 @@ def _build_recommended_profiles_section() -> list[str]:
         "",
         "适合减少本地 Codex 或 API 消耗，把高成本分析转到 ChatGPT 网页人工处理中转。",
         "",
-        "- `provider`：`chatgpt_web_manual`",
-        "- 运行后按提示处理 `data/chatgpt_web_manual/requests/` 下的请求包，再用 `manual-llm-import` 导入响应",
+        "- `provider`：`chatgpt_web_manual`（仅在需要直接改底层配置时使用）",
+        "- 更推荐直接进入“人工中转”页面或运行相关命令，处理 `data/chatgpt_web_manual/requests/` 下的请求包，再用 `manual-llm-import` 导入响应",
         "",
     ]
 
@@ -198,7 +198,7 @@ def _build_strategy_section() -> list[str]:
         "- `codex_local.model` 留空：使用本机 Codex 默认模型，最省心，但不同机器上不一定完全一致。",
         "- `codex_local.model` 写死：结果更稳定，更适合长期运行和多机部署。",
         "- `openai_api.model`：适合需要跨机器一致、且明确控制外部接口模型的情况。",
-        "- `chatgpt_web_manual`：适合把高消耗分析分流到 ChatGPT 网页人工处理中转，代价是需要人工导入响应，不能全自动跑完。",
+        "- `chatgpt_web_manual`：适合把高消耗分析分流到 ChatGPT 网页人工处理中转。它更像一条人工工作流，而不是常规设置页里的自动 provider。",
         "",
     ]
 

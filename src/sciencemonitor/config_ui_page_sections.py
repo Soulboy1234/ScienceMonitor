@@ -7,6 +7,7 @@ from datetime import date
 from pathlib import Path
 from urllib.parse import urlencode
 
+from .analysis_providers import ALL_PROVIDER_LABELS, automatic_provider_choices
 from .chatgpt_web_manual import ManualRequestStatus
 from .config import config_ui_state_path, output_root
 from .config_ui_markdown import render_obsidian_markdown_file
@@ -307,7 +308,7 @@ def _render_llm_settings_card(analysis: dict, provider: str, *, span: str = "spa
             <div class="card {span}">
               <h4>分析后端与服务</h4>
               <div class="form-stack">
-                {_select("provider", provider, [("codex_local", "Codex 本地"), ("openai_api", "OpenAI API"), ("openrouter_api", "OpenRouter API")], "分析后端", "这是项目默认使用的自动分析后端。它决定单篇总结、周报和深度解读优先调用哪类模型服务；切换后会改变程序走本地 Codex、OpenAI API 还是 OpenRouter API。", extra_attrs='data-provider-select')}
+                {_select("provider", provider, automatic_provider_choices(), "分析后端", "这是项目默认使用的自动分析后端。它决定单篇总结、周报和深度解读优先调用哪类模型服务；切换后会改变程序走本地 Codex、OpenAI API 还是 OpenRouter API。", extra_attrs='data-provider-select')}
                 <div class="{codex_class}" data-provider-only="codex_local">
                   <div class="form-stack">
                     {_text("codex_model", analysis.get("codex_local", {}).get("model", ""), "Codex 模型名（留空则使用本机默认）", "这个字段指定本地 Codex 调用的模型名。留空时程序使用本机默认模型；填具体模型名时，会把后续自动分析固定到该模型。")}
@@ -633,10 +634,4 @@ def _help_anchor(help_text: str) -> str:
 
 
 def _display_provider_label(provider: str) -> str:
-    mapping = {
-        "codex_local": "Codex 本地",
-        "openai_api": "OpenAI API",
-        "openrouter_api": "OpenRouter API",
-        "chatgpt_web_manual": "人工中转",
-    }
-    return mapping.get(provider, provider)
+    return ALL_PROVIDER_LABELS.get(provider, provider)

@@ -12,6 +12,7 @@ from datetime import date
 from pathlib import Path
 from sqlite3 import Row
 
+from .analysis_providers import SUPPORTED_ANALYSIS_PROVIDERS
 from .chatgpt_web_manual import (
     ManualResponsePending,
     load_manual_response,
@@ -48,7 +49,6 @@ from .tags import normalize_tags as normalize_project_tags
 from .utils import clean_abstract_text, clean_title_text
 
 
-SUPPORTED_ANALYSIS_PROVIDERS = ("codex_local", "openai_api", "openrouter_api", "chatgpt_web_manual")
 SUPPORTED_REASONING_EFFORTS = ("low", "medium", "high", "xhigh")
 DEFAULT_CODEX_EXECUTABLE_CANDIDATES = (
     Path("/Applications/Codex.app/Contents/Resources/codex"),
