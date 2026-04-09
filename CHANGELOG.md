@@ -23,7 +23,7 @@ Tag: `v1.3.0`
 
 Snapshot commit:
 
-- `TO_BE_FILLED_AFTER_TAG`
+- `0f3b2bc4f2d664581e6ab51a5076d1888a46031d`
 
 版本定位：
 
