@@ -23,7 +23,7 @@ Tag: `v1.2.1`
 
 Snapshot commit:
 
-- 待打 tag 后回填
+- `f03c3cd51b73ac336e187235d917749d6580c3f4`
 
 版本定位：
 
@@ -90,7 +90,10 @@ Snapshot commit:
 发版时状态：
 
 - 作为大检查前备份点记录
-- 详细 gate 结果以后续 tag 对应提交为准
+- `doctor --consistency-only` 通过
+- `entropy-check` 通过
+- `harness-check` 通过
+- `pytest -q` 通过，`148 passed`
 
 ## [v1.2.0] - 2026-04-08
 
