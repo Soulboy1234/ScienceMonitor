@@ -57,6 +57,19 @@ ensure_poppler_tools() {
   done
 }
 
+ensure_playwright_browser() {
+  if "$VENV_DIR/bin/python" - <<'PY' >/dev/null 2>&1
+import importlib.util
+raise SystemExit(0 if importlib.util.find_spec("playwright") else 1)
+PY
+  then
+    echo "Ensuring Playwright Chromium browser is available..."
+    if ! "$VENV_DIR/bin/python" -m playwright install chromium >/dev/null 2>&1; then
+      echo "Playwright Chromium install failed. UI visual review may not be available until it is installed manually." >&2
+    fi
+  fi
+}
+
 supports_required_python() {
   local candidate="$1"
   "$candidate" - <<'PY' >/dev/null 2>&1
@@ -94,6 +107,7 @@ fi
 "$VENV_DIR/bin/python" -m pip install --upgrade pip
 "$VENV_DIR/bin/python" -m pip install -r "$REQUIREMENTS_FILE"
 ensure_poppler_tools
+ensure_playwright_browser
 
 echo "Local environment is ready at: $VENV_DIR"
 echo "Interpreter used: $PYTHON_BIN"

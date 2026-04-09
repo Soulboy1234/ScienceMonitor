@@ -97,18 +97,19 @@ def run_deep_read(
     pdf_dir_override: Path | None = None,
     sync_library: bool = True,
     related_summary_override: Path | None = None,
+    runtime_override: dict | None = None,
 ) -> DeepReadResult:
     project = root or project_root()
-    runtime = load_runtime_config(project)
+    runtime = runtime_override or load_runtime_config(project)
     if not runtime.get("features", {}).get("weekly_report_enabled", True):
         # no-op; weekly report toggle should not block deep reads
         pass
 
     analysis_engine = AnalysisEngine(project)
     if not analysis_engine.deep_read_enabled():
-        return DeepReadResult(False, "深度解读功能当前已关闭。请在配置界面或 PROJECT_CONFIG.md 中开启后再运行。")
+        return DeepReadResult(False, "当前分析后端不可用，深度解读无法继续。请先在设置里切换到可用的 LLM 后端。")
     if not analysis_engine.provider_status().get("provider_supported", False):
-        return DeepReadResult(False, "当前 analysis provider 不再受支持。请切换到 codex_local、openai_api 或 chatgpt_web_manual。")
+        return DeepReadResult(False, "当前 analysis provider 不再受支持。请切换到 codex_local、openai_api、openrouter_api 或人工中转。")
 
     metadata = _resolve_metadata(storage, doi=doi, title=title, journal=journal, url=url)
     if not metadata.get("title"):
@@ -461,9 +462,13 @@ def _extract_pdf_text(project: Path, pdf_path: Path, runtime: dict) -> str:
         return extracted
     pdftotext_bin = shutil.which("pdftotext") or str(project / ".venv" / "bin" / "pdftotext")
     page_limit = int(runtime.get("deep_read", {}).get("pdf_page_limit", 40) or 40)
+    command = [pdftotext_bin, "-nopgbrk", "-f", "1"]
+    if page_limit > 0:
+        command.extend(["-l", str(page_limit)])
+    command.extend([str(pdf_path), "-"])
     try:
         result = subprocess.run(
-            [pdftotext_bin, "-nopgbrk", "-f", "1", "-l", str(page_limit), str(pdf_path), "-"],
+            command,
             check=True,
             capture_output=True,
             text=True,

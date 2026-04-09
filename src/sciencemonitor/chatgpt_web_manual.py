@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .article_summary_meta import abbreviate_journal_name, first_author_label
 from .config import chatgpt_web_manual_requests_root, chatgpt_web_manual_responses_root
 
 
@@ -31,6 +32,7 @@ class ManualRequestStatus:
     request_id: str
     request_kind: str
     title: str
+    display_label: str
     status: str
     created_at: str
     updated_at: str
@@ -71,9 +73,12 @@ def prepare_manual_request_bundle(
     request_dir.mkdir(parents=True, exist_ok=True)
     prompt_signature = _prompt_signature(prompt, schema)
     context = context or {}
+    existing_metadata = _load_request_metadata(request_dir / "metadata.json")
     resource_hints = context.get("resource_hints", {}) if isinstance(context.get("resource_hints", {}), dict) else {}
-    request_label = str(context.get("request_label", "") or title or request_id)
-    response_filename = _build_response_filename(request_kind, request_label, request_id)
+    request_label = str(existing_metadata.get("request_label", "") or context.get("request_label", "") or title or request_id)
+    response_filename = str(
+        existing_metadata.get("response_filename", "") or _build_response_filename(request_kind, request_label, request_id)
+    )
     response_json_path = chatgpt_web_manual_responses_root(root) / response_filename
     response_raw_path = chatgpt_web_manual_responses_root(root) / response_filename.replace(".json", ".raw.md")
     response_json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -92,7 +97,6 @@ def prepare_manual_request_bundle(
     shutil.rmtree(request_dir / "attachments", ignore_errors=True)
     shutil.rmtree(request_dir / "context", ignore_errors=True)
 
-    existing_metadata = _load_request_metadata(request_dir / "metadata.json")
     now = datetime.now().isoformat(timespec="seconds")
     metadata = {
         "request_id": request_id,
@@ -258,6 +262,7 @@ def list_manual_requests(
                 request_id=str(metadata.get("request_id", "") or request_dir.name),
                 request_kind=str(metadata.get("request_kind", "") or ""),
                 title=str(metadata.get("title", "") or ""),
+                display_label=_manual_display_label(metadata, status),
                 status=status,
                 created_at=str(metadata.get("created_at", "") or ""),
                 updated_at=str(metadata.get("updated_at", "") or ""),
@@ -312,8 +317,7 @@ def render_manual_request_status(statuses: list[ManualRequestStatus]) -> str:
     for item in statuses:
         imported = item.last_imported_at or "-"
         lines.append(
-            f"- {item.request_id} status={item.status} kind={item.request_kind or '-'} "
-            f"title={item.title or '-'} imported_at={imported} response={item.response_filename} dir={item.request_dir}"
+            f"- {item.display_label} imported_at={imported} response={item.response_filename} dir={item.request_dir}"
         )
     return "\n".join(lines)
 
@@ -515,6 +519,25 @@ def _request_status(root: Path, metadata: dict[str, Any]) -> str:
             return "ready"
         return "stale"
     return "pending"
+
+
+def _manual_display_label(metadata: dict[str, Any], status: str) -> str:
+    resource_hints = metadata.get("resource_hints", {})
+    if not isinstance(resource_hints, dict):
+        resource_hints = {}
+    authors = str(resource_hints.get("authors", "") or "")
+    published_date = str(resource_hints.get("published_date", "") or "")
+    journal = str(resource_hints.get("journal", "") or "")
+    title = str(resource_hints.get("title", "") or metadata.get("title", "") or "-")
+    first_author = first_author_label(authors)
+    year = published_date[:4] if len(published_date) >= 4 else "----"
+    journal_short = abbreviate_journal_name(journal or "Unknown")
+    status_text = {
+        "pending": "待导入",
+        "ready": "已就绪",
+        "stale": "待修复",
+    }.get(status, status)
+    return f"【{status_text}】{first_author}（{year}）- {journal_short} - {title}"
 
 
 def _extract_json_payload(text: str) -> dict[str, Any]:

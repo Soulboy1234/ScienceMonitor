@@ -203,13 +203,14 @@ class ScienceMonitor:
         report_date: date,
         days_back: int = 7,
         max_per_source: int = 20,
+        hydrate: bool = True,
         source_ids: set[str] | None = None,
     ) -> tuple[UpdateResult, Path | None, dict]:
         update_result = self.update(
             report_date=report_date,
             days_back=days_back,
             max_per_source=max_per_source,
-            hydrate=True,
+            hydrate=hydrate,
             source_ids=source_ids,
         )
         if not self.weekly_report_enabled():
@@ -230,7 +231,7 @@ class ScienceMonitor:
         return update_result, report_path, stats
 
     def weekly_report_enabled(self) -> bool:
-        return bool(self.runtime_config.get("features", {}).get("weekly_report_enabled", True))
+        return True
 
     def list_sources(self) -> list[SourceConfig]:
         return list(self.sources)

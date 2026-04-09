@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import pathlib
 import sys
 import tempfile
@@ -80,6 +81,9 @@ class ChatGPTWebManualTest(unittest.TestCase):
             self.assertIn(bundle.response_filename, prompt_text)
             self.assertIn("不要在聊天正文里展开完整 JSON", prompt_text)
             self.assertNotIn("第一个字符必须是", prompt_text)
+            first_metadata = json.loads((bundle.request_dir / "metadata.json").read_text(encoding="utf-8"))
+            self.assertEqual(first_metadata["request_label"], "sample_paper")
+            self.assertEqual(first_metadata["response_filename"], bundle.response_filename)
 
             import_manual_response(
                 root,
@@ -96,6 +100,9 @@ class ChatGPTWebManualTest(unittest.TestCase):
             )
             self.assertEqual(payload["body"], "ok")
             self.assertEqual(payload["tags"], ["热层/密度"])
+            second_metadata = json.loads((bundle.request_dir / "metadata.json").read_text(encoding="utf-8"))
+            self.assertEqual(second_metadata["request_label"], "sample_paper")
+            self.assertEqual(second_metadata["response_filename"], bundle.response_filename)
 
     def test_manual_provider_accepts_direct_json_saved_under_recommended_name(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

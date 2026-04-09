@@ -65,7 +65,7 @@ def build_report(
         if analysis_engine is None:
             raise RuntimeError("周报生成已不再支持规则法。请提供可用的 LLM 分析后端。")
         if not analysis_engine.report_enabled():
-            raise RuntimeError("当前 report.enabled=false，周报生成无法继续。请先启用周报 LLM 分析。")
+            raise RuntimeError("当前分析后端不可用，周报生成无法继续。请先在设置里切换到可用的 LLM 后端。")
         if report_analysis is None:
             raise RuntimeError("周报生成需要有效的 LLM 分析结果，但当前未成功返回结果。请检查 provider 配置、模型可用性或额度。")
     stats = {

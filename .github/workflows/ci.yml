@@ -25,6 +25,9 @@ jobs:
       - name: Prepare CI output directory
         run: mkdir -p "$GITHUB_WORKSPACE/out"
 
+      - name: Install Playwright Chromium
+        run: ./.venv/bin/python -m playwright install --with-deps chromium
+
       - name: Run harness check
         env:
           SCIENCEMONITOR_OUTPUT_ROOT: ${{ github.workspace }}/out

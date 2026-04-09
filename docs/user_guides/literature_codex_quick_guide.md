@@ -117,4 +117,4 @@
 - [article_summary_template.md](../../config/templates/article_summary_template.md)
 - [daily_report_template.md](../../config/templates/daily_report_template.md)
 - [deep_reading_report_template.md](../../config/templates/deep_reading_report_template.md)
-- [常用分级标签参考.md](%E5%B8%B8%E7%94%A8%E5%88%86%E7%BA%A7%E6%A0%87%E7%AD%BE%E5%8F%82%E8%80%83.md)
+- [hierarchical_tag_reference.md](../workflow_specs/hierarchical_tag_reference.md)

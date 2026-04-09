@@ -31,28 +31,35 @@
 
 ## 最小结构
 
-每份 ExecPlan 至少保留这些标题：
+每份 ExecPlan 至少保留这些中文标题：
 
 ```md
-# Title
+# 计划：YYYY-MM-DD_主题
 
-## Purpose / Big Picture
-## Progress
-## Surprises & Discoveries
-## Decision Log
-## Outcomes & Retrospective
-## Context and Orientation
-## Plan of Work
-## Concrete Steps
+## 目的 / 大图景
+## 背景与定位
+## 工作范围
+## 非目标
+## 进度
+## 计划中的工作
+## 具体步骤
+## 发现与意外
+## 决策记录
+## 结果与复盘
+## 验证
 ```
 
 ## 维护规则
 
-- `Progress` 持续更新，不要只在开始时写一次
-- 新发现写到 `Surprises & Discoveries`
-- 关键取舍写到 `Decision Log`
-- 做完后补 `Outcomes & Retrospective`
+- `进度` 必须使用待办框；进行中写 `- [ ]`，完成后改成 `- [x]`
+- `进度` 持续更新，不要只在开始时写一次
+- 新发现写到 `发现与意外`
+- 关键取舍写到 `决策记录`
+- 做完后补 `结果与复盘`
 - 完成后把文件从 `active/` 移到 `completed/`
+- 以 `config/templates/exec_plan_template.md` 为模板起草新计划
+- `harness-check` 现在会校验模板文件和 `active/` 中计划的结构稳定性；`completed/` 先按归档资料处理
+- `harness-check` 会读取 `active/` 中计划的勾选项摘要，作为当前执行状态的一部分输出
 
 ## 与普通文档的区别
 

@@ -11,14 +11,13 @@
 配置文件在 [config/analysis.json](../config/analysis.json)。
 
 核心字段：
-- `provider`：选择分析后端，可选 `codex_local`、`openai_api`、`chatgpt_web_manual`
-- `article_summaries.enabled`：是否开启单篇总结的 LLM 分析
-- `article_summaries.max_items_per_run`：每次运行最多让多少篇单篇总结走 LLM
-- `report.enabled`：是否开启周报 LLM 分析
-- `report.max_papers_in_prompt`：周报最多送给 LLM 的论文数
+- `provider`：选择默认分析后端，可选 `codex_local`、`openai_api`、`openrouter_api`
+- `article_summaries.reasoning_effort`：单篇总结推理强度
+- `report.reasoning_effort`：周报推理强度
+- `deep_reads.reasoning_effort`：深度解读推理强度
 - `codex_local.executable`：可选，手动指定 `codex` 可执行文件
-- `openai_api.api_key`：外部 API key
-- `openai_api.api_key_env`：优先读取的环境变量名，默认是 `SCIENCEMONITOR_OPENAI_API_KEY`
+- `openai_api.*`：OpenAI Responses API 配置
+- `openrouter_api.*`：OpenRouter API 配置
 
 ## 使用本地 Codex
 
@@ -54,12 +53,13 @@
 {
   "provider": "openai_api",
   "article_summaries": {
-    "enabled": true,
-    "max_items_per_run": 10
+    "reasoning_effort": "medium"
   },
   "report": {
-    "enabled": true,
-    "max_papers_in_prompt": 25
+    "reasoning_effort": "medium"
+  },
+  "deep_reads": {
+    "reasoning_effort": "high"
   },
   "codex_local": {
     "model": "",
@@ -77,6 +77,14 @@
 }
 ```
 
+如果你使用 OpenRouter 这类聚合平台，把 `provider` 改成 `openrouter_api`，并填写：
+
+- `openrouter_api.api_key_env`
+- `openrouter_api.model`
+- `openrouter_api.base_url`
+- 可选的 `openrouter_api.site_url`
+- 可选的 `openrouter_api.app_name`
+
 更推荐的部署方式：
 
 ```bash
@@ -87,7 +95,7 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 
 ## 使用 ChatGPT 网页人工中转
 
-如果你想减少本地 Codex 或 API 消耗，可以把 `provider` 设成 `chatgpt_web_manual`。
+如果你想减少本地 Codex 或 API 消耗，不需要把全局 `provider` 切成 `chatgpt_web_manual`。人工中转现在是独立工作流。
 
 这个模式不会自动调浏览器，而是：
 
@@ -97,7 +105,7 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 4. 用 `manual-llm-import` 导回响应
 5. 重新运行原命令
 
-当前 manual 请求包默认不再复制全文整理稿、摘要整理稿、related summary 或 PDF。推荐按 `request.md` 里给出的文件名保存网页返回的 JSON。
+当前 manual 请求包默认不再复制全文整理稿、摘要整理稿、related summary 或 PDF。推荐按 `request.md` 里给出的文件名保存网页返回的 JSON，然后导入。
 
 常用命令：
 
@@ -127,7 +135,7 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 
 当前不再保留规则法文本兜底：
 - 如果 LLM 失败，单篇总结、周报和深度解读会直接报错
-- 如果 `max_items_per_run` 有上限，超过上限的文章不会生成单篇总结，而不是回退到规则法
+- 当前也不再维护旧的 `enabled`、`max_items_per_run`、`max_papers_in_prompt`、`max_input_chars` 这些历史配置项
 
 候选标签审阅：
 
@@ -151,7 +159,8 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 
 - 单篇总结和深度解读现在会尽量复用全文整理稿、摘要包或人工中转请求包，不再只看原始摘要。
 - `codex_local` 更适合演示和本机使用。
-- `openai_api` 更适合脱离 Codex 的独立部署。
+- `openai_api` 更适合直接接 OpenAI。
+- `openrouter_api` 更适合接 OpenRouter 或类似的统一 API 平台。
 - `chatgpt_web_manual` 更适合高成本分析的人工作业流，不适合完全无人值守运行。
 - `openai_api.base_url` 默认要求使用 `https`；只有本地 `localhost` 调试接口允许 `http`
 - 当前项目运行并不依赖 Codex skills；skills 只影响我在当前会话里的工作方式，不影响你把程序部署到其他电脑

@@ -15,7 +15,82 @@
 
 ## [Unreleased]
 
-暂无。
+- 当前为 `v1.3.0` 大检查与优化阶段，变化待收束后记录。
+
+## [v1.2.1] - 2026-04-09
+
+Tag: `v1.2.1`
+
+Snapshot commit:
+
+- 待打 tag 后回填
+
+版本定位：
+
+- `v1.2.0` 之后的大检查前备份版本
+- 目标是把当前累计的 UI、harness、文档治理与标签参考统一改动固定成一个可回退版本点
+
+主要变化：
+
+- `workflow_specs` 文档治理更新：
+  - `docs/workflow_specs/常用分级标签参考.md` 已统一重命名为 `docs/workflow_specs/hierarchical_tag_reference.md`
+  - 该文档已补齐“目的 / 当前定位 / 数量与顺序建议 / 使用原则”等结构，和其他 workflow spec 文档保持一致
+  - `docs_review` 现在除了检查缺失文件，也会检查已知说明文件是否放错目录，并会阻止旧中文文件名重新进入仓库
+- 新增 harness 自监督闭环：
+  - 新增 `harness-audit`，用于评估当前 harness 是否仍覆盖了项目工作流的关键风险点
+  - 新增 `harness-optimize`，用于按审计结果执行低风险、确定性的治理修补并重新审计
+  - `harness-check` 现在会纳入 `harness_audit` 结果，不再只检查业务侧 gate
+  - `maintenance-check` 已恢复全绿，说明新增治理模块与现有维护链路兼容
+  - `harness_governance_overview.md`、`README.md`、`AGENTS.md`、`release_checklist.md`、`python_module_map.md` 已同步新的治理入口
+  - 新增 Playwright 驱动的 UI 结构 / 功能 / 视觉审查后，按新增治理范围重定包级总预算到 `14500`，未放宽单模块和单函数预算
+- `ExecPlan` 治理收紧：
+  - `ExecPlan` 的机器模板 source of truth 已迁到 `config/templates/exec_plan_template.md`
+  - `harness-check` 现在会输出 `active/` 中计划的勾选摘要，明确当前执行状态
+  - 新增 `config_ui_review` 审查模块，把关键 UI 结构和说明稳定性接入 harness gate
+  - 新增 `config_ui_functional_review` 审查模块，把导航切换、滚动复位和 provider 切换等 UI 核心交互接入 harness gate
+  - 删除 `docs/exec_plans/TEMPLATE.md`，不再保留导航页
+  - 新增 `docs_review` 审查模块，把说明文件的放置规则接入 harness gate
+- `config-ui` 界面重做：
+  - 改为左侧导航 + 右侧交互日志 / 操作区的控制台布局
+  - 周报、深度解读、人工中转、设置分区明确
+  - 把样式和导航脚本从 Python 页面层拆到独立静态资源，降低页面代码熵
+  - 固定左右分栏，窄窗口下不再把导航压到页面上方
+  - 支持拖拽调整左侧导航宽度
+  - 统一修复文字溢出背景框的问题
+  - 总览页重排为：运行环境、LLM 状态、输出路径
+  - 去掉顶部重复状态展示和交互日志里的冗余说明
+  - 右侧主内容取消固定最大宽度，随浏览器窗口自适应
+  - 品牌区显示当前版本号，左侧状态区补充面板地址
+  - 人工中转最近活动改为显示 `【状态】作者（年份）- 期刊缩写 - 题目`
+  - `config-ui` 页面读取 `doctor` 时不再误报运行 PATH 假阳性
+  - 右侧主内容区恢复纵向滚动，页面整体保持左右固定分栏
+  - 总览页改为运行统计 + 运行状态检查 + 运行环境 / LLM 状态
+  - 导航项的小字说明已去掉，左侧只保留主模块名称和底部状态区
+  - 表单字段已统一增加 hover 说明，周报、深度解读、人工中转和设置页都有解释浮窗
+  - 表单布局已收紧为更稳定的设置行样式，面板间距统一
+  - 周报页改为周报生成参数、监测期刊缩写列表和周报最新结果
+  - 深度解读页改为任务面板、可调 PDF 页数、数量统计和最新深读结果
+  - 人工中转页改为最近活动、请求生成、响应文件解读和最新生成结果
+  - 支持在 UI 中直接预览和打开新生成的 `prompt.md`
+  - UI 文件链接现在同时支持项目目录和实际输出目录
+  - 深度解读页支持单次任务级 PDF 页数覆盖，`0` 表示读取全部页
+  - 设置页已收口成“分析后端与服务 + 路径与输出”两块，移除了无效开关和重复设置
+  - 新增 `openrouter_api` 作为可运行的分析后端，支持单独配置模型、base_url、API key 和可选请求头
+- `config-ui` 控制面重审：
+  - provider 切换入口前置并明确保存目标
+  - 显示公开默认输出路径、本机私有输出路径和实际输出路径
+  - 增加 `chatgpt_web_manual` 请求状态展示与推荐响应文件导入入口
+- `ExecPlan` 格式治理：
+  - 重新要求 `active/` 计划使用 `Progress` 勾选清单
+  - 最近几份 UI 计划已补回完成态勾选
+- 修复 `chatgpt_web_manual` 的响应文件名稳定性：
+  - 同一 `request_id` 会复用既有 `request_label` 和 `response_filename`
+  - 避免 Linux 大小写敏感文件系统下二次调用找不到已导入响应
+
+发版时状态：
+
+- 作为大检查前备份点记录
+- 详细 gate 结果以后续 tag 对应提交为准
 
 ## [v1.2.0] - 2026-04-08
 

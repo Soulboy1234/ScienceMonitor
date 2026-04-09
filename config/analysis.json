@@ -1,18 +1,12 @@
 {
   "provider": "codex_local",
   "article_summaries": {
-    "enabled": true,
-    "max_items_per_run": 0,
     "reasoning_effort": "medium"
   },
   "report": {
-    "enabled": true,
-    "max_papers_in_prompt": 50,
     "reasoning_effort": "medium"
   },
   "deep_reads": {
-    "enabled": true,
-    "max_input_chars": 28000,
     "reasoning_effort": "high"
   },
   "codex_local": {
@@ -26,6 +20,15 @@
     "api_key_env": "SCIENCEMONITOR_OPENAI_API_KEY",
     "model": "gpt-5-mini",
     "base_url": "https://api.openai.com/v1/responses",
+    "timeout_seconds": 120
+  },
+  "openrouter_api": {
+    "api_key": "",
+    "api_key_env": "SCIENCEMONITOR_OPENROUTER_API_KEY",
+    "model": "openai/gpt-5-mini",
+    "base_url": "https://openrouter.ai/api/v1/chat/completions",
+    "site_url": "",
+    "app_name": "ScienceMonitor",
     "timeout_seconds": 120
   },
   "chatgpt_web_manual": {}

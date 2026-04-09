@@ -117,11 +117,11 @@
 ## 标签参考文件怎么理解
 
 - `config/focus_tags.json` 是机器归一化和别名映射的 source of truth
-- `docs/workflow_specs/常用分级标签参考.md` 是人类阅读参考，不参与运行时匹配
+- `docs/workflow_specs/hierarchical_tag_reference.md` 是人类阅读参考，不参与运行时匹配
 
 所以：
 
 - 机器要用的首选词表、canonical 命名、开放词表约束和候选记录路径，改 `config/focus_tags.json`
-- 人想快速查“常用标签一般长什么样”，看 `docs/workflow_specs/常用分级标签参考.md`
+- 人想快速查“常用标签一般长什么样”，看 `docs/workflow_specs/hierarchical_tag_reference.md`
 
 它不应该搬到 `config/`，因为它不是程序直接消费的运行时资产。

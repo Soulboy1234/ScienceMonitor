@@ -176,6 +176,7 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 
 详细说明见 [docs/user_guides/llm_analysis_readme.md](docs/user_guides/llm_analysis_readme.md)。
 如果使用 `chatgpt_web_manual`，工作流说明见 [docs/user_guides/chatgpt_web_manual_workflow.md](docs/user_guides/chatgpt_web_manual_workflow.md)。
+如果你想整体理解当前项目的 harness 治理边界，见 [docs/user_guides/harness_governance_overview.md](docs/user_guides/harness_governance_overview.md)。
 
 如果你的目标是“脱离 Codex 环境独立运行”，推荐直接用：
 
@@ -221,6 +222,8 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 ./scripts/run_science_monitor.sh sources
 ./scripts/run_science_monitor.sh doctor
 ./scripts/run_science_monitor.sh entropy-check
+./scripts/run_science_monitor.sh harness-audit
+./scripts/run_science_monitor.sh harness-optimize
 ./scripts/run_science_monitor.sh maintenance-check --auto-repair
 ./scripts/run_science_monitor.sh manual-llm-status
 ./scripts/run_science_monitor.sh config-ui
@@ -384,7 +387,11 @@ export SCIENCEMONITOR_LOG_ROOT="$HOME/Library/Application Support/ScienceMonitor
 - `real-eval` 负责真实论文集成评测
 - `real-eval --check-fixtures` 会把当前真实案例输出和已认可基线比较
 - `real-eval --update-fixtures` 只在你确认“新输出更正确”时使用
-- `harness-check` 是本地和 CI 的统一 gate，默认只跑 `doctor` 一致性检查和 `golden eval`
+- `harness-audit` 负责监督当前 harness 是否仍覆盖了现有工作流的关键风险点
+- `harness-optimize` 负责按审计结论做低风险、确定性的治理修补，再重新审计
+- `harness-check` 是本地和 CI 的统一 gate，默认只跑 `doctor` 一致性检查和 `golden eval`- `harness-audit` 负责监督当前 harness 是否覆盖了现有工作流的关键风险点
+- `harness-optimize` 负责按审计建议做低风险、确定性的治理修补
+
 - `maintenance-check` 是代码维护 gate，负责“审核 -> 调整 -> 测试 -> 再审核”
 - `entropy-check` 负责代码熵预算，不检查业务输出正确性
 
@@ -406,3 +413,5 @@ export SCIENCEMONITOR_LOG_ROOT="$HOME/Library/Application Support/ScienceMonitor
 3. `config/local.paths.json` 或 [PROJECT_CONFIG.md](PROJECT_CONFIG.md) 里的 `output_root` 是否指向正确的输出仓库
 4. LLM provider 是否符合新电脑环境
 5. PDF 工具是否能正常用
+- Harness 审计：`./scripts/run_science_monitor.sh harness-audit`
+- Harness 优化：`./scripts/run_science_monitor.sh harness-optimize`

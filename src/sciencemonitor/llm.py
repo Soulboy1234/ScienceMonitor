@@ -11,8 +11,6 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from sqlite3 import Row
-from urllib import request
-from urllib.parse import urlparse
 
 from .chatgpt_web_manual import (
     ManualResponsePending,
@@ -26,7 +24,13 @@ from .config import (
     llm_tmp_root,
     load_master_plan_preferences,
 )
-from .http import DEFAULT_HEADERS
+from .llm_api_support import (
+    resolve_api_key,
+    resolve_api_key_source,
+    resolve_base_url,
+    run_openai_structured,
+    run_openrouter_structured,
+)
 from .llm_contracts import (
     _prepare_article_source_text_for_prompt,
     build_article_prompt,
@@ -44,7 +48,7 @@ from .tags import normalize_tags as normalize_project_tags
 from .utils import clean_abstract_text, clean_title_text
 
 
-SUPPORTED_ANALYSIS_PROVIDERS = ("codex_local", "openai_api", "chatgpt_web_manual")
+SUPPORTED_ANALYSIS_PROVIDERS = ("codex_local", "openai_api", "openrouter_api", "chatgpt_web_manual")
 SUPPORTED_REASONING_EFFORTS = ("low", "medium", "high", "xhigh")
 DEFAULT_CODEX_EXECUTABLE_CANDIDATES = (
     Path("/Applications/Codex.app/Contents/Resources/codex"),
@@ -54,18 +58,12 @@ DEFAULT_CODEX_EXECUTABLE_CANDIDATES = (
 DEFAULT_ANALYSIS_CONFIG = {
     "provider": "codex_local",
     "article_summaries": {
-        "enabled": True,
-        "max_items_per_run": 3,
         "reasoning_effort": "medium",
     },
     "report": {
-        "enabled": True,
-        "max_papers_in_prompt": 25,
         "reasoning_effort": "medium",
     },
     "deep_reads": {
-        "enabled": True,
-        "max_input_chars": 28000,
         "reasoning_effort": "high",
     },
     "codex_local": {
@@ -79,6 +77,15 @@ DEFAULT_ANALYSIS_CONFIG = {
         "api_key_env": "SCIENCEMONITOR_OPENAI_API_KEY",
         "model": "gpt-5-mini",
         "base_url": "https://api.openai.com/v1/responses",
+        "timeout_seconds": 120,
+    },
+    "openrouter_api": {
+        "api_key": "",
+        "api_key_env": "SCIENCEMONITOR_OPENROUTER_API_KEY",
+        "model": "openai/gpt-5-mini",
+        "base_url": "https://openrouter.ai/api/v1/chat/completions",
+        "site_url": "",
+        "app_name": "ScienceMonitor",
         "timeout_seconds": 120,
     },
     "chatgpt_web_manual": {},
@@ -136,7 +143,6 @@ def _summarize_codex_failure(returncode: int, stderr_text: str, stderr_path: Pat
             f"Details: {stderr_path}"
         )
     return f"codex_local analysis failed with exit code {returncode}. Details: {stderr_path}"
-
 
 @dataclass(frozen=True)
 class ArticleAnalysis:
@@ -212,30 +218,18 @@ class AnalysisEngine:
         self.tmp_root.mkdir(parents=True, exist_ok=True)
 
     def article_enabled(self) -> bool:
-        return bool(self.config.get("article_summaries", {}).get("enabled", True))
+        return self.provider in SUPPORTED_ANALYSIS_PROVIDERS
 
     def report_enabled(self) -> bool:
-        return bool(self.config.get("report", {}).get("enabled", True))
+        return self.provider in SUPPORTED_ANALYSIS_PROVIDERS
 
     def deep_read_enabled(self) -> bool:
-        return bool(self.config.get("deep_reads", {}).get("enabled", True))
-
-    def article_limit(self) -> int:
-        return int(self.config.get("article_summaries", {}).get("max_items_per_run", 5) or 0)
-
-    def report_prompt_limit(self) -> int:
-        return int(self.config.get("report", {}).get("max_papers_in_prompt", 25) or 25)
-
-    def deep_read_max_input_chars(self) -> int:
-        return int(self.config.get("deep_reads", {}).get("max_input_chars", 28000) or 28000)
+        return self.provider in SUPPORTED_ANALYSIS_PROVIDERS
 
     def analyze_article(self, row: Row, index: int) -> ArticleAnalysis | None:
         if not self.article_enabled():
             return None
         self._ensure_supported_provider()
-        limit = self.article_limit()
-        if limit > 0 and index >= limit:
-            return None
 
         cache_key = self._article_cache_key(row)
         cached = self._read_json_cache("articles", cache_key)
@@ -281,7 +275,7 @@ class AnalysisEngine:
             return None
         self._ensure_supported_provider()
 
-        selected_summaries = summaries[: max(1, self.report_prompt_limit())]
+        selected_summaries = list(summaries)
         summary_signature = "|".join(
             str(summary.row["doi"] or summary.row["fingerprint"] or summary.note_title)
             for summary in selected_summaries
@@ -331,9 +325,6 @@ class AnalysisEngine:
         normalized_full_text = clean_abstract_text(full_text)
         if self.provider != "chatgpt_web_manual" and not normalized_full_text:
             return None
-        max_chars = max(self.deep_read_max_input_chars(), 4000)
-        if self.provider != "chatgpt_web_manual" and len(normalized_full_text) > max_chars:
-            normalized_full_text = normalized_full_text[:max_chars].rsplit(" ", 1)[0].strip() + " ..."
 
         cache_basis = "|".join(
             [
@@ -415,6 +406,8 @@ class AnalysisEngine:
             return self._run_codex_structured(prompt, schema, name, reasoning_effort=reasoning_effort)
         if self.provider == "openai_api":
             return self._run_openai_structured(prompt, schema)
+        if self.provider == "openrouter_api":
+            return self._run_openrouter_structured(prompt, schema)
         if self.provider == "chatgpt_web_manual":
             return self._run_chatgpt_web_manual_structured(
                 prompt,
@@ -494,56 +487,10 @@ class AnalysisEngine:
         return json.loads(output_path.read_text(encoding="utf-8"))
 
     def _run_openai_structured(self, prompt: str, schema: dict) -> dict:
-        settings = self.config.get("openai_api", {})
-        api_key = self._resolve_openai_api_key(settings)
-        if not api_key:
-            raise RuntimeError(
-                "openai_api provider requires an API key via config/analysis.json "
-                "or environment variable SCIENCEMONITOR_OPENAI_API_KEY."
-            )
-        base_url = self._resolve_openai_base_url(settings)
+        return run_openai_structured(self.config.get("openai_api", {}), prompt, schema)
 
-        payload = {
-            "model": str(settings.get("model", "gpt-5-mini") or "gpt-5-mini"),
-            "instructions": "你是 Space Physics 文献分析助手。只根据给定标题、摘要和元数据输出中文分析，不要编造全文细节。",
-            "input": prompt,
-            "text": {
-                "format": {
-                    "type": "json_schema",
-                    "name": schema["name"],
-                    "schema": schema["schema"],
-                    "strict": True,
-                }
-            },
-        }
-        req = request.Request(
-            base_url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                **DEFAULT_HEADERS,
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
-            method="POST",
-        )
-        with request.urlopen(req, timeout=int(settings.get("timeout_seconds", 120) or 120)) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-
-        output_text = data.get("output_text", "")
-        if not output_text:
-            for item in data.get("output", []):
-                if item.get("type") != "message":
-                    continue
-                for content in item.get("content", []):
-                    if content.get("type") == "output_text":
-                        output_text = content.get("text", "")
-                        break
-                if output_text:
-                    break
-        if not output_text:
-            raise RuntimeError("OpenAI response did not include output_text")
-        return json.loads(output_text)
+    def _run_openrouter_structured(self, prompt: str, schema: dict) -> dict:
+        return run_openrouter_structured(self.config.get("openrouter_api", {}), prompt, schema)
 
     def _run_chatgpt_web_manual_structured(
         self,
@@ -579,8 +526,10 @@ class AnalysisEngine:
     def provider_status(self) -> dict:
         codex_settings = self.config.get("codex_local", {})
         openai_settings = self.config.get("openai_api", {})
+        openrouter_settings = self.config.get("openrouter_api", {})
         codex_executable = self._resolve_codex_executable(codex_settings, strict=False)
         api_key = self._resolve_openai_api_key(openai_settings)
+        openrouter_api_key = self._resolve_openrouter_api_key(openrouter_settings)
         manual_counts = manual_status_counts(self.root)
         return {
             "provider": self.provider,
@@ -592,10 +541,32 @@ class AnalysisEngine:
             "article_reasoning_effort": self._analysis_reasoning_effort("article_summaries"),
             "report_reasoning_effort": self._analysis_reasoning_effort("report"),
             "deep_read_reasoning_effort": self._analysis_reasoning_effort("deep_reads"),
-            "openai_base_url": self._resolve_openai_base_url(openai_settings, strict=False),
+            "openai_base_url": resolve_base_url(
+                openai_settings,
+                default_url="https://api.openai.com/v1/responses",
+                provider_name="openai_api",
+                strict=False,
+            ),
             "openai_api_key_present": bool(api_key),
-            "openai_api_key_source": self._resolve_openai_api_key_source(openai_settings),
+            "openai_api_key_source": resolve_api_key_source(
+                openai_settings,
+                env_name="SCIENCEMONITOR_OPENAI_API_KEY",
+                fallback_env_name="OPENAI_API_KEY",
+            ),
             "openai_model": str(openai_settings.get("model", "gpt-5-mini") or "gpt-5-mini"),
+            "openrouter_base_url": resolve_base_url(
+                openrouter_settings,
+                default_url="https://openrouter.ai/api/v1/chat/completions",
+                provider_name="openrouter_api",
+                strict=False,
+            ),
+            "openrouter_api_key_present": bool(openrouter_api_key),
+            "openrouter_api_key_source": resolve_api_key_source(
+                openrouter_settings,
+                env_name="SCIENCEMONITOR_OPENROUTER_API_KEY",
+                fallback_env_name="OPENROUTER_API_KEY",
+            ),
+            "openrouter_model": str(openrouter_settings.get("model", "openai/gpt-5-mini") or "openai/gpt-5-mini"),
             "chatgpt_web_manual_root": str(chatgpt_web_manual_root(self.root)),
             "chatgpt_web_manual_pending": int(manual_counts.get("pending", 0)),
             "chatgpt_web_manual_ready": int(manual_counts.get("ready", 0)),
@@ -669,6 +640,9 @@ class AnalysisEngine:
         if self.provider == "openai_api":
             openai_settings = self.config.get("openai_api", {})
             model = str(openai_settings.get("model", "gpt-5-mini") or "gpt-5-mini").strip() or "gpt-5-mini"
+        elif self.provider == "openrouter_api":
+            openrouter_settings = self.config.get("openrouter_api", {})
+            model = str(openrouter_settings.get("model", "openai/gpt-5-mini") or "openai/gpt-5-mini").strip() or "openai/gpt-5-mini"
         elif self.provider == "chatgpt_web_manual":
             model = "chatgpt_web_manual"
         else:
@@ -725,7 +699,7 @@ class AnalysisEngine:
         if self.provider in SUPPORTED_ANALYSIS_PROVIDERS:
             return
         raise RuntimeError(
-            "当前 analysis provider 已不再支持。现在只支持 codex_local、openai_api 或 chatgpt_web_manual。"
+            "当前 analysis provider 已不再支持。现在只支持 codex_local、openai_api、openrouter_api 或 chatgpt_web_manual。"
         )
 
     def _resolve_codex_executable(self, settings: dict, strict: bool = True) -> str:
@@ -750,39 +724,6 @@ class AnalysisEngine:
         if strict:
             raise RuntimeError("codex_local provider requires the codex CLI to be installed and on PATH.")
         return ""
-
-    def _resolve_openai_api_key(self, settings: dict) -> str:
-        env_name = str(settings.get("api_key_env", "") or "SCIENCEMONITOR_OPENAI_API_KEY").strip()
-        if env_name:
-            value = os.environ.get(env_name, "").strip()
-            if value:
-                return value
-        direct = str(settings.get("api_key", "") or "").strip()
-        if direct:
-            return direct
-        fallback = os.environ.get("OPENAI_API_KEY", "").strip()
-        return fallback
-
-    def _resolve_openai_api_key_source(self, settings: dict) -> str:
-        env_name = str(settings.get("api_key_env", "") or "SCIENCEMONITOR_OPENAI_API_KEY").strip()
-        if env_name and os.environ.get(env_name, "").strip():
-            return env_name
-        if str(settings.get("api_key", "") or "").strip():
-            return "config"
-        if os.environ.get("OPENAI_API_KEY", "").strip():
-            return "OPENAI_API_KEY"
-        return ""
-
-    def _resolve_openai_base_url(self, settings: dict, strict: bool = True) -> str:
-        base_url = str(settings.get("base_url", "https://api.openai.com/v1/responses") or "https://api.openai.com/v1/responses").strip()
-        parsed = urlparse(base_url)
-        if parsed.scheme == "https":
-            return base_url
-        if parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost"}:
-            return base_url
-        if strict:
-            raise RuntimeError("openai_api.base_url must use https unless it points to localhost.")
-        return base_url
 
     def _subprocess_env(self) -> dict[str, str]:
         env = dict(os.environ)
@@ -812,6 +753,50 @@ class AnalysisEngine:
             if canonical not in fallback:
                 fallback.append(canonical)
         return self._prefer_more_specific_tags(fallback)[:8]
+
+    def _resolve_openai_api_key(self, settings: dict) -> str:
+        return resolve_api_key(
+            settings,
+            env_name="SCIENCEMONITOR_OPENAI_API_KEY",
+            fallback_env_name="OPENAI_API_KEY",
+        )
+
+    def _resolve_openrouter_api_key(self, settings: dict) -> str:
+        return resolve_api_key(
+            settings,
+            env_name="SCIENCEMONITOR_OPENROUTER_API_KEY",
+            fallback_env_name="OPENROUTER_API_KEY",
+        )
+
+    def _resolve_openai_api_key_source(self, settings: dict) -> str:
+        return resolve_api_key_source(
+            settings,
+            env_name="SCIENCEMONITOR_OPENAI_API_KEY",
+            fallback_env_name="OPENAI_API_KEY",
+        )
+
+    def _resolve_openrouter_api_key_source(self, settings: dict) -> str:
+        return resolve_api_key_source(
+            settings,
+            env_name="SCIENCEMONITOR_OPENROUTER_API_KEY",
+            fallback_env_name="OPENROUTER_API_KEY",
+        )
+
+    def _resolve_openai_base_url(self, settings: dict, strict: bool = True) -> str:
+        return resolve_base_url(
+            settings,
+            default_url="https://api.openai.com/v1/responses",
+            provider_name="openai_api",
+            strict=strict,
+        )
+
+    def _resolve_openrouter_base_url(self, settings: dict, strict: bool = True) -> str:
+        return resolve_base_url(
+            settings,
+            default_url="https://openrouter.ai/api/v1/chat/completions",
+            provider_name="openrouter_api",
+            strict=strict,
+        )
 
     def normalize_tags(self, tags: list[str]) -> list[str]:
         return self._normalize_tags(tags)

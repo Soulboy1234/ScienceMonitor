@@ -41,6 +41,8 @@
 
 - 环境自检：`./scripts/run_science_monitor.sh doctor`
 - 代码熵检查：`./scripts/run_science_monitor.sh entropy-check`
+- Harness 审计：`./scripts/run_science_monitor.sh harness-audit`
+- Harness 优化：`./scripts/run_science_monitor.sh harness-optimize`
 - 维护循环：`./scripts/run_science_monitor.sh maintenance-check --auto-repair`
 - 统一 harness gate：`./scripts/run_science_monitor.sh harness-check`
 - Golden eval：`./scripts/run_science_monitor.sh golden-eval`
@@ -48,6 +50,8 @@
 - 人工中转请求状态：`./scripts/run_science_monitor.sh manual-llm-status`
 - 人工中转响应导入：`./scripts/run_science_monitor.sh manual-llm-import --request-id <id>`，必要时追加 `--response-file /path/to/response.txt`
 - 发版前清单：`docs/user_guides/release_checklist.md`
+- Harness 总览：`docs/user_guides/harness_governance_overview.md`- Harness 自监督会通过 `harness-audit` 评估当前治理覆盖面，并用 `harness-optimize` 做低风险修补
+
 - 列出期刊：`./scripts/run_science_monitor.sh sources`
 - 跑测试：`./.venv/bin/python -m pytest -q`
 - 本地运行：`./scripts/run_science_monitor.sh <command>`
@@ -59,15 +63,20 @@
 - 主流程：`src/sciencemonitor/pipeline.py`
 - 环境与一致性自检：`src/sciencemonitor/doctor.py`
 - 代码熵审计：`src/sciencemonitor/entropy.py`
+- Harness 审计：`src/sciencemonitor/harness_audit.py`
+- Harness 优化：`src/sciencemonitor/harness_optimize.py`
+- 文档放置审计：`src/sciencemonitor/docs_review.py`
 - 维护循环：`src/sciencemonitor/maintenance.py`
 - 统一 harness gate：`src/sciencemonitor/harness.py`
 - Golden eval：`src/sciencemonitor/golden_eval.py`
 - 真实案例评测：`src/sciencemonitor/real_case_eval.py`
 - 治理总览：`docs/exec_plans/GovernanceBoard.md`
+- ExecPlan 模板：`config/templates/exec_plan_template.md`
 - 抓取：`src/sciencemonitor/crossref.py`
 - 网页全文/摘要抓取：`src/sciencemonitor/article_fetch.py`
 - 配置：`src/sciencemonitor/config.py`
 - 本地配置面板：`src/sciencemonitor/config_ui.py`
+- 配置面板审查：`src/sciencemonitor/config_ui_review.py`
 - ChatGPT 网页人工中转：`src/sciencemonitor/chatgpt_web_manual.py`
 - 单篇总结：`src/sciencemonitor/article_summaries.py`
 - 周报：`src/sciencemonitor/reporting.py`
@@ -128,6 +137,7 @@
 额外原则：
 
 - 运行时直接消费的模板、配置和机器资产，优先放 `config/`
+- `ExecPlan` 的机器模板 source of truth 在 `config/templates/exec_plan_template.md`
 - `docs/` 尽量只保留规范、说明、计划和人类阅读材料
 
 ## 什么时候必须写 ExecPlan
@@ -140,6 +150,11 @@
 - 会引入迁移步骤或分阶段治理
 
 完成后，把计划移到 `docs/exec_plans/completed/`。
+
+补充说明：
+
+- `ExecPlan` 的机器模板 source of truth 在 `config/templates/exec_plan_template.md`
+- `harness-check` 会读取 `active/` 中计划的勾选项摘要，作为当前执行状态的一部分
 
 ## 修改规则
 

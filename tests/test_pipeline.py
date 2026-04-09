@@ -221,7 +221,7 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["title"], "Ionosphere Response to Solar Wind Forcing")
 
-    def test_run_daily_skips_report_when_weekly_report_disabled(self) -> None:
+    def test_run_daily_still_generates_report_when_runtime_weekly_switch_is_false(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = pathlib.Path(tmpdir)
             (root / "config").mkdir()
@@ -271,8 +271,8 @@ class PipelineTest(unittest.TestCase):
                 monitor.close()
 
             self.assertEqual(update_result.kept_count, 1)
-            self.assertIsNone(report_path)
-            self.assertEqual(stats["paper_count"], 0)
+            self.assertIsNotNone(report_path)
+            self.assertEqual(stats["paper_count"], 1)
             summary_files = list((root / "out" / "auto" / "article_summaries").glob("*.md"))
             self.assertEqual(len(summary_files), 1)
 

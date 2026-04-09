@@ -12,7 +12,13 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from sciencemonitor.entropy import EntropyCheckReport
+from sciencemonitor.config_ui_functional_review import ConfigUIFunctionalReviewReport
+from sciencemonitor.config_ui_review import ConfigUIReviewReport
+from sciencemonitor.config_ui_visual_review import ConfigUIVisualReviewReport
+from sciencemonitor.docs_review import DocsReviewReport
+from sciencemonitor.exec_plan_review import ExecPlanCheckReport
 from sciencemonitor.golden_eval import GoldenEvalCaseResult
+from sciencemonitor.harness_audit import HarnessAuditReport
 from sciencemonitor.harness import HarnessCheckReport
 from sciencemonitor.maintenance import SubprocessCheckResult, run_maintenance_cycle
 
@@ -32,6 +38,19 @@ def _entropy_report(passed: bool) -> EntropyCheckReport:
 def _harness_report(passed: bool) -> HarnessCheckReport:
     return HarnessCheckReport(
         doctor_report={"warnings": []},
+        harness_audit_report=HarnessAuditReport(checks={"docs": True}, findings=[]),
+        exec_plan_report=ExecPlanCheckReport(
+            passed=True,
+            template_path=ROOT / "config" / "templates" / "exec_plan_template.md",
+            active_plans=[],
+            completed_plans=[],
+            active_statuses=[],
+            issues=[],
+        ),
+        docs_review_report=DocsReviewReport(passed=True, issues=[]),
+        config_ui_review_report=ConfigUIReviewReport(passed=True, issues=[]),
+        config_ui_functional_review_report=ConfigUIFunctionalReviewReport(passed=True, issues=[]),
+        config_ui_visual_review_report=ConfigUIVisualReviewReport(passed=True, issues=[], artifacts=[]),
         golden_results=[
             GoldenEvalCaseResult(
                 name="article_summary",

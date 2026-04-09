@@ -16,7 +16,9 @@ from .deep_reads import run_deep_read
 from .doctor import run_doctor
 from .entropy import render_entropy_check_summary, run_entropy_check
 from .golden_eval import render_golden_eval_summary, run_golden_eval
+from .harness_audit import render_harness_audit_summary, run_harness_audit
 from .harness import render_harness_check_summary, run_harness_check
+from .harness_optimize import render_harness_optimize_summary, run_harness_optimize
 from .maintenance import render_maintenance_summary, run_maintenance_cycle
 from .pipeline import ScienceMonitor
 from .real_case_eval import run_real_case_eval, run_real_case_fixture_eval
@@ -47,6 +49,8 @@ def dispatch_command(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
         "deep-read": _handle_deep_read,
         "tag-candidates": _handle_tag_candidates,
         "golden-eval": _handle_golden_eval,
+        "harness-audit": _handle_harness_audit,
+        "harness-optimize": _handle_harness_optimize,
         "entropy-check": _handle_entropy_check,
         "real-eval": _handle_real_eval,
         "harness-check": _handle_harness_check,
@@ -111,6 +115,12 @@ def _add_analysis_commands(subparsers: argparse._SubParsersAction, defaults: dic
 def _add_eval_and_maintenance_commands(subparsers: argparse._SubParsersAction) -> None:
     golden_eval = subparsers.add_parser("golden-eval", help="Run stable golden-output regression checks.")
     golden_eval.add_argument("--update", action="store_true", help="Refresh golden fixtures to the current normalized outputs.")
+
+    harness_audit = subparsers.add_parser("harness-audit", help="Audit whether the current harness still covers the project workflow.")
+    harness_audit.add_argument("--no-write-report", action="store_true", help="Print the audit summary only and skip writing the markdown audit report.")
+
+    harness_optimize = subparsers.add_parser("harness-optimize", help="Apply low-risk deterministic harness governance repairs and rerun harness audit.")
+    harness_optimize.add_argument("--no-write-report", action="store_true", help="Print the optimize summary only and skip writing the markdown optimize report.")
 
     subparsers.add_parser("entropy-check", help="Check code-size budgets, oversized functions, and import-cycle entropy guards.")
 
@@ -285,6 +295,18 @@ def _handle_golden_eval(args: argparse.Namespace, monitor: ScienceMonitor) -> in
     return 0 if all(item.passed for item in results) else 1
 
 
+def _handle_harness_audit(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
+    report = run_harness_audit(monitor.root, write_report=not bool(args.no_write_report))
+    print(render_harness_audit_summary(report))
+    return 0 if report.passed else 1
+
+
+def _handle_harness_optimize(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
+    report = run_harness_optimize(monitor.root, write_report=not bool(args.no_write_report))
+    print(render_harness_optimize_summary(report))
+    return 0 if report.after_audit.passed else 1
+
+
 def _handle_entropy_check(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
     del args
     report = run_entropy_check(monitor.root)
@@ -360,7 +382,13 @@ def _handle_audit(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
 
 def _handle_daily(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
     report_date = date.fromisoformat(args.date)
-    update_result, report_path, stats = monitor.run_daily(report_date=report_date, days_back=args.days_back, max_per_source=args.max_per_source, source_ids=_parse_source_ids(args.source_ids))
+    update_result, report_path, stats = monitor.run_daily(
+        report_date=report_date,
+        days_back=args.days_back,
+        max_per_source=args.max_per_source,
+        hydrate=True,
+        source_ids=_parse_source_ids(args.source_ids),
+    )
     if report_path is None:
         print(f"Fetched {update_result.fetched_count} candidates and kept {update_result.kept_count}. Weekly report generation is disabled, so only updates/summaries were produced.")
     else:

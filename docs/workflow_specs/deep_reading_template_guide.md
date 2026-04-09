@@ -111,4 +111,4 @@
 - 编号列表必须逐条换行，不能和前一句挤在同一行
 - 详细风格和目标结构仍可参考：
   - `literature_note_style_guide.md`
-  - `deep_reading_comparison_and_fusion.md`
+- `../user_guides/deep_reading_comparison_and_fusion.md`

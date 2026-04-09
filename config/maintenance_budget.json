@@ -2,7 +2,7 @@
   "global_limits": {
     "default_module_max_lines": 600,
     "default_function_max_lines": 80,
-    "package_total_max_lines": 11900
+    "package_total_max_lines": 14500
   },
   "module_line_limits": {
     "article_summaries.py": 560,
@@ -23,7 +23,11 @@
     "article_fetch.py": 380,
     "article_source_text.py": 500,
     "config_ui.py": 500,
+    "config_ui_actions.py": 320,
+    "config_ui_markdown.py": 240,
     "config_ui_page.py": 400,
+    "config_ui_support.py": 420,
+    "exec_plan_review.py": 260,
     "reporting.py": 500,
     "reporting_template.py": 160,
     "real_case_eval.py": 380,
@@ -44,7 +48,8 @@
     "real_case_eval.py::compare_real_case_fixtures": 120,
     "reporting.py::build_report": 140,
     "source_audit.py::generate_source_audit": 140,
-    "chatgpt_web_manual.py::prepare_manual_request_bundle": 95
+    "chatgpt_web_manual.py::prepare_manual_request_bundle": 95,
+    "config_ui_markdown.py::_render_minimal_markdown": 110
   },
   "allowed_import_cycles": []
 }

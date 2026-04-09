@@ -24,6 +24,12 @@
 ./scripts/run_science_monitor.sh maintenance-check --auto-repair --max-passes 2
 ```
 
+### Harness 自监督
+
+```bash
+./scripts/run_science_monitor.sh harness-audit
+```
+
 ### Harness gate
 
 ```bash
@@ -60,6 +66,7 @@
 - 如治理流程有变化，相关 runbook 已更新：
   - `eval_governance_runbook.md`
   - `maintenance_governance_runbook.md`
+  - `harness_governance_overview.md`
 - 如项目状态有变化，`GovernanceBoard.md` 已更新
 
 ## 6. 发布动作

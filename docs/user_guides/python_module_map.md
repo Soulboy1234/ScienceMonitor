@@ -45,6 +45,15 @@
 - [config_ui_page.py](../../src/sciencemonitor/config_ui_page.py)
   配置面板渲染层。负责配置 UI 的页面布局、状态条、操作卡片和表单 HTML 片段。
 
+- [config_ui_review.py](../../src/sciencemonitor/config_ui_review.py)
+  配置面板结构审查层。负责检查 UI 的关键 HTML 片段、关键 CSS/JS 片段是否存在，避免说明、类名和交互钩子悄悄回退。
+
+- [config_ui_functional_review.py](../../src/sciencemonitor/config_ui_functional_review.py)
+  配置面板功能审查层。负责用浏览器模拟导航切换、标题更新、滚动复位和 provider 切换，验证 UI 的核心交互是否真的可用。
+
+- [config_ui_visual_review.py](../../src/sciencemonitor/config_ui_visual_review.py)
+  配置面板视觉审查层。负责在固定视口下检查周报页等关键布局是否同排、是否溢出、表单节奏是否均匀，并留存截图。
+
 - [chatgpt_web_manual.py](../../src/sciencemonitor/chatgpt_web_manual.py)
   ChatGPT 网页人工中转层。负责生成请求包、保存 prompt/schema/template、导入人工响应、校验 JSON 结构并维护请求状态。
 
@@ -69,6 +78,12 @@
 
 - [harness.py](../../src/sciencemonitor/harness.py)
   统一 harness gate。负责把 `doctor`、`golden eval` 和可选的 `real eval fixture` 检查收成一个 `harness-check` 入口。
+
+- [harness_audit.py](../../src/sciencemonitor/harness_audit.py)
+  Harness 自监督层。负责评估当前 harness 是否还覆盖了当前工作流的关键风险点，并输出审计报告。
+
+- [harness_optimize.py](../../src/sciencemonitor/harness_optimize.py)
+  Harness 优化层。负责按 harness 审计结论做低风险、确定性的治理修补，并生成前后对比报告。
 
 - [crossref.py](../../src/sciencemonitor/crossref.py)
   Crossref 抓取客户端。负责按期刊源、时间窗口获取论文元数据，也负责按 DOI/标题查询单篇论文元数据。

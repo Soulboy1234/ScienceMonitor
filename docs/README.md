@@ -63,9 +63,7 @@
 - [daily_report_template_guide.md](workflow_specs/daily_report_template_guide.md)
 - [deep_reading_template_guide.md](workflow_specs/deep_reading_template_guide.md)
 - [source_of_truth_matrix.md](workflow_specs/source_of_truth_matrix.md)
-- [literature_codex_quick_guide.md](workflow_specs/literature_codex_quick_guide.md)
-- [deep_reading_comparison_and_fusion.md](workflow_specs/deep_reading_comparison_and_fusion.md)
-- [常用分级标签参考.md](workflow_specs/%E5%B8%B8%E7%94%A8%E5%88%86%E7%BA%A7%E6%A0%87%E7%AD%BE%E5%8F%82%E8%80%83.md)
+- [hierarchical_tag_reference.md](workflow_specs/hierarchical_tag_reference.md)
 
 ### User Guides
 
@@ -74,9 +72,14 @@
 - [chatgpt_web_manual_workflow.md](user_guides/chatgpt_web_manual_workflow.md)
 - [eval_governance_runbook.md](user_guides/eval_governance_runbook.md)
 - [maintenance_governance_runbook.md](user_guides/maintenance_governance_runbook.md)
+- [harness_governance_overview.md](user_guides/harness_governance_overview.md)
 - [release_checklist.md](user_guides/release_checklist.md)
 - [python_module_map.md](user_guides/python_module_map.md)
 - [agent_skill_usage.md](user_guides/agent_skill_usage.md)
+- [literature_codex_quick_guide.md](user_guides/literature_codex_quick_guide.md)
+- [deep_reading_comparison_and_fusion.md](user_guides/deep_reading_comparison_and_fusion.md)
+
+说明文件的放置规则由 `src/sciencemonitor/docs_review.py` 接入 `harness-check` 审核。
 
 ### Exec Plans
 

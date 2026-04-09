@@ -11,6 +11,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from sciencemonitor.golden_eval import GoldenEvalCaseResult
+from sciencemonitor.harness_audit import HarnessAuditReport
 from sciencemonitor.harness import render_harness_check_summary, run_harness_check
 from sciencemonitor.real_case_eval import RealCaseEvalResult, RealCaseFixtureCheckResult
 
@@ -20,6 +21,24 @@ class HarnessCheckTest(unittest.TestCase):
         with mock.patch(
             "sciencemonitor.harness.run_doctor",
             return_value={"warnings": []},
+        ), mock.patch(
+            "sciencemonitor.harness.run_harness_audit",
+            return_value=HarnessAuditReport(checks={"docs": True}, findings=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_exec_plan_check",
+            return_value=mock.Mock(passed=True, template_path=ROOT / "template.md", active_plans=[], completed_plans=[], active_statuses=[], issues=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_docs_review",
+            return_value=mock.Mock(passed=True, issues=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_config_ui_review",
+            return_value=mock.Mock(passed=True, issues=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_config_ui_functional_review",
+            return_value=mock.Mock(passed=True, issues=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_config_ui_visual_review",
+            return_value=mock.Mock(passed=True, issues=[], artifacts=[]),
         ), mock.patch(
             "sciencemonitor.harness.run_golden_eval",
             return_value=[
@@ -70,11 +89,34 @@ class HarnessCheckTest(unittest.TestCase):
             summary = render_harness_check_summary(report)
             self.assertIn("overall=ok", summary)
             self.assertIn("real_fixture_passed=1/1", summary)
+            self.assertIn("docs=ok", summary)
+            self.assertIn("config_ui=ok", summary)
+            self.assertIn("config_ui_functional=ok", summary)
+            self.assertIn("config_ui_visual=ok", summary)
+            self.assertIn("harness_audit=ok", summary)
 
     def test_harness_check_fails_on_missing_real_fixture(self) -> None:
         with mock.patch(
             "sciencemonitor.harness.run_doctor",
             return_value={"warnings": []},
+        ), mock.patch(
+            "sciencemonitor.harness.run_harness_audit",
+            return_value=HarnessAuditReport(checks={"docs": True}, findings=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_exec_plan_check",
+            return_value=mock.Mock(passed=True, template_path=ROOT / "template.md", active_plans=[], completed_plans=[], active_statuses=[], issues=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_docs_review",
+            return_value=mock.Mock(passed=True, issues=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_config_ui_review",
+            return_value=mock.Mock(passed=True, issues=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_config_ui_functional_review",
+            return_value=mock.Mock(passed=True, issues=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_config_ui_visual_review",
+            return_value=mock.Mock(passed=True, issues=[], artifacts=[]),
         ), mock.patch(
             "sciencemonitor.harness.run_golden_eval",
             return_value=[

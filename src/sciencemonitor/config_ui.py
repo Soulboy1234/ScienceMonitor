@@ -4,32 +4,46 @@ import cgi
 import json
 import os
 import webbrowser
-from datetime import date, datetime
+from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse, unquote
 
-from .article_summary_markdown import sanitize_filename
+from .chatgpt_web_manual import (
+    list_manual_requests,
+)
 from .config import (
     config_ui_state_path,
+    local_path_config_path,
     load_runtime_config,
+    output_root,
     path_config_path,
     project_root,
     runtime_config_path,
     sync_configs_from_project_markdown,
     write_project_config_markdown,
 )
+from .config_ui_actions import (
+    _int_field,
+    _run_deep_read_action,
+    _run_manual_create_action,
+    _run_manual_import_action,
+    _run_manual_import_upload_action,
+    _run_report_action,
+    _text_field,
+)
 from .config_ui_page import (
     render_error_page as _render_error_page,
     render_page as _render_page,
     render_shutdown_page as _render_shutdown_page,
 )
-from .deep_reads import run_deep_read
+from .config_ui_support import (
+    collect_config_ui_state,
+)
 from .doctor import run_doctor
-from .llm import DEFAULT_ANALYSIS_CONFIG, SUPPORTED_ANALYSIS_PROVIDERS
-from .pipeline import ScienceMonitor
+from .llm import DEFAULT_ANALYSIS_CONFIG
 
 
 def serve_config_ui(
@@ -58,45 +72,10 @@ def serve_config_ui(
 def _build_handler(project: Path):
     class ConfigUIHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
-            sync_configs_from_project_markdown(project)
-            query = parse_qs(urlparse(self.path).query)
-            status = _status_payload_from_query(query)
-            doctor = run_doctor(project)
-            runtime = load_runtime_config(project)
-            analysis = _load_analysis_config(project)
-            paths = _load_paths_config(project)
-            payload = _render_page(project, runtime, analysis, paths, doctor, status)
-            self._send_html(payload)
+            _handle_get_request(self, project)
 
         def do_POST(self) -> None:  # noqa: N802
-            action = urlparse(self.path).path or "/save-config"
-            try:
-                if action == "/shutdown-ui":
-                    payload = _render_shutdown_page(project)
-                    self._send_html(payload)
-                    Thread(target=self.server.shutdown, daemon=True).start()
-                    return
-
-                form, files = _parse_form_data(self)
-                if action == "/save-config":
-                    _save_from_form(project, form)
-                    params = {"kind": "ok", "title": "配置已保存", "message": "配置已保存，并同步回 PROJECT_CONFIG.md。"}
-                elif action == "/run-report":
-                    params = _run_report_action(project, form)
-                elif action == "/run-deep-read":
-                    params = _run_deep_read_action(project, form, files)
-                else:
-                    payload = _render_error_page(project, f"未知操作路径：{action}")
-                    self._send_html(payload, status=HTTPStatus.NOT_FOUND)
-                    return
-            except Exception as exc:
-                payload = _render_error_page(project, str(exc))
-                self._send_html(payload, status=HTTPStatus.BAD_REQUEST)
-                return
-
-            self.send_response(HTTPStatus.SEE_OTHER)
-            self.send_header("Location", "/?" + urlencode(params))
-            self.end_headers()
+            _handle_post_request(self, project)
 
         def log_message(self, format: str, *args) -> None:  # noqa: A003
             return
@@ -109,7 +88,103 @@ def _build_handler(project: Path):
             self.end_headers()
             self.wfile.write(encoded)
 
+        def _send_local_file(self, parsed) -> None:
+            _serve_local_file(self, project, parsed)
+
     return ConfigUIHandler
+
+
+def _handle_get_request(handler: BaseHTTPRequestHandler, project: Path) -> None:
+    parsed = urlparse(handler.path)
+    if parsed.path == "/local-file":
+        handler._send_local_file(parsed)  # type: ignore[attr-defined]
+        return
+    sync_configs_from_project_markdown(project)
+    query = parse_qs(parsed.query)
+    status = _status_payload_from_query(query)
+    doctor = run_doctor(project, strict_runtime=False)
+    runtime = load_runtime_config(project)
+    analysis = _load_analysis_config(project)
+    paths = _load_paths_config(project)
+    manual_requests = list_manual_requests(project, limit=8)
+    ui_state = collect_config_ui_state(project)
+    payload = _render_page(
+        project,
+        runtime,
+        analysis,
+        paths,
+        doctor,
+        status,
+        manual_requests=manual_requests,
+        ui_state=ui_state,
+    )
+    handler._send_html(payload)  # type: ignore[attr-defined]
+
+
+def _handle_post_request(handler: BaseHTTPRequestHandler, project: Path) -> None:
+    action = urlparse(handler.path).path or "/save-config"
+    try:
+        if action == "/shutdown-ui":
+            payload = _render_shutdown_page(project)
+            handler._send_html(payload)  # type: ignore[attr-defined]
+            Thread(target=handler.server.shutdown, daemon=True).start()
+            return
+
+        form, files = _parse_form_data(handler)
+        if action == "/save-config":
+            _save_from_form(project, form)
+            params = {"kind": "ok", "title": "配置已保存", "message": "配置已保存，并同步回 PROJECT_CONFIG.md。"}
+        elif action == "/run-report":
+            params = _run_report_action(project, form)
+        elif action == "/run-deep-read":
+            params = _run_deep_read_action(project, form, files)
+        elif action == "/manual-llm-create":
+            params = _run_manual_create_action(project, form)
+        elif action == "/manual-llm-import":
+            params = _run_manual_import_action(project, form)
+        elif action == "/manual-llm-import-upload":
+            params = _run_manual_import_upload_action(project, form, files)
+        else:
+            payload = _render_error_page(project, f"未知操作路径：{action}")
+            handler._send_html(payload, status=HTTPStatus.NOT_FOUND)  # type: ignore[attr-defined]
+            return
+    except Exception as exc:
+        payload = _render_error_page(project, str(exc))
+        handler._send_html(payload, status=HTTPStatus.BAD_REQUEST)  # type: ignore[attr-defined]
+        return
+
+    handler.send_response(HTTPStatus.SEE_OTHER)
+    handler.send_header("Location", "/?" + urlencode(params))
+    handler.end_headers()
+
+
+def _serve_local_file(handler: BaseHTTPRequestHandler, project: Path, parsed) -> None:
+    raw_path = parse_qs(parsed.query).get("path", [""])[0]
+    if not raw_path:
+        handler._send_html(_render_error_page(project, "缺少 path 参数。"), status=HTTPStatus.BAD_REQUEST)  # type: ignore[attr-defined]
+        return
+    target = Path(unquote(raw_path)).expanduser().resolve()
+    allowed_roots = [project.resolve(), output_root(project).resolve()]
+    if not any(_is_relative_to(target, base) for base in allowed_roots):
+        handler._send_html(_render_error_page(project, "只允许访问项目目录内的文件。"), status=HTTPStatus.FORBIDDEN)  # type: ignore[attr-defined]
+        return
+    if not target.exists() or not target.is_file():
+        handler._send_html(_render_error_page(project, f"文件不存在：{target}"), status=HTTPStatus.NOT_FOUND)  # type: ignore[attr-defined]
+        return
+    content_type = "text/plain; charset=utf-8"
+    if target.suffix.lower() == ".md":
+        content_type = "text/markdown; charset=utf-8"
+    elif target.suffix.lower() == ".json":
+        content_type = "application/json; charset=utf-8"
+    elif target.suffix.lower() == ".pdf":
+        content_type = "application/pdf"
+    encoded = target.read_bytes()
+    handler.send_response(HTTPStatus.OK)
+    handler.send_header("Content-Type", content_type)
+    handler.send_header("Content-Length", str(len(encoded)))
+    handler.send_header("Content-Disposition", f'inline; filename="{target.name}"')
+    handler.end_headers()
+    handler.wfile.write(encoded)
 
 
 def _save_from_form(project: Path, form: dict[str, list[str]]) -> None:
@@ -125,56 +200,54 @@ def _save_from_form(project: Path, form: dict[str, list[str]]) -> None:
     analysis.setdefault("deep_reads", {})
     analysis.setdefault("codex_local", {})
     analysis.setdefault("openai_api", {})
+    analysis.setdefault("openrouter_api", {})
     analysis.setdefault("chatgpt_web_manual", {})
     analysis["article_summaries"].pop("fallback_to_rules", None)
+    analysis["article_summaries"].pop("enabled", None)
+    analysis["article_summaries"].pop("max_items_per_run", None)
     analysis["report"].pop("fallback_to_rules", None)
+    analysis["report"].pop("enabled", None)
+    analysis["report"].pop("max_papers_in_prompt", None)
     analysis["deep_reads"].pop("fallback_to_rules", None)
+    analysis["deep_reads"].pop("enabled", None)
+    analysis["deep_reads"].pop("max_input_chars", None)
 
-    runtime["features"]["weekly_report_enabled"] = _bool_field(form, "weekly_report_enabled")
-
-    runtime["cli_defaults"]["daily_days_back"] = _int_field(form, "daily_days_back", minimum=1)
-    runtime["cli_defaults"]["daily_max_per_source"] = _int_field(form, "daily_max_per_source", minimum=1)
-    runtime["cli_defaults"]["update_days_back"] = _int_field(form, "update_days_back", minimum=1)
-    runtime["cli_defaults"]["update_max_per_source"] = _int_field(form, "update_max_per_source", minimum=1)
-    runtime["cli_defaults"]["update_hydrate"] = _bool_field(form, "update_hydrate")
-    runtime["cli_defaults"]["report_window_days"] = _int_field(form, "report_window_days", minimum=1)
-    runtime["cli_defaults"]["summaries_window_days"] = _int_field(form, "summaries_window_days", minimum=1)
-    runtime["cli_defaults"]["audit_window_days"] = _int_field(form, "audit_window_days", minimum=1)
-    runtime["cli_defaults"]["audit_max_per_source"] = _int_field(form, "audit_max_per_source", minimum=1)
-
-    runtime["deep_read"]["search_full_text_when_pdf_missing"] = _bool_field(form, "search_full_text_when_pdf_missing")
-    runtime["deep_read"]["pdf_page_limit"] = _int_field(form, "pdf_page_limit", minimum=1)
+    runtime["features"]["weekly_report_enabled"] = True
 
     analysis["provider"] = _text_field(form, "provider") or "codex_local"
-    if analysis["provider"] not in SUPPORTED_ANALYSIS_PROVIDERS:
-        supported = "、".join(SUPPORTED_ANALYSIS_PROVIDERS)
-        raise ValueError(f"provider 只支持：{supported}")
-    analysis["article_summaries"]["enabled"] = _bool_field(form, "article_summaries_enabled")
-    analysis["article_summaries"]["max_items_per_run"] = _int_field(form, "article_summaries_max_items_per_run", minimum=0)
-    analysis["article_summaries"]["reasoning_effort"] = _text_field(form, "article_summaries_reasoning_effort") or "medium"
-    analysis["report"]["enabled"] = _bool_field(form, "report_enabled")
-    analysis["report"]["max_papers_in_prompt"] = _int_field(form, "report_max_papers_in_prompt", minimum=1)
-    analysis["report"]["reasoning_effort"] = _text_field(form, "report_reasoning_effort") or "medium"
-    analysis["deep_reads"]["enabled"] = _bool_field(form, "deep_reads_enabled")
-    analysis["deep_reads"]["max_input_chars"] = _int_field(form, "deep_reads_max_input_chars", minimum=2000)
-    analysis["deep_reads"]["reasoning_effort"] = _text_field(form, "deep_reads_reasoning_effort") or "high"
-    analysis["codex_local"]["model"] = _text_field(form, "codex_model")
-    analysis["codex_local"]["executable"] = _text_field(form, "codex_executable")
-    analysis["codex_local"]["sandbox"] = _text_field(form, "codex_sandbox") or "read-only"
-    analysis["codex_local"]["timeout_seconds"] = _int_field(form, "codex_timeout_seconds", minimum=30)
-    analysis["openai_api"]["api_key"] = _text_field(form, "openai_api_key")
-    analysis["openai_api"]["api_key_env"] = _text_field(form, "openai_api_key_env") or "SCIENCEMONITOR_OPENAI_API_KEY"
-    analysis["openai_api"]["model"] = _text_field(form, "openai_model") or "gpt-5-mini"
-    analysis["openai_api"]["base_url"] = _text_field(form, "openai_base_url") or "https://api.openai.com/v1/responses"
-    analysis["openai_api"]["timeout_seconds"] = _int_field(form, "openai_timeout_seconds", minimum=30)
+    if analysis["provider"] not in {"codex_local", "openai_api", "openrouter_api"}:
+        raise ValueError("provider 只支持：codex_local、openai_api、openrouter_api。人工中转请在“人工中转”页面执行。")
+    analysis["article_summaries"]["reasoning_effort"] = _text_field(form, "article_summaries_reasoning_effort") or str(analysis["article_summaries"].get("reasoning_effort", "medium") or "medium")
+    analysis["report"]["reasoning_effort"] = _text_field(form, "report_reasoning_effort") or str(analysis["report"].get("reasoning_effort", "medium") or "medium")
+    analysis["deep_reads"]["reasoning_effort"] = _text_field(form, "deep_reads_reasoning_effort") or str(analysis["deep_reads"].get("reasoning_effort", "high") or "high")
+    analysis["codex_local"]["model"] = _text_field(form, "codex_model") or str(analysis["codex_local"].get("model", "") or "")
+    analysis["codex_local"]["executable"] = _text_field(form, "codex_executable") or str(analysis["codex_local"].get("executable", "") or "")
+    analysis["codex_local"]["sandbox"] = _text_field(form, "codex_sandbox") or str(analysis["codex_local"].get("sandbox", "read-only") or "read-only")
+    analysis["codex_local"]["timeout_seconds"] = _optional_int_field(form, "codex_timeout_seconds", int(analysis["codex_local"].get("timeout_seconds", 300) or 300), minimum=30)
+    analysis["openai_api"]["api_key"] = _text_field(form, "openai_api_key") or str(analysis["openai_api"].get("api_key", "") or "")
+    analysis["openai_api"]["api_key_env"] = _text_field(form, "openai_api_key_env") or str(analysis["openai_api"].get("api_key_env", "SCIENCEMONITOR_OPENAI_API_KEY") or "SCIENCEMONITOR_OPENAI_API_KEY")
+    analysis["openai_api"]["model"] = _text_field(form, "openai_model") or str(analysis["openai_api"].get("model", "gpt-5-mini") or "gpt-5-mini")
+    analysis["openai_api"]["base_url"] = _text_field(form, "openai_base_url") or str(analysis["openai_api"].get("base_url", "https://api.openai.com/v1/responses") or "https://api.openai.com/v1/responses")
+    analysis["openai_api"]["timeout_seconds"] = _optional_int_field(form, "openai_timeout_seconds", int(analysis["openai_api"].get("timeout_seconds", 120) or 120), minimum=30)
+    analysis["openrouter_api"]["api_key"] = _text_field(form, "openrouter_api_key") or str(analysis["openrouter_api"].get("api_key", "") or "")
+    analysis["openrouter_api"]["api_key_env"] = _text_field(form, "openrouter_api_key_env") or str(analysis["openrouter_api"].get("api_key_env", "SCIENCEMONITOR_OPENROUTER_API_KEY") or "SCIENCEMONITOR_OPENROUTER_API_KEY")
+    analysis["openrouter_api"]["model"] = _text_field(form, "openrouter_model") or str(analysis["openrouter_api"].get("model", "openai/gpt-5-mini") or "openai/gpt-5-mini")
+    analysis["openrouter_api"]["base_url"] = _text_field(form, "openrouter_base_url") or str(analysis["openrouter_api"].get("base_url", "https://openrouter.ai/api/v1/chat/completions") or "https://openrouter.ai/api/v1/chat/completions")
+    analysis["openrouter_api"]["site_url"] = _text_field(form, "openrouter_site_url") or str(analysis["openrouter_api"].get("site_url", "") or "")
+    analysis["openrouter_api"]["app_name"] = _text_field(form, "openrouter_app_name") or str(analysis["openrouter_api"].get("app_name", "ScienceMonitor") or "ScienceMonitor")
+    analysis["openrouter_api"]["timeout_seconds"] = _optional_int_field(form, "openrouter_timeout_seconds", int(analysis["openrouter_api"].get("timeout_seconds", 120) or 120), minimum=30)
 
-    paths["output_root"] = _text_field(form, "output_root")
-    if not paths["output_root"]:
-        raise ValueError("output_root 不能为空。")
+    local_output_root = _text_field(form, "local_output_root")
+    public_paths = {
+        key: value
+        for key, value in paths.items()
+        if key not in {"local_output_root", "local_paths_config", "effective_output_root"}
+    }
 
     runtime_config_path(project).write_text(json.dumps(runtime, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (project / "config" / "analysis.json").write_text(json.dumps(analysis, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    path_config_path(project).write_text(json.dumps(paths, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path_config_path(project).write_text(json.dumps(public_paths, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _write_local_paths_config(project, local_output_root)
     write_project_config_markdown(project)
 
 
@@ -189,10 +262,32 @@ def _load_analysis_config(project: Path) -> dict:
 
 def _load_paths_config(project: Path) -> dict:
     path = path_config_path(project)
+    paths: dict
     if not path.exists():
-        return {"output_root": "out"}
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    return payload if isinstance(payload, dict) else {"output_root": "out"}
+        paths = {"output_root": "out"}
+    else:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        paths = payload if isinstance(payload, dict) else {"output_root": "out"}
+    local_path = local_path_config_path(project)
+    local_output_root = ""
+    if local_path.exists():
+        local_payload = json.loads(local_path.read_text(encoding="utf-8"))
+        if isinstance(local_payload, dict):
+            local_output_root = str(local_payload.get("output_root", "") or "")
+    paths["local_output_root"] = local_output_root
+    paths["local_paths_config"] = str(local_path)
+    paths["effective_output_root"] = str(output_root(project))
+    return paths
+
+
+def _write_local_paths_config(project: Path, local_output_root: str) -> None:
+    path = local_path_config_path(project)
+    if not local_output_root:
+        path.unlink(missing_ok=True)
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"output_root": local_output_root}
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def _status_payload_from_query(query: dict[str, list[str]]) -> dict[str, str]:
@@ -255,140 +350,6 @@ def _parse_form_data(handler: BaseHTTPRequestHandler) -> tuple[dict[str, list[st
     return fields, files
 
 
-def _run_report_action(project: Path, form: dict[str, list[str]]) -> dict[str, str]:
-    report_date = _date_field(form, "report_date")
-    window_days = _int_field(form, "report_window_days_run", minimum=1)
-    run_update = _bool_field(form, "run_update_before_report")
-    max_per_source = _int_field(form, "report_max_per_source_run", minimum=1)
-    update_days_back = _int_field(form, "report_update_days_back", minimum=1)
-    source_ids = _source_ids_field(form, "report_source_ids")
-
-    monitor = ScienceMonitor(project)
-    try:
-        if not monitor.weekly_report_enabled():
-            raise ValueError("周报功能当前已关闭。请先在配置中开启“启用周报生成功能”，再生成周报。")
-        if run_update:
-            update_result, report_path, stats = monitor.run_daily(
-                report_date=report_date,
-                days_back=update_days_back,
-                max_per_source=max_per_source,
-                source_ids=source_ids or None,
-            )
-            message = (
-                f"已完成更新并生成周报。候选 {update_result.fetched_count} 条，保留 {update_result.kept_count} 篇；"
-                f"周报覆盖 {stats.get('paper_count', 0)} 篇论文、{stats.get('journal_count', 0)} 本期刊。"
-            )
-            if update_result.error_count:
-                message += f" 另有 {update_result.error_count} 个来源报错，请再检查日志。"
-        else:
-            report_path, stats = monitor.generate_windowed_report(report_date=report_date, window_days=window_days)
-            message = (
-                f"已基于当前数据库重建周报，窗口 {window_days} 天；"
-                f"覆盖 {stats.get('paper_count', 0)} 篇论文、{stats.get('journal_count', 0)} 本期刊。"
-            )
-            if source_ids:
-                message += " 注意：未勾选“先更新再生成”时，限定期刊 source_ids 不生效。"
-        return {
-            "kind": "ok",
-            "title": "周报生成完成",
-            "message": message,
-            "path": str(report_path),
-        }
-    finally:
-        monitor.close()
-
-
-def _run_deep_read_action(
-    project: Path,
-    form: dict[str, list[str]],
-    files: dict[str, cgi.FieldStorage],
-) -> dict[str, str]:
-    uploaded_pdf = files.get("deep_read_pdf")
-    uploaded_path = _save_uploaded_pdf(project, uploaded_pdf) if uploaded_pdf else None
-    local_pdf_path = _text_field(form, "deep_read_pdf_path")
-    pdf_path = str(uploaded_path) if uploaded_path else local_pdf_path
-    doi = _text_field(form, "deep_read_doi")
-    title = _text_field(form, "deep_read_title")
-    journal = _text_field(form, "deep_read_journal")
-    url = _text_field(form, "deep_read_url")
-
-    if not pdf_path and not doi and not title:
-        raise ValueError("请至少提供 PDF、DOI 或论文题目中的一项。")
-
-    monitor = ScienceMonitor(project)
-    try:
-        result = run_deep_read(
-            root=project,
-            storage=monitor.storage,
-            doi=doi,
-            title=title,
-            pdf_path=pdf_path,
-            journal=journal,
-            url=url,
-        )
-    finally:
-        monitor.close()
-
-    if not result.success:
-        return {
-            "kind": "error",
-            "title": "深度解读失败",
-            "message": result.message,
-            "path": str(uploaded_path) if uploaded_path else "",
-        }
-
-    message = f"已完成深度解读，全文来源类型：{result.source_kind or 'unknown'}。"
-    if not pdf_path:
-        message += " 本次未提供 PDF，系统已自动尝试获取全文。"
-    return {
-        "kind": "ok",
-        "title": "深度解读完成",
-        "message": message,
-        "path": str(result.output_path) if result.output_path else "",
-        "extra_path": str(result.pdf_output_path) if result.pdf_output_path else "",
-    }
-
-
-def _save_uploaded_pdf(project: Path, file_item: cgi.FieldStorage | None) -> Path | None:
-    if file_item is None or not getattr(file_item, "filename", ""):
-        return None
-    filename = sanitize_filename(Path(str(file_item.filename)).name) or "uploaded.pdf"
-    suffix = Path(filename).suffix.lower()
-    content_type = str(getattr(file_item, "type", "") or "").lower()
-    if suffix != ".pdf" and content_type != "application/pdf":
-        raise ValueError("当前只支持上传 PDF 文件。")
-
-    upload_dir = project / "tmp" / "ui_uploads"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    stem = Path(filename).stem or "uploaded"
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    candidate = upload_dir / f"{timestamp}-{stem}.pdf"
-    index = 1
-    while candidate.exists():
-        candidate = upload_dir / f"{timestamp}-{stem}-{index}.pdf"
-        index += 1
-
-    with candidate.open("wb") as handle:
-        payload = file_item.file.read()
-        handle.write(payload if isinstance(payload, bytes) else bytes(payload))
-    return candidate
-
-
-def _date_field(form: dict[str, list[str]], name: str) -> date:
-    raw = _text_field(form, name)
-    if not raw:
-        raise ValueError(f"{name} 不能为空。")
-    try:
-        return date.fromisoformat(raw)
-    except ValueError as exc:
-        raise ValueError(f"{name} 必须是 YYYY-MM-DD 格式。") from exc
-
-
-def _source_ids_field(form: dict[str, list[str]], name: str) -> set[str]:
-    raw = _text_field(form, name)
-    return {item.strip() for item in raw.split(",") if item.strip()}
-
-
 def _deep_update(target: dict, override: dict) -> None:
     for key, value in override.items():
         if isinstance(value, dict) and isinstance(target.get(key), dict):
@@ -397,20 +358,15 @@ def _deep_update(target: dict, override: dict) -> None:
             target[key] = value
 
 
-def _bool_field(form: dict[str, list[str]], name: str) -> bool:
-    return name in form
+def _optional_int_field(form: dict[str, list[str]], name: str, default: int, minimum: int = 0) -> int:
+    if name not in form:
+        return default
+    return _int_field(form, name, minimum=minimum)
 
 
-def _int_field(form: dict[str, list[str]], name: str, minimum: int = 0) -> int:
-    raw = _text_field(form, name)
+def _is_relative_to(path: Path, base: Path) -> bool:
     try:
-        value = int(raw)
-    except ValueError as exc:
-        raise ValueError(f"{name} 必须是整数。") from exc
-    if value < minimum:
-        raise ValueError(f"{name} 必须大于等于 {minimum}。")
-    return value
-
-
-def _text_field(form: dict[str, list[str]], name: str) -> str:
-    return str(form.get(name, [""])[0]).strip()
+        path.relative_to(base)
+        return True
+    except ValueError:
+        return False
