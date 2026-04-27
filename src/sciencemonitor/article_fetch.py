@@ -19,6 +19,16 @@ from .http import HTTPClient
 from .utils import clean_abstract_text, clean_title_text
 
 
+INVALID_PAGE_TITLES = {
+    "redirecting",
+    "redirect",
+    "loading",
+    "just a moment",
+    "access denied",
+    "please wait",
+}
+
+
 @dataclass(frozen=True)
 class ArticlePageSnapshot:
     source_url: str = ""
@@ -280,9 +290,16 @@ def _prefer_longer(*values: str) -> str:
 def _prefer_title(*values: str) -> str:
     for value in values:
         clean = clean_title_text(value)
-        if clean:
+        if clean and not _is_invalid_page_title(clean):
             return clean
     return ""
+
+
+def _is_invalid_page_title(value: str) -> bool:
+    clean = clean_title_text(value).strip().lower()
+    if not clean:
+        return True
+    return clean in INVALID_PAGE_TITLES or clean.startswith("redirecting")
 
 
 def article_source_cache_root(project_root: Path) -> Path:

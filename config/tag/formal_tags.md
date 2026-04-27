@@ -1,0 +1,341 @@
+# 正式标签
+
+> 这份文件是正式 canonical tag 的人工审阅入口。
+> 手动修改这份 Markdown 后，程序会用它同步 `config/focus_tags.json` 中的正式标签集合。
+> `aliases`、`patterns`、`suppression_rules` 和 `tag_rules` 等机器规则仍保留在 JSON 中维护。
+
+## 研究对象
+- 对象
+	- 热层
+		- 密度
+		- 风场
+			- 垂直风
+			- 伺服理论
+		- 温度
+		- 成分
+		- TAD
+			- 干涉
+		- EMA
+		- ETA
+		- 响应时延
+		- 超旋
+		- 过冷却
+		- 长期变化
+		- 低热层
+		- MDM
+		- MTM
+	- 电离层
+		- 赤道
+			- 电场
+		- 低纬
+		- 中纬
+		- 高纬
+		- 不规则体
+		- 闪烁
+		- TEC
+		- 电子密度
+		- 电子温度
+		- BLISS
+		- EIA
+		- X-Pattern
+		- EPB
+		- SED
+		- SGDs
+		- TID
+		- 离子飘移
+		- 长期变化
+		- foF2
+		- hmF2
+		- PPEF【AI总结】
+		- 垂直漂移【AI总结】
+		- 顶层电离层【AI总结】
+		- 扩展F【AI总结】
+	- 极区
+		- 极光
+		- 等离子体对流
+		- 对流边界
+		- 对流电场
+		- FACs
+		- 焦耳加热
+		- HMB
+		- PEJ
+		- SAPS
+		- cusp
+		- 中性-离子摩擦加热
+		- 极光电集流
+		- 极盖
+		- 电场
+		- 电子密度
+		- 离子拖曳
+		- 跨极盖传播
+	- 磁层
+		- 电流体系
+		- 太阳风耦合
+		- 弓激波
+		- 电离层耦合
+		- 磁层顶
+	- 日地耦合
+	- 重力波
+		- 山岳波【AI总结】
+		- 斜向传播【AI总结】
+		- 次级重力波【AI总结】
+		- 湍流耦合【AI总结】
+		- 非地形【AI总结】
+	- 潮汐
+	- 其他行星
+		- 月球
+		- 水星
+		- 金星
+		- 火星
+			- 行星际-电离层耦合
+			- 逃逸
+		- 木星
+		- 土星
+		- 天王星
+		- 海王星
+		- 行星综合
+	- Alfven波
+	- 中间层
+	- 动力学过程
+	- 周期扰动
+	- 地磁
+	- 环电流
+	- 电子沉降
+	- 等离子体层
+	- 粒子注入
+	- 逃逸层
+		- 温度
+	- 太阳风
+		- 动压
+		- 高速流
+	- 行星际激波
+	- 场论
+	- 行星空间环境【AI总结】
+	- 太阳
+		- 日冕【AI总结】
+		- 活动区【AI总结】
+		- 冕洞【AI总结】
+		- 日球层【AI总结】
+		- 色球【AI总结】
+	- 高能粒子
+		- 电子【AI总结】
+		- 质子【AI总结】
+	- 波粒相互作用【AI总结】
+		- 合声波【AI总结】
+		- TDS【AI总结】
+		- ULF波【AI总结】
+		- 非线性散射【AI总结】
+	- 相对论电子【AI总结】
+	- 波动
+		- EMIC波【AI总结】
+		- 声重力波【AI总结】
+		- 离子回旋波【AI总结】
+	- 速度分布
+		- Maxwell【AI总结】
+		- 壳分布【AI总结】
+		- 环分布【AI总结】
+		- 锤头型【AI总结】
+		- 非麦克斯韦【AI总结】
+	- 气辉
+		- OH【AI总结】
+	- 重离子
+		- 电荷态【AI总结】
+	- 长期变化【AI总结】
+	- 外逸层【AI总结】
+
+## 事件 / 驱动
+- 事件
+	- SEP
+	- SpaceX事件
+	- 太空台风
+	- 磁暴
+		- 小磁暴
+		- 急始
+		- 恢复相
+		- 扰动发电机
+		- 穿透电场
+		- CIR
+		- CME
+		- 正暴【AI总结】
+		- 负暴【AI总结】
+	- HILDCAAs
+	- SSW
+	- 亚暴
+	- 磁重联
+	- 磁云【AI总结】
+	- 太阳耀斑【AI总结】
+	- ICME【AI总结】
+
+## 指数 / 控制量
+- 指数
+	- IMF
+		- Bx
+		- By
+		- Bz
+	- Dst
+	- SYM-H
+	- AE
+	- F107
+	- ROTI
+	- AL
+	- AU
+	- Ap
+	- MgII
+	- PCN
+	- CPCP
+	- HP
+	- SMR【AI总结】
+	- EUV【AI总结】
+
+## 仪器 / 数据
+- 仪器
+	- FPI
+	- SuperDARN
+	- GNSS
+	- CHAMP
+	- Swarm
+	- GRACE
+	- GRACE-FO
+	- MMS
+	- DMSP
+	- ICON
+	- VanAllenProbes
+	- NICER
+	- 磁强计
+	- 电离层测高仪
+	- 气辉仪
+	- 流星雷达
+	- 极光图像
+	- 再分析资料
+	- 射电掩星
+	- KPLO
+	- 射电
+		- S波段
+	- 月球重力场模型
+	- OMNI
+	- ACE
+	- APOD
+	- CHN-sat
+	- COSMIC-2
+	- DE-1
+	- DE-2
+	- EISCAT
+	- Formosat
+	- GOCE
+	- GOLD
+	- GUVI
+	- Geotail
+	- ISR
+	- Interball-1
+	- MAVEN
+	- Magion4
+	- SABER
+	- SSUSI
+	- SuperMAG
+	- THEMIS_A-E
+	- TIMED
+	- 中国空间站
+	- ParkerSolarProbe【AI总结】
+	- Arase【AI总结】
+	- Juno【AI总结】
+	- SolarOrbiter【AI总结】
+	- PSP【AI总结】
+	- FY-4B【AI总结】
+	- GOES【AI总结】
+	- 地磁仪【AI总结】
+	- 探空火箭【AI总结】
+	- SOHO【AI总结】
+	- Starlink【AI总结】
+	- 天问一号【AI总结】
+- 数据
+	- 数据对比
+	- TLE【AI总结】
+
+## 模型 / 方法
+- 方法
+	- 可解释模型
+	- SHAP
+	- 数据同化
+	- 数值模拟
+	- 统计研究
+	- 误差估计
+	- GLM
+	- 轨道重建
+	- 建模
+		- 经验模型
+		- 理论模型
+		- 机器学习
+			- LSTM
+			- PINN【AI总结】
+	- 图像处理
+		- 图像分割【AI总结】
+		- 目标检测【AI总结】
+- 模型
+	- AMIE
+	- AMPERE
+	- CMIT
+	- CTIPe
+	- DTM
+	- GITM
+	- HASDM
+	- IPWM
+	- JB2008
+	- LFM
+	- MAGE
+	- MIX
+	- MSIS
+	- 修正
+	- PPMLR-MHD
+	- TDIM
+	- TIEGCM
+	- TIMEGCM
+	- WACCM-X
+	- WAM-IPE
+	- WINDMI
+	- Weimer
+- 工具
+
+## 结果特征
+- 特征
+	- 极光强度
+	- 等离子体对流
+	- 南北半球不对称性
+	- 昼夜不对称性
+	- 昼夜差异
+	- 晨昏不对称性
+	- 春秋不对称性
+	- DZM
+	- Day-to-Day
+	- 中小尺度扰动
+	- 四波结构
+	- 太阳辐射影响
+	- 太阳辐射终止线
+	- 季节变化
+	- 日出终止线
+	- 极区热层密度极小值
+	- 纬度差异
+	- 经度结构
+	- 背景影响
+	- 高度差异
+
+## 应用 / 影响
+- 应用
+	- 空间天气
+	- 卫星影响
+	- 业务化预报
+	- 卫星轨道衰减
+	- 空间天气影响
+	- 预测
+	- 基础设施【AI总结】
+	- 卫星轨道【AI总结】
+
+## 状态标签
+- 信息来源
+	- 仅摘要
+	- 仅元数据
+	- GPT总结
+- 综述
+- Todo
+- 重要
+- 展望
+- 科学思考

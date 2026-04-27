@@ -40,13 +40,14 @@ def render_page(
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
+  <meta name="sciencemonitor-ui" content="config-ui">
   <title>ScienceMonitor 控制台</title>
   <style>{css_text}</style>
 </head>
 <body>
   <div class="app">
     <div class="sidebar-shell">
-      {render_sidebar(project, runtime, analysis, paths, doctor, nav_items)}
+      {render_sidebar(project, runtime, analysis, paths, doctor, nav_items, ui_state)}
     </div>
     <div class="sidebar-resizer" data-sidebar-resizer role="separator" aria-orientation="vertical" aria-label="调整导航栏宽度"></div>
     <main class="main">
@@ -57,7 +58,7 @@ def render_page(
           {render_weekly_report_view(project, runtime, status, ui_state)}
           {render_deep_read_view(project, runtime, paths, status, ui_state)}
           {render_manual_view(project, status, manual_requests, ui_state)}
-          {render_settings_view(runtime, analysis, paths)}
+          {render_settings_view(project, runtime, analysis, paths)}
         </div>
       </div>
     </main>

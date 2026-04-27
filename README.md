@@ -7,12 +7,20 @@ Space Physics 文献监测、单篇总结、深度解读与周报生成工具。
 - 输出目录：Obsidian 使用的周报、单篇总结、深读、索引、个人工作区
 - 当前公开默认输出位置：`out/`。如需在本机接入私人 Obsidian vault，请复制 [config/local.paths.example.json](config/local.paths.example.json) 为 `config/local.paths.json` 并修改其中的 `output_root`；该本地文件不会上传 GitHub。
 
+## 文件操作边界
+
+- 项目源码、配置、测试、日志和数据目录都在当前仓库内管理。
+- 文献总结、深度解读、周报、索引和个人工作区写入 `output_root`，默认是 `out/`，也可以通过 `config/local.paths.json` 或环境变量改到私人 Obsidian vault。
+- 程序默认不会删除 `output_root` 下的文件；即使内部存在去重或迁移逻辑，也会在默认配置下保留原文件。
+- 如果你明确希望允许程序删除 `output_root` 下的文件，需要在 [PROJECT_CONFIG.md](PROJECT_CONFIG.md) 的 `config/runtime.json` 同步块里把 `safety.allow_output_deletions` 改成 `true`。这一步视为用户审核。
+- `config/analysis.json` 里的 `codex_local.sandbox` 只控制 Codex 子进程可访问范围，不等于项目自身对输出目录的文件保护策略。
+
 ## 功能概览
 
 - 监控多个 Space Physics 相关期刊与高影响力观察哨期刊
 - 抓取标题、摘要、DOI、发表日期等元数据
 - 生成单篇文献总结、深度解读和周报
-- 支持 `codex_local`、`openai_api`、`openrouter_api` 三种自动分析后端
+- 支持 `codex_local`、`openai_api`、`openrouter_api`、`ollama_api` 四种自动分析后端
 - 支持 `chatgpt_web_manual` 人工中转工作流
 - 支持 Obsidian wiki link、article index 和双向链接
 - 支持 PDF 工具链自检与项目环境自检
@@ -48,6 +56,7 @@ ScienceMonitor/
 - 本地 `codex` CLI：只有使用 `codex_local` 时才需要
 - OpenAI 兼容 API：如果使用 `openai_api`
 - OpenRouter 或兼容聚合 API：如果使用 `openrouter_api`
+- Ollama 本地服务：如果使用 `ollama_api`
 - ChatGPT 网页：如果使用人工中转工作流
 - `poppler`：如果系统已安装，项目会优先复用；如果没有，项目会回退到本地 PDF 包装器
 
@@ -55,7 +64,7 @@ ScienceMonitor/
 
 项目不依赖 Codex desktop 或 Codex app 本身。
 
-- 如果选择 `openai_api` 或 `openrouter_api`，只要提供可用模型和 API key，就可以脱离 Codex 环境运行
+- 如果选择 `openai_api`、`openrouter_api` 或 `ollama_api`，只要对应服务可用，就可以脱离 Codex 环境运行
 - 只有 `codex_local` provider 才依赖本地 `codex` CLI
 - `chatgpt_web_manual` 更适合作为独立人工中转工作流使用，而不是常规自动 provider
 
@@ -143,6 +152,10 @@ cp config/local.paths.example.json config/local.paths.json
 
 程序解析优先级是：`SCIENCEMONITOR_OUTPUT_ROOT` 环境变量 > `config/local.paths.json` > `config/paths.json` > `out`。
 
+默认文件保护规则：
+- `output_root` 下的输出文件默认只写入和更新，不删除。
+- 如需允许程序删除输出文件，需在 [PROJECT_CONFIG.md](PROJECT_CONFIG.md) 的 `config/runtime.json` 同步块里显式开启 `safety.allow_output_deletions=true`。
+
 高级配置仍然直接编辑这些文件：
 - [config/sources.json](config/sources.json)
 - [config/topics.json](config/topics.json)
@@ -161,6 +174,7 @@ cp config/local.paths.example.json config/local.paths.json
 - `codex_local`：调用本地 Codex
 - `openai_api`：调用 OpenAI Responses API
 - `openrouter_api`：调用 OpenRouter 或兼容聚合 API
+- `ollama_api`：调用本机 Ollama，例如 `gemma4:26b`
 
 人工中转模式：
 - `chatgpt_web_manual`：生成人工中转请求包，由你在 ChatGPT 网页完成分析后再导回结果
@@ -181,6 +195,7 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 
 详细说明见 [docs/user_guides/llm_analysis_readme.md](docs/user_guides/llm_analysis_readme.md)。
 如果使用 `openrouter_api`，请在 `PROJECT_CONFIG.md` 或 `config/analysis.json` 中配置对应的 `model / base_url / api_key_env`。
+如果使用 `ollama_api`，请确认 Ollama 已启动，并在 `PROJECT_CONFIG.md` 或 `config/analysis.json` 中配置 `ollama_api.model / ollama_api.base_url`。
 如果使用 `chatgpt_web_manual`，工作流说明见 [docs/user_guides/chatgpt_web_manual_workflow.md](docs/user_guides/chatgpt_web_manual_workflow.md)。
 如果你想整体理解当前项目的 harness 治理边界，见 [docs/user_guides/harness_governance_overview.md](docs/user_guides/harness_governance_overview.md)。
 
@@ -191,9 +206,15 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 - 可访问的 `openai_api.base_url`
 - 已安装好的 Python 依赖和 PDF 工具链
 
+如果目标是在本机完全离线运行 LLM 分析，可以使用：
+
+- `provider=ollama_api`
+- `ollama_api.model=gemma4:26b`
+- 已启动的 Ollama 服务
+
 如果你的目标是“尽量减少 Codex 与 API 消耗”，更推荐直接走人工中转工作流：
 
-- 保持常规自动 provider 不变，或按需切到 `codex_local / openai_api / openrouter_api`
+- 保持常规自动 provider 不变，或按需切到 `codex_local / openai_api / openrouter_api / ollama_api`
 - 进入人工中转页面，或运行相关命令生成 `data/chatgpt_web_manual/requests/` 下的请求包
 - 用 `manual-llm-import` 导入响应，再重新执行原命令
 
@@ -306,7 +327,7 @@ export SCIENCEMONITOR_LOG_ROOT="$HOME/Library/Application Support/ScienceMonitor
 - 周报生成参数
 - 深度解读任务参数
 - 缺少 PDF 时是否自动搜索全文
-- `codex_local / openai_api / openrouter_api`
+- `codex_local / openai_api / openrouter_api / ollama_api`
 - 对应模型、超时和本机私有输出路径等
 
 注意：

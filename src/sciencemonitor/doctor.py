@@ -22,6 +22,7 @@ from .deep_reads import _load_deep_read_template
 from .llm import AnalysisEngine
 from .reporting import load_report_template
 from .tags import load_tag_taxonomy
+from .tag_governance import ensure_tag_governance_files, refresh_pending_tag_files
 
 
 def run_doctor(root: Path | None = None, *, strict_runtime: bool = True) -> dict:
@@ -62,12 +63,14 @@ def run_doctor(root: Path | None = None, *, strict_runtime: bool = True) -> dict
             warnings.append(f"PDF 工具缺失：{', '.join(missing)}。")
         if not provider_status.get("provider_supported", False):
             warnings.append(
-                "当前 analysis provider 不再受支持。请将 config/analysis.json 中的 provider 改为 codex_local、openai_api、openrouter_api 或 chatgpt_web_manual。"
+                "当前 analysis provider 不再受支持。请将 config/analysis.json 中的 provider 改为 codex_local、openai_api、openrouter_api、ollama_api 或 chatgpt_web_manual。"
             )
         if provider_status["provider"] == "codex_local" and not provider_status["codex_available"]:
             warnings.append("当前选择 codex_local，但没有找到 codex 可执行文件。")
         if provider_status["provider"] == "openai_api" and not provider_status["openai_api_key_present"]:
             warnings.append("当前选择 openai_api，但没有检测到 API key。")
+        if provider_status["provider"] == "ollama_api" and not provider_status.get("ollama_available", False):
+            warnings.append("当前选择 ollama_api，但没有检测到可用的 Ollama 服务。请确认 Ollama 已启动且 base_url 可访问。")
         if configured_paths.get("output_root") and not out_root.exists():
             source = "config/local.paths.json" if local_paths.exists() else "config/paths.json"
             warnings.append(f"{source} 指定的 output_root 当前不存在。首次部署前请确认路径。")
@@ -135,15 +138,17 @@ def _check_template(project: Path, label: str, path: Path, loader) -> dict[str, 
 def _check_focus_tags(project: Path) -> dict[str, object]:
     issues: list[str] = []
     try:
+        ensure_tag_governance_files(project)
         taxonomy = load_tag_taxonomy(project)
+        refresh_pending_tag_files(project)
         if not taxonomy.preferred_labels:
             issues.append("focus_tags.json 未定义任何 canonical 标签。")
         if not taxonomy.category_order:
             issues.append("focus_tags.json 未定义标签类别顺序。")
         if taxonomy.default_max_tags <= 0:
             issues.append("focus_tags.json 的 default_max_tags 必须大于 0。")
-        if not taxonomy.candidate_log_path.strip():
-            issues.append("focus_tags.json 的 candidate_log_path 不能为空。")
+        if not taxonomy.pending_tags_path.strip():
+            issues.append("focus_tags.json 的 pending_tags_path 不能为空。")
     except Exception as exc:
         issues.append(str(exc))
     return _build_check_result("focus_tags", "标签配置", issues)

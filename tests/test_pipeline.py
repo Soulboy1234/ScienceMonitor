@@ -103,6 +103,34 @@ class FilteredCrossrefClient:
                 mode=source.mode,
             ),
             Paper(
+                fingerprint="reviewers",
+                source_id=source.id,
+                source_name=source.journal_title,
+                journal_title=source.journal_title,
+                title="Thank You to Our Peer Reviewers in 2025",
+                abstract="",
+                published_date=date(2026, 3, 14),
+                doi="10.1000/reviewers",
+                url="https://example.org/reviewers",
+                authors=["A Author"],
+                tier=source.tier,
+                mode=source.mode,
+            ),
+            Paper(
+                fingerprint="editorial",
+                source_id=source.id,
+                source_name=source.journal_title,
+                journal_title=source.journal_title,
+                title="Editorial Note",
+                abstract="",
+                published_date=date(2026, 3, 14),
+                doi="10.1000/editorial",
+                url="https://example.org/editorial",
+                authors=["A Author"],
+                tier=source.tier,
+                mode=source.mode,
+            ),
+            Paper(
                 fingerprint="real",
                 source_id=source.id,
                 source_name=source.journal_title,
@@ -221,6 +249,67 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["title"], "Ionosphere Response to Solar Wind Forcing")
 
+    def test_run_daily_emits_progress_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            (root / "config").mkdir()
+            (root / "data").mkdir()
+            (root / "config" / "templates").mkdir(parents=True)
+            (root / "config" / "sources.json").write_text(
+                ROOT.joinpath("config", "sources.json").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (root / "config" / "topics.json").write_text(
+                ROOT.joinpath("config", "topics.json").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (root / "config" / "focus_tags.json").write_text(
+                ROOT.joinpath("config", "focus_tags.json").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (root / "config" / "templates" / "article_summary_template.md").write_text(
+                ROOT.joinpath("config", "templates", "article_summary_template.md").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (root / "config" / "templates" / "daily_report_template.md").write_text(
+                ROOT.joinpath("config", "templates", "daily_report_template.md").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+            monitor = ScienceMonitor(root=root, crossref_client=FakeCrossrefClient())
+            progress_events: list[dict] = []
+            try:
+                with mock.patch("sciencemonitor.pipeline.resolve_summary_source_material", side_effect=_stable_summary_material), mock.patch(
+                    "sciencemonitor.article_summaries.resolve_summary_source_material",
+                    side_effect=_stable_summary_material,
+                ), mock.patch(
+                    "sciencemonitor.llm.AnalysisEngine.analyze_article",
+                    side_effect=_fake_article_analysis,
+                ), mock.patch(
+                    "sciencemonitor.llm.AnalysisEngine.analyze_report",
+                    side_effect=_fake_report_analysis,
+                ):
+                    monitor.run_daily(
+                        report_date=date(2026, 3, 14),
+                        days_back=1,
+                        max_per_source=5,
+                        source_ids={"jgr_space_physics"},
+                        progress_callback=progress_events.append,
+                    )
+            finally:
+                monitor.close()
+
+        stages = [str(item.get("stage", "")) for item in progress_events]
+        self.assertIn("starting", stages)
+        self.assertIn("fetching", stages)
+        self.assertIn("building_report", stages)
+        self.assertIn("summary_generation", stages)
+        self.assertIn("done", stages)
+        summary_events = [item for item in progress_events if item.get("stage") == "summary_generation"]
+        self.assertTrue(summary_events)
+        self.assertTrue(any(int(item.get("summary_total", 0) or 0) >= 1 for item in summary_events))
+        self.assertTrue(any(str(item.get("summary_provider", "") or "") == "codex_local" for item in summary_events))
+
     def test_run_daily_still_generates_report_when_runtime_weekly_switch_is_false(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = pathlib.Path(tmpdir)
@@ -278,6 +367,62 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(stats["paper_count"], 1)
             summary_files = list((root / "out" / "auto" / "article_summaries").glob("*.md"))
             self.assertEqual(len(summary_files), 1)
+
+    def test_run_daily_falls_back_to_stored_abstract_when_live_fetch_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            (root / "config").mkdir()
+            (root / "data").mkdir()
+            (root / "config" / "templates").mkdir(parents=True)
+            (root / "config" / "sources.json").write_text(
+                ROOT.joinpath("config", "sources.json").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (root / "config" / "topics.json").write_text(
+                ROOT.joinpath("config", "topics.json").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (root / "config" / "focus_tags.json").write_text(
+                ROOT.joinpath("config", "focus_tags.json").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (root / "config" / "templates" / "article_summary_template.md").write_text(
+                ROOT.joinpath("config", "templates", "article_summary_template.md").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (root / "config" / "templates" / "daily_report_template.md").write_text(
+                ROOT.joinpath("config", "templates", "daily_report_template.md").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+            monitor = ScienceMonitor(root=root, crossref_client=FakeCrossrefClient())
+            try:
+                with mock.patch("sciencemonitor.pipeline.resolve_summary_source_material", side_effect=_stable_summary_material), mock.patch(
+                    "sciencemonitor.article_summaries.resolve_summary_source_material",
+                    side_effect=RuntimeError("temporary fetch failure"),
+                ), mock.patch(
+                    "sciencemonitor.llm.AnalysisEngine.analyze_article",
+                    side_effect=_fake_article_analysis,
+                ), mock.patch(
+                    "sciencemonitor.llm.AnalysisEngine.analyze_report",
+                    side_effect=_fake_report_analysis,
+                ):
+                    update_result, report_path, stats = monitor.run_daily(
+                        report_date=date(2026, 3, 14),
+                        days_back=1,
+                        max_per_source=5,
+                        source_ids={"jgr_space_physics"},
+                    )
+            finally:
+                monitor.close()
+
+            self.assertEqual(update_result.kept_count, 1)
+            self.assertIsNotNone(report_path)
+            self.assertEqual(stats["paper_count"], 1)
+            summary_files = list((root / "out" / "auto" / "article_summaries").glob("*.md"))
+            self.assertEqual(len(summary_files), 1)
+            summary_text = summary_files[0].read_text(encoding="utf-8")
+            self.assertIn("#信息来源/仅摘要", summary_text)
 
 
 if __name__ == "__main__":

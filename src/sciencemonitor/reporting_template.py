@@ -6,13 +6,20 @@ from pathlib import Path
 
 REPORT_TEMPLATE_VAR_RE = re.compile(r"{{\s*([A-Za-z_][A-Za-z0-9_]*)\s*}}")
 REQUIRED_REPORT_HEADINGS = [
+    "## 周报信息",
     "## 今日概览",
-    "## 今日搜索的文献的主要关注点分类",
-    "## 今日建议",
-    "### 今日最值得关注的论文",
-    "### 按主题聚焦",
-    "### 按期刊汇总",
-    "## 附注",
+    "### 本周重点方向分布",
+    "### 整体观察",
+    "### 与当前工作相关的重点",
+    "## 文章推荐",
+    "### 推荐论文",
+    "### 建议重点关注的事件或物理过程",
+    "### 对当前工作的可能启发",
+    "## 主题推荐",
+    "## 各期刊主题汇总",
+    "## 其他",
+    "### 未获取摘要/全文的文献",
+    "### 附注",
 ]
 REPORT_TEMPLATE_REQUIRED_MARKERS = [
     "----",
@@ -27,14 +34,16 @@ REPORT_TEMPLATE_REQUIRED_VARS = {
     "report_date",
     "window_days",
     "journals",
-    "paper_count",
-    "journal_count",
-    "overview_bullets_block",
-    "focus_categories_block",
-    "daily_suggestions_block",
-    "highlights_block",
-    "topics_block",
-    "journals_block",
+    "report_info_block",
+    "overview_table_block",
+    "objective_overview_block",
+    "preference_overview_block",
+    "recommended_papers_block",
+    "recommended_processes_block",
+    "work_implications_block",
+    "theme_recommendations_block",
+    "journal_roundup_block",
+    "missing_sources_block",
     "generated_at",
 }
 REPORT_REVIEW_MAX_PASSES = 3
@@ -110,6 +119,7 @@ def autofix_report_markdown(markdown: str) -> str:
     fixed = markdown.replace("\r\n", "\n").replace("\r", "\n")
     fixed = re.sub(r"[ \t]+\n", "\n", fixed)
     fixed = re.sub(r"\n{3,}", "\n\n", fixed)
+    fixed = re.sub(r"(?m)^(### .+)\n\n+(?=(?:\||- |\s+\d+\.\s))", r"\1\n", fixed)
     fixed = re.sub(r"(?m)^(#### .+)\n\n+(?=   - )", r"\1\n", fixed)
     fixed = re.sub(r"(?m)^(### .+)\n{3,}", r"\1\n\n", fixed)
     return fixed.strip() + "\n"
@@ -117,18 +127,14 @@ def autofix_report_markdown(markdown: str) -> str:
 
 def audit_report_markdown(markdown: str) -> list[str]:
     issues: list[str] = []
-    for heading in (
-        "## 今日概览",
-        "## 今日搜索的文献的主要关注点分类",
-        "## 今日建议",
-        "### 今日最值得关注的论文",
-        "### 按主题聚焦",
-        "### 按期刊汇总",
-        "## 附注",
-    ):
+    for heading in REQUIRED_REPORT_HEADINGS:
         pattern = re.compile(rf"(?m)^{re.escape(heading)}\n\n\n+")
         if pattern.search(markdown):
             issues.append(f"报告区块 {heading} 后存在多余空行")
-    if re.search(r"(?m)^#### .+\n\n(?=   - )", markdown):
-        issues.append("主题或期刊小节标题与正文之间存在多余空行")
+    if re.search(r"(?m)^### .+\n\n(?=(?:\\||- |\\d+\\. ))", markdown):
+        issues.append("周报三级标题与后续表格或列表之间存在多余空行")
+    if "| 期刊 | 新增文章数 |" not in markdown:
+        issues.append("周报信息缺少期刊统计表")
+    if "| 重点方向 | 文章数 | 重点期刊 |" not in markdown:
+        issues.append("今日概览缺少重点方向统计表")
     return issues

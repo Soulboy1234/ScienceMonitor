@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass
 from urllib import request
 from urllib.parse import urlparse
+from urllib.error import URLError
 
 from .http import DEFAULT_HEADERS
+
+
+@dataclass(frozen=True)
+class StructuredApiResponse:
+    payload: dict
+    usage: dict[str, int]
 
 
 def extract_chat_completion_text(payload: dict) -> str:
@@ -64,7 +72,7 @@ def resolve_base_url(settings: dict, *, default_url: str, provider_name: str, st
     return base_url
 
 
-def run_openai_structured(settings: dict, prompt: str, schema: dict) -> dict:
+def run_openai_structured(settings: dict, prompt: str, schema: dict) -> StructuredApiResponse:
     api_key = resolve_api_key(
         settings,
         env_name="SCIENCEMONITOR_OPENAI_API_KEY",
@@ -120,10 +128,13 @@ def run_openai_structured(settings: dict, prompt: str, schema: dict) -> dict:
                 break
     if not output_text:
         raise RuntimeError("OpenAI response did not include output_text")
-    return json.loads(output_text)
+    return StructuredApiResponse(
+        payload=json.loads(output_text),
+        usage=_extract_openai_usage(data.get("usage", {})),
+    )
 
 
-def run_openrouter_structured(settings: dict, prompt: str, schema: dict) -> dict:
+def run_openrouter_structured(settings: dict, prompt: str, schema: dict) -> StructuredApiResponse:
     api_key = resolve_api_key(
         settings,
         env_name="SCIENCEMONITOR_OPENROUTER_API_KEY",
@@ -180,4 +191,112 @@ def run_openrouter_structured(settings: dict, prompt: str, schema: dict) -> dict
     output_text = extract_chat_completion_text(data)
     if not output_text:
         raise RuntimeError("OpenRouter response did not include structured text content")
-    return json.loads(output_text)
+    return StructuredApiResponse(
+        payload=json.loads(output_text),
+        usage=_extract_openrouter_usage(data.get("usage", {})),
+    )
+
+
+def run_ollama_structured(settings: dict, prompt: str, schema: dict) -> StructuredApiResponse:
+    model = str(settings.get("model", "gemma4:26b") or "gemma4:26b").strip()
+    if not model:
+        raise RuntimeError("ollama_api provider requires ollama_api.model, for example gemma4:26b.")
+    base_url = resolve_base_url(
+        settings,
+        default_url="http://127.0.0.1:11434/api/chat",
+        provider_name="ollama_api",
+        strict=False,
+    )
+    payload = {
+        "model": model,
+        "stream": False,
+        "format": schema["schema"],
+        "messages": [
+            {
+                "role": "system",
+                "content": "你是 Space Physics 文献分析助手。只根据给定标题、摘要和元数据输出中文分析；必须只输出符合 JSON schema 的 JSON。",
+            },
+            {"role": "user", "content": prompt},
+        ],
+    }
+    req = request.Request(
+        base_url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            **DEFAULT_HEADERS,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    with request.urlopen(req, timeout=int(settings.get("timeout_seconds", 300) or 300)) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    output_text = str((data.get("message") or {}).get("content", "") or "").strip()
+    if not output_text:
+        output_text = str(data.get("response", "") or "").strip()
+    if not output_text:
+        raise RuntimeError("Ollama response did not include structured text content")
+    return StructuredApiResponse(
+        payload=json.loads(output_text),
+        usage=_extract_ollama_usage(data),
+    )
+
+
+def check_ollama_available(settings: dict) -> bool:
+    base_url = resolve_base_url(
+        settings,
+        default_url="http://127.0.0.1:11434/api/chat",
+        provider_name="ollama_api",
+        strict=False,
+    )
+    parsed = urlparse(base_url)
+    tags_url = f"{parsed.scheme}://{parsed.netloc}/api/tags"
+    try:
+        req = request.Request(tags_url, headers={**DEFAULT_HEADERS, "Accept": "application/json"}, method="GET")
+        with request.urlopen(req, timeout=2) as resp:
+            return 200 <= int(getattr(resp, "status", 200) or 200) < 300
+    except (OSError, URLError, TimeoutError):
+        return False
+
+
+def _extract_openai_usage(raw_usage: dict) -> dict[str, int]:
+    usage = raw_usage if isinstance(raw_usage, dict) else {}
+    input_tokens = _int_value(usage.get("input_tokens"))
+    output_tokens = _int_value(usage.get("output_tokens"))
+    total_tokens = _int_value(usage.get("total_tokens")) or (input_tokens + output_tokens)
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+    }
+
+
+def _extract_openrouter_usage(raw_usage: dict) -> dict[str, int]:
+    usage = raw_usage if isinstance(raw_usage, dict) else {}
+    input_tokens = _int_value(usage.get("prompt_tokens"))
+    output_tokens = _int_value(usage.get("completion_tokens"))
+    total_tokens = _int_value(usage.get("total_tokens")) or (input_tokens + output_tokens)
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+    }
+
+
+def _extract_ollama_usage(raw_usage: dict) -> dict[str, int]:
+    usage = raw_usage if isinstance(raw_usage, dict) else {}
+    input_tokens = _int_value(usage.get("prompt_eval_count"))
+    output_tokens = _int_value(usage.get("eval_count"))
+    total_tokens = input_tokens + output_tokens
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+    }
+
+
+def _int_value(value: object) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0

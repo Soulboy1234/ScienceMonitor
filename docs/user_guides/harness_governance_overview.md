@@ -20,6 +20,7 @@
 
 - 运行环境一致
 - 计划和说明文件不漂移
+- 标签输出会尽量收敛到 formal 体系
 - UI 结构、功能和视觉不回退
 - 报告模板和输出格式不悄悄变化
 - 真实案例和 golden 基线仍可复现
@@ -87,7 +88,12 @@
 7. `golden-eval`
    - 单篇总结、周报、深度解读的稳定基线是否仍匹配
 
-8. 可选的 `real-eval fixture` 检查
+8. `tag_output_review`
+   - 自动输出中的标签是否仍然符合 formal 风格
+   - 可归并到 formal 的标签是否已经被归并
+   - 是否仍有“应被审核 agent 重写却没重写”的历史标签
+
+9. 可选的 `real-eval fixture` 检查
    - 只有显式带 `--include-real-eval` 时才检查
    - 用于真实案例输出和 fixture 漂移治理
 

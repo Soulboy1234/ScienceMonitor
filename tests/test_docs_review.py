@@ -25,6 +25,7 @@ def _touch_root_docs(root: pathlib.Path, *, readme: str | None = None, project_c
         or (
             "# README\n"
             "openrouter_api\n"
+            "ollama_api\n"
             "manual-llm-import\n"
         ),
     )
@@ -34,6 +35,7 @@ def _touch_root_docs(root: pathlib.Path, *, readme: str | None = None, project_c
         or (
             "# PROJECT_CONFIG\n"
             "openrouter_api\n"
+            "ollama_api\n"
             "chatgpt_web_manual\n"
         ),
     )

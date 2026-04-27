@@ -3,26 +3,42 @@
 统计窗口：近 {{window_days}} 天
 监控期刊：{{journals}}
 
+## 周报信息
+{{report_info_block}}
+
 ## 今日概览
-- 今日共监控到 {{paper_count}} 篇新论文，来自 {{journal_count}} 本期刊。
-{{overview_bullets_block}}
+{{tag_wordcloud_block}}
 
-## 今日搜索的文献的主要关注点分类
-{{focus_categories_block}}
+### 本周重点方向分布
+{{overview_table_block}}
 
-## 今日建议
-{{daily_suggestions_block}}
+### 整体观察
+{{objective_overview_block}}
 
-### 今日最值得关注的论文
-{{highlights_block}}
+### 与当前工作相关的重点
+{{preference_overview_block}}
 
-### 按主题聚焦
-{{topics_block}}
+### 建议重点关注的事件或物理过程
+{{recommended_processes_block}}
 
-### 按期刊汇总
-{{journals_block}}
+### 对当前工作的可能启发
+{{work_implications_block}}
 
-## 附注
+## 文章推荐
+### 推荐论文
+{{recommended_papers_block}}
+
+## 主题推荐
+{{theme_recommendations_block}}
+
+## 各期刊主题汇总
+{{journal_roundup_block}}
+
+## 其他
+### 未获取摘要/全文的文献
+{{missing_sources_block}}
+
+### 附注
 - 本报告以标题、摘要和元数据为基础生成，后续可结合单篇文献卡片进一步细读。
 - 生成时间：{{generated_at}}
 

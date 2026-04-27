@@ -106,10 +106,10 @@ def _add_analysis_commands(subparsers: argparse._SubParsersAction, defaults: dic
     deep_read.add_argument("--journal", default="", help="Optional journal name.")
     deep_read.add_argument("--url", default="", help="Optional landing page URL.")
 
-    tag_candidates = subparsers.add_parser("tag-candidates", help="Review open-vocabulary tag candidates collected during runtime.")
-    tag_candidates.add_argument("--min-count", type=int, default=2, help="Only show tags used at least this many times.")
-    tag_candidates.add_argument("--limit", type=int, default=50, help="Maximum number of tags to include in the report. Use 0 for all.")
-    tag_candidates.add_argument("--no-write-report", action="store_true", help="Print the summary only and skip writing the markdown review report.")
+    tag_candidates = subparsers.add_parser("tag-candidates", help="Refresh and review pending tags collected during runtime.")
+    tag_candidates.add_argument("--min-count", type=int, default=2, help="Only show pending tags whose runtime count or real-output usage count reaches this value.")
+    tag_candidates.add_argument("--limit", type=int, default=50, help="Maximum number of pending tags to print. Use 0 for all.")
+    tag_candidates.add_argument("--no-write-report", action="store_true", help="Print the summary only and skip rewriting the pending-tag markdown file.")
 
 
 def _add_eval_and_maintenance_commands(subparsers: argparse._SubParsersAction) -> None:
@@ -205,6 +205,13 @@ def _handle_doctor(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
     print(f"openai_model={report['provider_status']['openai_model']}")
     print(f"openai_api_key_present={report['provider_status']['openai_api_key_present']}")
     print(f"openai_api_key_source={report['provider_status']['openai_api_key_source'] or 'NONE'}")
+    print(f"openrouter_base_url={report['provider_status']['openrouter_base_url']}")
+    print(f"openrouter_model={report['provider_status']['openrouter_model']}")
+    print(f"openrouter_api_key_present={report['provider_status']['openrouter_api_key_present']}")
+    print(f"openrouter_api_key_source={report['provider_status']['openrouter_api_key_source'] or 'NONE'}")
+    print(f"ollama_base_url={report['provider_status']['ollama_base_url']}")
+    print(f"ollama_model={report['provider_status']['ollama_model']}")
+    print(f"ollama_available={report['provider_status']['ollama_available']}")
     print(f"chatgpt_web_manual_root={report['provider_status']['chatgpt_web_manual_root']}")
     print(f"chatgpt_web_manual_pending={report['provider_status']['chatgpt_web_manual_pending']}")
     print(f"chatgpt_web_manual_ready={report['provider_status']['chatgpt_web_manual_ready']}")
@@ -278,14 +285,17 @@ def _handle_tag_candidates(args: argparse.Namespace, monitor: ScienceMonitor) ->
     candidates = filter_tag_candidates(monitor.root, min_count=args.min_count, limit=args.limit)
     if not args.no_write_report:
         report_path = write_tag_candidates_report(monitor.root, min_count=args.min_count, limit=args.limit)
-        print(f"Wrote tag candidate review report to {report_path}.")
+        print(f"Synced pending-tag review markdown to {report_path}.")
     if not candidates:
-        print("No tag candidates matched the current filter.")
+        print("No pending tags matched the current filter.")
         return 0
-    print(f"Matched {len(candidates)} tag candidates.")
+    print(f"Matched {len(candidates)} pending tags.")
     for item in candidates:
         contexts = ", ".join(f"{key}:{value}" for key, value in sorted(item.contexts.items())) or "-"
-        print(f"- {item.tag} count={item.count} contexts={contexts} last_seen={item.last_seen or '-'}")
+        print(
+            f"- {item.tag} runtime_count={item.count} usage_count={item.usage_count} "
+            f"contexts={contexts} last_seen={item.last_seen or '-'}"
+        )
     return 0
 
 

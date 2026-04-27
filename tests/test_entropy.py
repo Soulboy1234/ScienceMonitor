@@ -10,7 +10,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from sciencemonitor.entropy import _collect_module_line_counts, _collect_unused_imports
+from sciencemonitor.entropy import _collect_import_cycles, _collect_module_line_counts, _collect_unused_imports
 
 
 class EntropyUnusedImportTest(unittest.TestCase):
@@ -55,6 +55,39 @@ class EntropyUnusedImportTest(unittest.TestCase):
             unused = _collect_unused_imports(source_root)
 
         self.assertEqual(unused, {})
+
+    def test_collect_import_cycles_ignores_lazy_function_imports(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source_root = pathlib.Path(tmpdir)
+            (source_root / "module_a.py").write_text(
+                "\n".join(
+                    [
+                        "from __future__ import annotations",
+                        "",
+                        "def lazy():",
+                        "    from .module_b import value",
+                        "    return value",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (source_root / "module_b.py").write_text(
+                "\n".join(
+                    [
+                        "from __future__ import annotations",
+                        "from .module_a import lazy",
+                        "",
+                        "value = 1",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            cycles = _collect_import_cycles(source_root)
+
+        self.assertEqual(cycles, [])
 
 
 if __name__ == "__main__":

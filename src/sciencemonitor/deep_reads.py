@@ -17,6 +17,7 @@ from .article_fetch import (
     write_article_source_cache,
 )
 from .article_summary_markdown import (
+    build_tag_line,
     extract_related_report_links,
     extract_summary_tags,
     normalize_doi,
@@ -31,6 +32,7 @@ from .article_summary_meta import (
     format_authors_apa,
     parse_authors,
 )
+from .article_summary_text import GPT_SUMMARY_TAG
 from .article_index import sync_out_library
 from .config import (
     article_summaries_root,
@@ -60,7 +62,9 @@ from .http import HTTPClient
 from .chatgpt_web_manual import ManualResponsePending
 from .llm import AnalysisEngine, DeepReadAnalysis
 from .storage import Storage
+from .tag_review import review_generated_tags
 from .tags import infer_preferred_tags_from_text, normalize_tags
+from .tag_governance import refresh_pending_tag_files
 from .utils import clean_abstract_text, clean_title_text
 
 DEEP_READ_EXCLUDED_SUMMARY_TAG_PREFIXES = ("信息来源/",)
@@ -109,7 +113,7 @@ def run_deep_read(
     if not analysis_engine.deep_read_enabled():
         return DeepReadResult(False, "当前分析后端不可用，深度解读无法继续。请先在设置里切换到可用的 LLM 后端。")
     if not analysis_engine.provider_status().get("provider_supported", False):
-        return DeepReadResult(False, "当前 analysis provider 不再受支持。请切换到 codex_local、openai_api、openrouter_api 或人工中转。")
+        return DeepReadResult(False, "当前 analysis provider 不再受支持。请切换到 codex_local、openai_api、openrouter_api、ollama_api 或人工中转。")
 
     metadata = _resolve_metadata(storage, doi=doi, title=title, journal=journal, url=url)
     if not metadata.get("title"):
@@ -209,6 +213,7 @@ def run_deep_read(
             source_kind=resolution.source_kind,
         )
     note_path.write_text(markdown, encoding="utf-8")
+    refresh_pending_tag_files(project)
     if sync_library:
         sync_out_library(project)
         resolved_knowledge_position = _build_knowledge_position_text(project, note_path, sync_library=True)
@@ -561,7 +566,10 @@ def _render_deep_read_markdown(
         links.append(_render_note_resource_link(project, note_path=note_path, target_path=related_summary, label="单篇总结"))
     if report_links:
         links.extend(report_links[:1])
-    tag_text = " ".join("#" + tag.replace(" ", "") for tag in analysis.tags)
+    output_tags = list(analysis.tags)
+    if source_kind == "chatgpt_web_manual_search" and GPT_SUMMARY_TAG not in output_tags:
+        output_tags.append(GPT_SUMMARY_TAG)
+    tag_text = build_tag_line(output_tags)
     authors = parse_authors(metadata.get("raw_authors", "") or metadata.get("authors", ""))
     authors_text = format_authors_apa(authors) if authors else "Unknown"
     year = (metadata.get("published_date", "") or "Unknown")[:4]
@@ -626,16 +634,20 @@ def _normalize_deep_read_analysis(
         if tag.startswith("仪器/") and tag not in merged_tags:
             merged_tags.append(tag)
     merged_tags = _filter_deep_read_source_status_tags(merged_tags)
+    related_summary_tag_evidence = "related_summary_tags: " + " ".join(summary_tags) if summary_tags else ""
     normalized_tags = _filter_deep_read_tags(
         project,
         metadata_title=metadata_title,
         full_text=full_text,
-        tags=normalize_tags(
+        tags=review_generated_tags(
             merged_tags,
             root=project,
             max_tags=10,
             context="deep_read",
             record_candidates=True,
+            title_text=metadata_title,
+            body_text=full_text,
+            extra_text=related_summary_tag_evidence,
         ),
     )
     return replace(

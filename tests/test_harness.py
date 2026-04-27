@@ -17,6 +17,45 @@ from sciencemonitor.real_case_eval import RealCaseEvalResult, RealCaseFixtureChe
 
 
 class HarnessCheckTest(unittest.TestCase):
+    def test_harness_check_passes_changed_paths_to_visual_review(self) -> None:
+        with mock.patch(
+            "sciencemonitor.harness.run_doctor",
+            return_value={"warnings": []},
+        ), mock.patch(
+            "sciencemonitor.harness.run_harness_audit",
+            return_value=HarnessAuditReport(checks={"docs": True}, findings=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_exec_plan_check",
+            return_value=mock.Mock(passed=True, template_path=ROOT / "template.md", active_plans=[], completed_plans=[], active_statuses=[], issues=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_docs_review",
+            return_value=mock.Mock(passed=True, issues=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_tag_governance_review",
+            return_value=mock.Mock(passed=True, issues=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_tag_output_review",
+            return_value=mock.Mock(passed=True, issues=[], scanned_files=0),
+        ), mock.patch(
+            "sciencemonitor.harness.run_config_ui_review",
+            return_value=mock.Mock(passed=True, issues=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_config_ui_functional_review",
+            return_value=mock.Mock(passed=True, issues=[]),
+        ), mock.patch(
+            "sciencemonitor.harness._detect_changed_paths",
+            return_value=["src/sciencemonitor/token_monitor.py"],
+        ), mock.patch(
+            "sciencemonitor.harness.run_config_ui_visual_review",
+            return_value=mock.Mock(passed=True, issues=[], artifacts=[], reviewed_views=("overview",)),
+        ) as visual_review, mock.patch(
+            "sciencemonitor.harness.run_golden_eval",
+            return_value=[],
+        ):
+            report = run_harness_check(root=ROOT)
+            self.assertTrue(report.passed)
+            visual_review.assert_called_once_with(ROOT, changed_paths=["src/sciencemonitor/token_monitor.py"])
+
     def test_harness_check_passes_when_all_gates_are_clean(self) -> None:
         with mock.patch(
             "sciencemonitor.harness.run_doctor",
@@ -30,6 +69,12 @@ class HarnessCheckTest(unittest.TestCase):
         ), mock.patch(
             "sciencemonitor.harness.run_docs_review",
             return_value=mock.Mock(passed=True, issues=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_tag_governance_review",
+            return_value=mock.Mock(passed=True, issues=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_tag_output_review",
+            return_value=mock.Mock(passed=True, issues=[], scanned_files=0),
         ), mock.patch(
             "sciencemonitor.harness.run_config_ui_review",
             return_value=mock.Mock(passed=True, issues=[]),
@@ -90,6 +135,8 @@ class HarnessCheckTest(unittest.TestCase):
             self.assertIn("overall=ok", summary)
             self.assertIn("real_fixture_passed=1/1", summary)
             self.assertIn("docs=ok", summary)
+            self.assertIn("tag_governance=ok", summary)
+            self.assertIn("tag_output_review=ok", summary)
             self.assertIn("config_ui=ok", summary)
             self.assertIn("config_ui_functional=ok", summary)
             self.assertIn("config_ui_visual=ok", summary)
@@ -108,6 +155,12 @@ class HarnessCheckTest(unittest.TestCase):
         ), mock.patch(
             "sciencemonitor.harness.run_docs_review",
             return_value=mock.Mock(passed=True, issues=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_tag_governance_review",
+            return_value=mock.Mock(passed=True, issues=[]),
+        ), mock.patch(
+            "sciencemonitor.harness.run_tag_output_review",
+            return_value=mock.Mock(passed=True, issues=[], scanned_files=0),
         ), mock.patch(
             "sciencemonitor.harness.run_config_ui_review",
             return_value=mock.Mock(passed=True, issues=[]),

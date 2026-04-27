@@ -125,18 +125,11 @@ def _collect_import_cycles(source_root: Path) -> list[tuple[str, ...]]:
     imports: dict[str, set[str]] = {name: set() for name in modules}
     for name, path in modules.items():
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
+        for node in tree.body:
             if isinstance(node, ast.ImportFrom):
                 target = _resolve_import_target(node.module, modules)
                 if target and target != name:
                     imports[name].add(target)
-        for line in path.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if not stripped.startswith("from ."):
-                continue
-            target = stripped.split()[1][1:].split(".")[0]
-            if target in modules and target != name:
-                imports[name].add(target)
 
     cycles: set[tuple[str, ...]] = set()
 

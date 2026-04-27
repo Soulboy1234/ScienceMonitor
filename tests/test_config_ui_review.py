@@ -34,6 +34,9 @@ class ConfigUIReviewTest(unittest.TestCase):
         js_text = (ROOT / "src" / "sciencemonitor" / "ui_assets" / "config_ui.js").read_text(encoding="utf-8")
         self.assertIn('const mainEl = document.querySelector(".main");', js_text)
         self.assertIn('mainEl.scrollTo({ top: 0, left: 0, behavior: "auto" });', js_text)
+        self.assertIn('window.fetch(`/latest-result?kind=${encodeURIComponent(kind)}`, { cache: "no-store" })', js_text)
+        self.assertIn("refreshChangedResults(payload.latest_results || {});", js_text)
+        self.assertNotIn("window.location.reload()", js_text)
 
 
 if __name__ == "__main__":

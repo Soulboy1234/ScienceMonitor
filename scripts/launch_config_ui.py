@@ -22,7 +22,7 @@ DEFAULT_SUPPORT_ROOT = Path.home() / "Library" / "Application Support" / "Scienc
 LOG_PATH = Path(os.environ.get("SCIENCEMONITOR_CONFIG_UI_LOG_PATH", DEFAULT_SUPPORT_ROOT / "config_ui_launcher.log")).expanduser()
 STATE_PATH = Path(os.environ.get("SCIENCEMONITOR_CONFIG_UI_STATE_PATH", DEFAULT_SUPPORT_ROOT / "config_ui_state.json")).expanduser()
 ENTRYPOINT = PROJECT_ROOT / "science_monitor.py"
-TITLE_MARKER = "<title>ScienceMonitor Config UI</title>"
+TITLE_MARKER = '<meta name="sciencemonitor-ui" content="config-ui">'
 
 
 def _log(message: str) -> None:

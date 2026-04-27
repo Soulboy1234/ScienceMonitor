@@ -41,6 +41,9 @@ DEFAULT_RUNTIME_CONFIG = {
         "search_full_text_when_pdf_missing": True,
         "pdf_page_limit": 40,
     },
+    "safety": {
+        "allow_output_deletions": False,
+    },
 }
 
 PROJECT_CONFIG_SYNC_TARGETS = (
@@ -197,6 +200,26 @@ def runtime_control_root(root: Path | None = None) -> Path:
     return (root or project_root()) / "config"
 
 
+def tag_config_root(root: Path | None = None) -> Path:
+    return runtime_control_root(root) / "tag"
+
+
+def focus_tags_config_path(root: Path | None = None) -> Path:
+    return runtime_control_root(root) / "focus_tags.json"
+
+
+def pending_tags_json_path(root: Path | None = None) -> Path:
+    return runtime_control_root(root) / "pending_tags.json"
+
+
+def formal_tags_markdown_path(root: Path | None = None) -> Path:
+    return tag_config_root(root) / "formal_tags.md"
+
+
+def pending_tags_markdown_path(root: Path | None = None) -> Path:
+    return tag_config_root(root) / "pending_tags.md"
+
+
 def harness_control_root(root: Path | None = None) -> Path:
     return workflow_specs_root(root)
 
@@ -218,6 +241,31 @@ def output_root(root: Path | None = None) -> Path:
     if configured is not None:
         return configured
     return project / "out"
+
+
+def output_deletions_allowed(root: Path | None = None) -> bool:
+    runtime = load_runtime_config(root)
+    safety = runtime.get("safety", {})
+    if not isinstance(safety, dict):
+        return False
+    return bool(safety.get("allow_output_deletions", False))
+
+
+def is_output_managed_path(path: Path, root: Path | None = None) -> bool:
+    project = root or project_root()
+    resolved_path = path.expanduser().resolve()
+    managed_root = output_root(project).resolve()
+    try:
+        resolved_path.relative_to(managed_root)
+        return True
+    except ValueError:
+        return False
+
+
+def can_delete_output_path(path: Path, root: Path | None = None) -> bool:
+    if not is_output_managed_path(path, root):
+        return True
+    return output_deletions_allowed(root)
 
 
 def data_root(root: Path | None = None) -> Path:
@@ -272,6 +320,10 @@ def audit_logs_root(root: Path | None = None) -> Path:
 
 def llm_tmp_root(root: Path | None = None) -> Path:
     return logs_root(root) / "llm_tmp"
+
+
+def token_monitor_root(root: Path | None = None) -> Path:
+    return logs_root(root) / "token_monitor"
 
 
 def llm_cache_root(root: Path | None = None) -> Path:
@@ -335,9 +387,17 @@ def load_topics(path: Path | None = None) -> list[TopicProfile]:
 
 
 def load_focus_tags(path: Path | None = None) -> dict:
-    focus_tags_path = path or project_root() / "config" / "focus_tags.json"
+    focus_tags_path = path or focus_tags_config_path(project_root())
     if not focus_tags_path.exists():
-        focus_tags_path = project_root() / "config" / "focus_tags.json"
+        focus_tags_path = focus_tags_config_path(project_root())
+    try:
+        from .tag_governance import ensure_tag_governance_files, sync_formal_tags_to_focus_tags_json_if_markdown_newer
+
+        project = focus_tags_path.parents[1]
+        ensure_tag_governance_files(project)
+        sync_formal_tags_to_focus_tags_json_if_markdown_newer(project)
+    except Exception:
+        pass
     with focus_tags_path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
 

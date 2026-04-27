@@ -17,6 +17,98 @@
 
 - 下一轮变更待规划。
 
+## [v1.5.0] - 2026-04-28
+
+Tag: `v1.5.0`
+
+Snapshot commit:
+
+- `TO_BE_FILLED_AFTER_TAG`
+
+版本定位：
+
+- `v1.4.0` 之后的正式大版本检查点
+- 目标是把 Ollama 本地模型接入、维护预算重校准、entropy 检查修复和完整 gate 复核收束为稳定基线
+
+主要变化：
+
+- 新增 `ollama_api` 自动分析后端：
+  - 默认模型为 `gemma4:26b`
+  - 默认请求 `http://127.0.0.1:11434/api/chat`
+  - 单篇总结、周报、深度解读复用现有结构化 JSON、缓存、审核和 token 记录链路
+- UI 设置页补充 Ollama 本地模型入口：
+  - 可配置模型名、base_url 和超时时间
+  - provider 显示、功能审查、视觉审查和 token 图例已同步
+- 完成维护稳定性检查：
+  - `doctor` 无告警
+  - `maintenance-check --auto-repair` 通过
+  - `harness-check` 通过
+  - 全量 pytest 通过
+- 修复代码熵检查问题：
+  - 删除未使用导入
+  - entropy import-cycle 检查不再把函数内懒加载 import 误报为模块级循环
+  - `maintenance_budget.json` 已重校准到当前稳定基线，后续增量仍受预算约束
+- 安全边界复核：
+  - 未发现 `shell=True`、`eval()`、`os.system()` 这类高风险执行点
+  - 输出目录删除仍由 `safety.allow_output_deletions` 控制
+  - UI 本地文件访问错误提示已明确为“项目目录或输出目录”
+- 修复深度解读标签继承边界：
+  - 深度解读继承相关单篇总结标签时，已有 `#事件/磁暴` 不会被全文片段误删
+  - 普通文章总结仍保留“磁暴必须是主研究对象才打标签”的收紧规则
+
+发版时状态：
+
+- `./.venv/bin/python -m pytest -q`：通过
+- `git diff --check`：通过
+- `./scripts/run_science_monitor.sh harness-check`：通过
+- `./scripts/run_science_monitor.sh maintenance-check --auto-repair`：通过
+
+## [v1.4.0] - 2026-04-17
+
+Tag: `v1.4.0`
+
+Snapshot commit:
+
+- `ff5d558bc73e921aa692f75c5115d964b657bcb2`
+
+版本定位：
+
+- `v1.3.0` 之后的次版本整理记录
+- 目标是把 UI 重构、标签治理重构、token 监测、人工中转治理和输出文件保护收口为一个新的中版本基线
+
+主要变化：
+
+- 完成 `config-ui` 重构与治理接入：
+  - 左侧导航 + 右侧工作区布局稳定
+  - 周报、深度解读、人工中转、设置页已统一纳入结构审查、功能审查和视觉审查
+  - 总览页已接入运行状态、环境检查、LLM 状态和 token 使用图
+- 完成 token 使用监测模块化：
+  - 新增 `token_monitor` 统一记录和汇总本地 Codex/API token 使用
+  - UI 可展示今天 / 本周 / 本月统计和 30 天柱状图
+  - token 记录集中到 `log/token_monitor/`
+- 完成标签治理重构：
+  - 正式标签与预选标签分离为 `formal_tags.md / pending_tags.md`
+  - 新增标签审核层和标签治理审查，优先用 formal 标签吸收模型标签
+  - `auto` 输出已按当前 formal 体系重审并与 pending 对齐
+- 完成人工中转工作流稳定化：
+  - 请求包、响应导入、结果审核和最新结果展示已收口
+  - 人工中转结果与自动周报/深读结果在 UI 中分流展示
+- 完成输出文件保护治理：
+  - 根文档已补充文件操作边界说明
+  - 默认不删除 `output_root` 下文件
+  - 新增 `safety.allow_output_deletions`，作为用户显式审核开关
+- 完成非研究型文献过滤补强：
+  - `审稿人致谢 / reviewer thanks / editorial / issue information` 等标题已被过滤出周报主链路
+
+发版时状态：
+
+- `harness-check` 通过
+- `pytest -q` 已在本轮多次通过；最近一次定向验证包括：
+  - `tests/test_article_summaries.py`
+  - `tests/test_article_index.py`
+- `git diff --check` 通过
+- 当前记录为文档化版本基线；是否打正式 Git tag 取决于后续是否执行提交/发版动作
+
 ## [v1.3.0] - 2026-04-09
 
 Tag: `v1.3.0`

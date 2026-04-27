@@ -125,6 +125,15 @@ def topic_labels(row: Row) -> list[str]:
     return [item for item in row["topic_labels"].split("\n") if item]
 
 
+def row_value(row: Row | dict, key: str, default=None):
+    if isinstance(row, dict):
+        return row.get(key, default)
+    try:
+        return row[key]
+    except Exception:
+        return default
+
+
 def resolve_local_pdf_path(row: Row) -> Path | None:
     if "local_pdf_path" not in row.keys():
         return None
@@ -201,8 +210,5 @@ def get_override(row: Row) -> dict | None:
 
 
 def _row_flag(row: Row, key: str, default: bool = False) -> bool:
-    try:
-        value = row[key]
-    except Exception:
-        value = row.get(key, default) if isinstance(row, dict) else default
+    value = row_value(row, key, default)
     return bool(value)

@@ -26,9 +26,11 @@ from .config import (
     load_master_plan_preferences,
 )
 from .llm_api_support import (
+    check_ollama_available,
     resolve_api_key,
     resolve_api_key_source,
     resolve_base_url,
+    run_ollama_structured,
     run_openai_structured,
     run_openrouter_structured,
 )
@@ -45,7 +47,8 @@ from .llm_contracts import (
     build_report_schema,
 )
 from .models import ArticleSummaryResult
-from .tags import normalize_tags as normalize_project_tags
+from .tag_review import review_generated_tags
+from .token_monitor import record_api_usage
 from .utils import clean_abstract_text, clean_title_text
 
 
@@ -88,6 +91,11 @@ DEFAULT_ANALYSIS_CONFIG = {
         "app_name": "ScienceMonitor",
         "timeout_seconds": 120,
     },
+    "ollama_api": {
+        "model": "gemma4:26b",
+        "base_url": "http://127.0.0.1:11434/api/chat",
+        "timeout_seconds": 300,
+    },
     "chatgpt_web_manual": {},
 }
 
@@ -104,26 +112,61 @@ FALLBACK_TAG_NORMALIZATION_RULES = [
     (r"热层密度|中性密度|thermospheric mass density|thermospheric density|neutral density|satellite drag|drag environment|drag of leo satellites|leo satellite drag", "热层/密度"),
     (r"热层成分|o/n2|composition|nitric oxide|一氧化氮|atomic oxygen", "热层/成分"),
     (r"热层温度|中性温度|thermospheric temperature|neutral temperature|exospheric temperature", "热层/温度"),
-    (r"月球|moon|lunar", "其他行星/月球"),
-    (r"火星|mars|martian", "其他行星/火星"),
-    (r"金星|venus|venusian", "其他行星/金星"),
-    (r"水星|mercury|mercurian", "其他行星/水星"),
-    (r"木星|jupiter|jovian", "其他行星/木星"),
-    (r"土星|saturn|saturnian", "其他行星/土星"),
-    (r"天王星|uranus|uranian", "其他行星/天王星"),
-    (r"海王星|neptune|neptunian", "其他行星/海王星"),
+    (r"月球|moon|lunar", "对象/其他行星/月球"),
+    (r"火星|mars|martian", "对象/其他行星/火星"),
+    (r"金星|venus|venusian", "对象/其他行星/金星"),
+    (r"水星|mercury|mercurian", "对象/其他行星/水星"),
+    (r"木星|jupiter|jovian", "对象/其他行星/木星"),
+    (r"土星|saturn|saturnian", "对象/其他行星/土星"),
+    (r"天王星|uranus|uranian", "对象/其他行星/天王星"),
+    (r"海王星|neptune|neptunian", "对象/其他行星/海王星"),
     (r"广义线性模型|generalized linear model|\bglm\b", "建模/统计模型/GLM"),
     (r"观测/?射电掩星|射电掩星", "仪器/射电掩星"),
     (r"探测器/?kplo|danuri|kplo", "仪器/KPLO"),
     (r"物理量/?电子密度", "电离层/电子密度"),
 ]
+
+class AnalysisQuotaExceeded(RuntimeError):
+    def __init__(self, provider: str, detail_path: Path, *, retry_after: str = "", phase: str = "analysis") -> None:
+        self.provider = provider
+        self.detail_path = detail_path
+        self.retry_after = retry_after.strip()
+        self.phase = phase
+        message = f"{provider} {phase} stopped because the account hit its usage limit."
+        if self.retry_after:
+            message += f" Try again at {self.retry_after}."
+        message += f" Details: {detail_path}"
+        super().__init__(message)
+
+    def ui_message(self) -> str:
+        base = f"{self.provider} 额度已耗尽，本次任务已中止。"
+        if self.retry_after:
+            base += f" 可在 {self.retry_after} 后重试。"
+        return base
+
+
+def _extract_codex_retry_after(stderr_text: str) -> str:
+    match = re.search(r"try again at ([^.]+)\.", stderr_text, flags=re.IGNORECASE)
+    if not match:
+        return ""
+    return str(match.group(1) or "").strip()
+
+
+def _raise_codex_usage_limit(stderr_text: str, stderr_path: Path, *, phase: str) -> None:
+    lowered = stderr_text.lower()
+    if "usage limit" in lowered or "purchase more credits" in lowered or "upgrade to pro" in lowered:
+        raise AnalysisQuotaExceeded(
+            "codex_local",
+            stderr_path,
+            retry_after=_extract_codex_retry_after(stderr_text),
+            phase=phase,
+        )
+
+
 def _summarize_codex_missing_output(stderr_text: str, stderr_path: Path) -> str:
     lowered = stderr_text.lower()
     if "usage limit" in lowered or "purchase more credits" in lowered or "upgrade to pro" in lowered:
-        return (
-            "codex_local analysis did not produce structured output because the account hit its usage limit. "
-            f"Details: {stderr_path}"
-        )
+        _raise_codex_usage_limit(stderr_text, stderr_path, phase="analysis")
     if "invalid json" in lowered or "schema" in lowered:
         return (
             "codex_local analysis finished without a valid structured response. "
@@ -138,10 +181,7 @@ def _summarize_codex_missing_output(stderr_text: str, stderr_path: Path) -> str:
 def _summarize_codex_failure(returncode: int, stderr_text: str, stderr_path: Path) -> str:
     lowered = stderr_text.lower()
     if "usage limit" in lowered or "purchase more credits" in lowered or "upgrade to pro" in lowered:
-        return (
-            "codex_local analysis stopped because the account hit its usage limit. "
-            f"Details: {stderr_path}"
-        )
+        _raise_codex_usage_limit(stderr_text, stderr_path, phase="analysis")
     return f"codex_local analysis failed with exit code {returncode}. Details: {stderr_path}"
 
 @dataclass(frozen=True)
@@ -170,6 +210,10 @@ class JournalInsight:
 class ReportAnalysis:
     overview_bullets: list[str] = field(default_factory=list)
     daily_suggestions: list[str] = field(default_factory=list)
+    preference_overview: str = ""
+    work_implication: str = ""
+    preference_paper_indices: list[int] = field(default_factory=list)
+    work_implication_paper_indices: list[int] = field(default_factory=list)
     topic_insights: list[TopicInsight] = field(default_factory=list)
     journal_insights: list[JournalInsight] = field(default_factory=list)
 
@@ -277,13 +321,29 @@ class AnalysisEngine:
 
         selected_summaries = list(summaries)
         summary_signature = "|".join(
-            str(summary.row["doi"] or summary.row["fingerprint"] or summary.note_title)
+            "::".join(
+                [
+                    str(summary.row["doi"] or summary.row["fingerprint"] or summary.note_title),
+                    ",".join(summary.tags),
+                    hashlib.sha1(
+                        "\n".join(
+                            [
+                                summary.note_title,
+                                summary.body,
+                                summary.supplement,
+                                summary.recommendation,
+                                summary.one_sentence,
+                            ]
+                        ).encode("utf-8")
+                    ).hexdigest()[:12],
+                ]
+            )
             for summary in selected_summaries
         )
         signature_hash = hashlib.sha1(summary_signature.encode("utf-8")).hexdigest()[:12]
         cache_basis = "|".join(
             [
-                "report_v2",
+                "report_v7",
                 report_date.isoformat(),
                 str(len(selected_summaries)),
                 signature_hash,
@@ -361,6 +421,10 @@ class AnalysisEngine:
         return ReportAnalysis(
             overview_bullets=self._normalize_text_list(payload.get("overview_bullets", [])),
             daily_suggestions=self._normalize_text_list(payload.get("daily_suggestions", [])),
+            preference_overview=str(payload.get("preference_overview", "")).strip(),
+            work_implication=str(payload.get("work_implication", "")).strip(),
+            preference_paper_indices=self._normalize_index_list(payload.get("preference_paper_indices", [])),
+            work_implication_paper_indices=self._normalize_index_list(payload.get("work_implication_paper_indices", [])),
             topic_insights=[
                 TopicInsight(label=str(item["label"]).strip(), summary=str(item["summary"]).strip())
                 for item in payload.get("topic_insights", [])
@@ -372,6 +436,20 @@ class AnalysisEngine:
                 if str(item.get("journal", "")).strip() and str(item.get("summary", "")).strip()
             ],
         )
+
+    def _normalize_index_list(self, values: object) -> list[int]:
+        if not isinstance(values, list):
+            return []
+        normalized: list[int] = []
+        for item in values:
+            try:
+                value = int(item)
+            except Exception:
+                continue
+            if value <= 0 or value in normalized:
+                continue
+            normalized.append(value)
+        return normalized[:4]
 
     def _deep_read_from_payload(self, payload: dict) -> DeepReadAnalysis:
         return DeepReadAnalysis(
@@ -405,9 +483,11 @@ class AnalysisEngine:
         if self.provider == "codex_local":
             return self._run_codex_structured(prompt, schema, name, reasoning_effort=reasoning_effort)
         if self.provider == "openai_api":
-            return self._run_openai_structured(prompt, schema)
+            return self._run_openai_structured(prompt, schema, name)
         if self.provider == "openrouter_api":
-            return self._run_openrouter_structured(prompt, schema)
+            return self._run_openrouter_structured(prompt, schema, name)
+        if self.provider == "ollama_api":
+            return self._run_ollama_structured(prompt, schema, name)
         if self.provider == "chatgpt_web_manual":
             return self._run_chatgpt_web_manual_structured(
                 prompt,
@@ -486,11 +566,41 @@ class AnalysisEngine:
             raise RuntimeError(_summarize_codex_missing_output(stderr_text, stderr_path))
         return json.loads(output_path.read_text(encoding="utf-8"))
 
-    def _run_openai_structured(self, prompt: str, schema: dict) -> dict:
-        return run_openai_structured(self.config.get("openai_api", {}), prompt, schema)
+    def _run_openai_structured(self, prompt: str, schema: dict, name: str) -> dict:
+        settings = self.config.get("openai_api", {})
+        result = run_openai_structured(settings, prompt, schema)
+        record_api_usage(
+            self.root,
+            provider="openai_api",
+            model=str(settings.get("model", "gpt-5-mini") or "gpt-5-mini"),
+            raw_usage=result.usage,
+            request_name=name,
+        )
+        return result.payload
 
-    def _run_openrouter_structured(self, prompt: str, schema: dict) -> dict:
-        return run_openrouter_structured(self.config.get("openrouter_api", {}), prompt, schema)
+    def _run_openrouter_structured(self, prompt: str, schema: dict, name: str) -> dict:
+        settings = self.config.get("openrouter_api", {})
+        result = run_openrouter_structured(settings, prompt, schema)
+        record_api_usage(
+            self.root,
+            provider="openrouter_api",
+            model=str(settings.get("model", "openai/gpt-5-mini") or "openai/gpt-5-mini"),
+            raw_usage=result.usage,
+            request_name=name,
+        )
+        return result.payload
+
+    def _run_ollama_structured(self, prompt: str, schema: dict, name: str) -> dict:
+        settings = self.config.get("ollama_api", {})
+        result = run_ollama_structured(settings, prompt, schema)
+        record_api_usage(
+            self.root,
+            provider="ollama_api",
+            model=str(settings.get("model", "gemma4:26b") or "gemma4:26b"),
+            raw_usage=result.usage,
+            request_name=name,
+        )
+        return result.payload
 
     def _run_chatgpt_web_manual_structured(
         self,
@@ -527,9 +637,16 @@ class AnalysisEngine:
         codex_settings = self.config.get("codex_local", {})
         openai_settings = self.config.get("openai_api", {})
         openrouter_settings = self.config.get("openrouter_api", {})
+        ollama_settings = self.config.get("ollama_api", {})
         codex_executable = self._resolve_codex_executable(codex_settings, strict=False)
         api_key = self._resolve_openai_api_key(openai_settings)
         openrouter_api_key = self._resolve_openrouter_api_key(openrouter_settings)
+        ollama_base_url = resolve_base_url(
+            ollama_settings,
+            default_url="http://127.0.0.1:11434/api/chat",
+            provider_name="ollama_api",
+            strict=False,
+        )
         manual_counts = manual_status_counts(self.root)
         return {
             "provider": self.provider,
@@ -567,6 +684,9 @@ class AnalysisEngine:
                 fallback_env_name="OPENROUTER_API_KEY",
             ),
             "openrouter_model": str(openrouter_settings.get("model", "openai/gpt-5-mini") or "openai/gpt-5-mini"),
+            "ollama_base_url": ollama_base_url,
+            "ollama_model": str(ollama_settings.get("model", "gemma4:26b") or "gemma4:26b"),
+            "ollama_available": check_ollama_available(ollama_settings) if self.provider == "ollama_api" else False,
             "chatgpt_web_manual_root": str(chatgpt_web_manual_root(self.root)),
             "chatgpt_web_manual_pending": int(manual_counts.get("pending", 0)),
             "chatgpt_web_manual_ready": int(manual_counts.get("ready", 0)),
@@ -612,12 +732,14 @@ class AnalysisEngine:
     def _article_cache_key(self, row: Row) -> str:
         source_kind = str(row["summary_source_kind"]).strip().lower() if "summary_source_kind" in row.keys() else ""
         source_text = _prepare_article_source_text_for_prompt(str(row["abstract"] or ""), preserve_blocks=True)
+        source_title = clean_title_text(str(row["title"] if "title" in row.keys() else ""))
         identity = str(row["doi"]).strip().lower() or str(row["fingerprint"])
         basis = "|".join(
             [
                 "article_v5",
                 identity,
                 source_kind,
+                hashlib.sha1(source_title.encode("utf-8")).hexdigest()[:12],
                 hashlib.sha1(source_text.encode("utf-8")).hexdigest()[:16],
                 self._analysis_signature("article_summaries"),
             ]
@@ -643,6 +765,9 @@ class AnalysisEngine:
         elif self.provider == "openrouter_api":
             openrouter_settings = self.config.get("openrouter_api", {})
             model = str(openrouter_settings.get("model", "openai/gpt-5-mini") or "openai/gpt-5-mini").strip() or "openai/gpt-5-mini"
+        elif self.provider == "ollama_api":
+            ollama_settings = self.config.get("ollama_api", {})
+            model = str(ollama_settings.get("model", "gemma4:26b") or "gemma4:26b").strip() or "gemma4:26b"
         elif self.provider == "chatgpt_web_manual":
             model = "chatgpt_web_manual"
         else:
@@ -699,7 +824,7 @@ class AnalysisEngine:
         if self.provider in SUPPORTED_ANALYSIS_PROVIDERS:
             return
         raise RuntimeError(
-            "当前 analysis provider 已不再支持。现在只支持 codex_local、openai_api、openrouter_api 或 chatgpt_web_manual。"
+            "当前 analysis provider 已不再支持。现在只支持 codex_local、openai_api、openrouter_api、ollama_api 或 chatgpt_web_manual。"
         )
 
     def _resolve_codex_executable(self, settings: dict, strict: bool = True) -> str:
@@ -736,7 +861,7 @@ class AnalysisEngine:
         return env
 
     def _normalize_tags(self, tags: list[str]) -> list[str]:
-        normalized = normalize_project_tags(tags, root=self.root, max_tags=8)
+        normalized = review_generated_tags(tags, root=self.root, max_tags=8, context="llm_analysis")
         if normalized:
             return normalized
 

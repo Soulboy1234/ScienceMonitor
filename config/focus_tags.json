@@ -47,7 +47,7 @@
     "style": "Prefer concise noun-like hierarchical tags. Reuse this preferred wordlist first, but allow reasonable new tags when the list does not cover the paper.",
     "open_vocabulary": true,
     "default_max_tags": 14,
-    "candidate_log_path": "data/tag_candidates.json",
+    "pending_tags_path": "config/pending_tags.json",
     "drop_patterns": [
       "^(研究星球/地球|地球|earth|terrestrial)$"
     ],
@@ -60,698 +60,897 @@
       ]
     }
   },
-  "suppression_rules": [
-    {
-      "general": "指数/IMF",
-      "specific": "指数/IMF/Bx"
-    },
-    {
-      "general": "指数/IMF",
-      "specific": "指数/IMF/By"
-    },
-    {
-      "general": "指数/IMF",
-      "specific": "指数/IMF/Bz"
-    },
-    {
-      "general": "其他行星/行星综合",
-      "specific": "其他行星/月球"
-    },
-    {
-      "general": "其他行星/行星综合",
-      "specific": "其他行星/水星"
-    },
-    {
-      "general": "其他行星/行星综合",
-      "specific": "其他行星/金星"
-    },
-    {
-      "general": "其他行星/行星综合",
-      "specific": "其他行星/火星"
-    },
-    {
-      "general": "其他行星/行星综合",
-      "specific": "其他行星/木星"
-    },
-    {
-      "general": "其他行星/行星综合",
-      "specific": "其他行星/土星"
-    },
-    {
-      "general": "其他行星/行星综合",
-      "specific": "其他行星/天王星"
-    },
-    {
-      "general": "其他行星/行星综合",
-      "specific": "其他行星/海王星"
-    },
-    {
-      "general": "电离层",
-      "specific": "电离层/TEC"
-    },
-    {
-      "general": "电离层",
-      "specific": "电离层/低纬"
-    },
-    {
-      "general": "电离层",
-      "specific": "电离层/中纬"
-    },
-    {
-      "general": "电离层",
-      "specific": "电离层/高纬"
-    },
-    {
-      "general": "电离层",
-      "specific": "电离层/不规则体"
-    },
-    {
-      "general": "电离层",
-      "specific": "电离层/闪烁"
-    },
-    {
-      "general": "电离层",
-      "specific": "电离层/电子密度"
-    },
-    {
-      "general": "电离层",
-      "specific": "电离层/电子温度"
-    },
-    {
-      "general": "极区/对流",
-      "specific": "极区/对流边界"
-    },
-    {
-      "general": "极区/对流",
-      "specific": "极区/对流电场"
-    }
-  ],
+  "suppression_rules": [],
   "tags": [
     {
-      "id": "thermosphere",
-      "label": "热层",
-      "category": "research_object",
-      "patterns": [
-        "thermosphere",
-        "thermospheric",
-        "热层"
-      ]
+      "id": "tag_94",
+      "label": "对象",
+      "category": "research_object"
     },
     {
-      "id": "thermosphere_density",
-      "label": "热层/密度",
-      "category": "research_object",
-      "aliases": [
-        "热层密度",
-        "中性密度",
-        "热层/质量密度"
-      ],
-      "patterns": [
-        "thermospheric mass density",
-        "thermospheric density",
-        "neutral density",
-        "mass density",
-        "air density",
-        "satellite drag",
-        "drag environment",
-        "drag of leo satellites",
-        "leo satellite drag",
-        "卫星阻力"
-      ]
+      "id": "tag_95",
+      "label": "对象/热层",
+      "category": "research_object"
     },
     {
-      "id": "thermosphere_wind",
-      "label": "热层/风场",
-      "category": "research_object",
-      "aliases": [
-        "热层/风",
-        "热层风"
-      ],
-      "patterns": [
-        "thermospheric wind",
-        "thermospheric winds",
-        "neutral wind",
-        "neutral winds",
-        "meridional wind",
-        "zonal wind",
-        "中性风",
-        "经向风",
-        "纬向风"
-      ]
+      "id": "tag_4",
+      "label": "对象/热层/密度",
+      "category": "research_object"
     },
     {
-      "id": "thermosphere_temperature",
-      "label": "热层/温度",
-      "category": "research_object",
-      "aliases": [
-        "热层温度",
-        "中性温度"
-      ],
-      "patterns": [
-        "thermospheric temperature",
-        "neutral temperature",
-        "exospheric temperature"
-      ]
+      "id": "tag_5",
+      "label": "对象/热层/风场",
+      "category": "research_object"
     },
     {
-      "id": "thermosphere_composition",
-      "label": "热层/成分",
-      "category": "research_object",
-      "aliases": [
-        "热层成分"
-      ],
-      "patterns": [
-        "o/n2",
-        "neutral composition",
-        "thermospheric composition",
-        "nitric oxide",
-        "atomic oxygen",
-        "oxygen-to-nitrogen ratio",
-        "一氧化氮",
-        "成分变化"
-      ]
+      "id": "tag_8",
+      "label": "对象/热层/风场/垂直风",
+      "category": "research_object"
     },
     {
-      "id": "thermosphere_tad",
-      "label": "热层/TAD",
-      "category": "research_object",
-      "patterns": [
-        "\\btad\\b",
-        "traveling atmospheric disturbance",
-        "traveling atmospheric disturbances"
-      ]
+      "id": "tag_9",
+      "label": "对象/热层/风场/伺服理论",
+      "category": "research_object"
     },
     {
-      "id": "ionosphere",
-      "label": "电离层",
-      "category": "research_object",
-      "patterns": [
-        "ionosphere",
-        "ionospheric",
-        "电离层"
-      ]
+      "id": "tag_12",
+      "label": "对象/热层/温度",
+      "category": "research_object"
     },
     {
-      "id": "ionosphere_tec",
-      "label": "电离层/TEC",
-      "category": "research_object",
-      "aliases": [
-        "TEC"
-      ],
-      "patterns": [
-        "total electron content",
-        "\\btec\\b",
-        "总电子含量"
-      ]
+      "id": "tag_96",
+      "label": "对象/热层/成分",
+      "category": "research_object"
     },
     {
-      "id": "ionosphere_low_latitude",
-      "label": "电离层/低纬",
-      "category": "research_object",
-      "patterns": [
-        "low-latitude ionosphere",
-        "低纬电离层",
-        "赤道电离层"
-      ]
+      "id": "tad_2",
+      "label": "对象/热层/TAD",
+      "category": "research_object"
     },
     {
-      "id": "ionosphere_mid_latitude",
-      "label": "电离层/中纬",
-      "category": "research_object",
-      "patterns": [
-        "mid-latitude ionosphere",
-        "中纬电离层"
-      ]
+      "id": "tad_3",
+      "label": "对象/热层/TAD/干涉",
+      "category": "research_object"
     },
     {
-      "id": "ionosphere_high_latitude",
-      "label": "电离层/高纬",
-      "category": "research_object",
-      "patterns": [
-        "high-latitude ionosphere",
-        "高纬电离层",
-        "极区电离层"
-      ]
+      "id": "ema_2",
+      "label": "对象/热层/EMA",
+      "category": "research_object"
     },
     {
-      "id": "ionosphere_irregularity",
-      "label": "电离层/不规则体",
-      "category": "research_object",
-      "patterns": [
-        "ionospheric irregularit",
-        "equatorial plasma bubble",
-        "plasma bubble",
-        "等离子体泡",
-        "赤道等离子体泡"
-      ]
+      "id": "eta",
+      "label": "对象/热层/ETA",
+      "category": "research_object"
     },
     {
-      "id": "ionosphere_scintillation",
-      "label": "电离层/闪烁",
-      "category": "research_object",
-      "patterns": [
-        "ionospheric scintillation",
-        "电离层闪烁",
-        "闪烁"
-      ]
+      "id": "tag_97",
+      "label": "对象/热层/响应时延",
+      "category": "research_object"
     },
     {
-      "id": "ionosphere_electron_density",
-      "label": "电离层/电子密度",
-      "category": "research_object",
-      "aliases": [
-        "电子密度"
-      ],
-      "patterns": [
-        "electron density",
-        "物理量/电子密度"
-      ]
+      "id": "tag_98",
+      "label": "对象/热层/超旋",
+      "category": "research_object"
     },
     {
-      "id": "ionosphere_electron_temperature",
-      "label": "电离层/电子温度",
-      "category": "research_object",
-      "aliases": [
-        "电子温度"
-      ],
-      "patterns": [
-        "electron temperature"
-      ]
+      "id": "tag_99",
+      "label": "对象/热层/过冷却",
+      "category": "research_object"
     },
     {
-      "id": "polar_aurora",
-      "label": "极区/极光",
-      "category": "research_object",
-      "patterns": [
-        "aurora",
-        "auroral",
-        "极光"
-      ]
+      "id": "tag_100",
+      "label": "对象/热层/长期变化",
+      "category": "research_object"
     },
     {
-      "id": "polar_convection",
-      "label": "极区/对流",
-      "category": "research_object",
-      "aliases": [
-        "高纬过程/极区对流"
-      ],
-      "patterns": [
-        "polar convection",
-        "极区对流"
-      ]
+      "id": "tag_101",
+      "label": "对象/热层/低热层",
+      "category": "research_object"
     },
     {
-      "id": "polar_convection_boundary",
-      "label": "极区/对流边界",
-      "category": "research_object",
-      "aliases": [
-        "极区对流/边界"
-      ],
-      "patterns": [
-        "convection boundary",
-        "polarconvectionboundary",
-        "polar cap boundary",
-        "极区对流边界"
-      ]
+      "id": "mdm",
+      "label": "对象/热层/MDM",
+      "category": "research_object"
     },
     {
-      "id": "polar_convection_electric_field",
-      "label": "极区/对流电场",
-      "category": "research_object",
-      "patterns": [
-        "convection electric field",
-        "polar electric field",
-        "极区电场",
-        "对流电场"
-      ]
+      "id": "mtm_2",
+      "label": "对象/热层/MTM",
+      "category": "research_object"
     },
     {
-      "id": "polar_facs",
-      "label": "极区/FACs",
-      "category": "research_object",
-      "patterns": [
-        "field-aligned current",
-        "\\bfacs?\\b",
-        "场向电流"
-      ]
+      "id": "tag_107",
+      "label": "对象/电离层",
+      "category": "research_object"
     },
     {
-      "id": "polar_joule_heating",
-      "label": "极区/焦耳加热",
-      "category": "research_object",
-      "patterns": [
-        "joule heating",
-        "焦耳加热"
-      ]
+      "id": "tag_102",
+      "label": "对象/电离层/赤道",
+      "category": "research_object"
     },
     {
-      "id": "magnetosphere",
-      "label": "磁层",
-      "category": "research_object",
-      "patterns": [
-        "magnetosphere",
-        "磁层",
-        "磁层状态",
-        "磁层活动"
-      ]
+      "id": "tag_103",
+      "label": "对象/电离层/赤道/电场",
+      "category": "research_object"
     },
     {
-      "id": "solar_terrestrial_coupling",
-      "label": "日地耦合",
-      "category": "research_object",
-      "patterns": [
-        "solar wind",
-        "interplanetary",
-        "日地耦合",
-        "太阳风"
-      ]
+      "id": "tag_104",
+      "label": "对象/电离层/低纬",
+      "category": "research_object"
     },
     {
-      "id": "gravity_wave_tide",
-      "label": "重力波/潮汐",
-      "category": "research_object",
-      "patterns": [
-        "gravity wave",
-        "gravity waves",
-        "planetary wave",
-        "planetary waves",
-        "tidal",
-        "\\btide\\b",
-        "潮汐"
-      ]
+      "id": "tag_105",
+      "label": "对象/电离层/中纬",
+      "category": "research_object"
     },
     {
-      "id": "moon",
-      "label": "其他行星/月球",
-      "category": "research_object",
-      "aliases": [
-        "研究星球/月球",
-        "电离层/月球",
-        "行星环境/月球"
-      ],
-      "patterns": [
-        "\\bmoon\\b",
-        "lunar",
-        "月球",
-        "danuri",
-        "\\bkplo\\b"
-      ],
-      "inference_scope": "title"
+      "id": "tag_106",
+      "label": "对象/电离层/高纬",
+      "category": "research_object"
     },
     {
-      "id": "mercury",
-      "label": "其他行星/水星",
-      "category": "research_object",
-      "aliases": [
-        "研究星球/水星"
-      ],
-      "patterns": [
-        "\\bmercury\\b",
-        "mercurian",
-        "水星"
-      ],
-      "inference_scope": "title"
+      "id": "tag_108",
+      "label": "对象/电离层/不规则体",
+      "category": "research_object"
     },
     {
-      "id": "venus",
-      "label": "其他行星/金星",
-      "category": "research_object",
-      "aliases": [
-        "研究星球/金星"
-      ],
-      "patterns": [
-        "\\bvenus\\b",
-        "venusian",
-        "金星"
-      ],
-      "inference_scope": "title"
+      "id": "tag_109",
+      "label": "对象/电离层/闪烁",
+      "category": "research_object"
     },
     {
-      "id": "mars",
-      "label": "其他行星/火星",
-      "category": "research_object",
-      "aliases": [
-        "研究星球/火星"
-      ],
-      "patterns": [
-        "\\bmars\\b",
-        "martian",
-        "火星"
-      ],
-      "inference_scope": "title"
+      "id": "tec",
+      "label": "对象/电离层/TEC",
+      "category": "research_object"
     },
     {
-      "id": "jupiter",
-      "label": "其他行星/木星",
-      "category": "research_object",
-      "aliases": [
-        "研究星球/木星",
-        "木卫三/极光",
-        "木卫三/大气"
-      ],
-      "patterns": [
-        "\\bjupiter\\b",
-        "jovian",
-        "木星",
-        "ganymede",
-        "europa",
-        "木卫三",
-        "木卫二"
-      ],
-      "inference_scope": "title"
+      "id": "tag_110",
+      "label": "对象/电离层/电子密度",
+      "category": "research_object"
     },
     {
-      "id": "saturn",
-      "label": "其他行星/土星",
-      "category": "research_object",
-      "aliases": [
-        "研究星球/土星",
-        "土卫六"
-      ],
-      "patterns": [
-        "\\bsaturn\\b",
-        "saturnian",
-        "土星",
-        "titan",
-        "enceladus",
-        "土卫二",
-        "土卫六"
-      ],
-      "inference_scope": "title"
+      "id": "tag_111",
+      "label": "对象/电离层/电子温度",
+      "category": "research_object"
     },
     {
-      "id": "uranus",
-      "label": "其他行星/天王星",
-      "category": "research_object",
-      "aliases": [
-        "研究星球/天王星",
-        "行星大气/天王星"
-      ],
-      "patterns": [
-        "\\buranus\\b",
-        "uranian",
-        "天王星"
-      ],
-      "inference_scope": "title"
+      "id": "bliss_2",
+      "label": "对象/电离层/BLISS",
+      "category": "research_object"
     },
     {
-      "id": "neptune",
-      "label": "其他行星/海王星",
-      "category": "research_object",
-      "aliases": [
-        "研究星球/海王星"
-      ],
-      "patterns": [
-        "\\bneptune\\b",
-        "neptunian",
-        "海王星"
-      ],
-      "inference_scope": "title"
+      "id": "eia_2",
+      "label": "对象/电离层/EIA",
+      "category": "research_object"
     },
     {
-      "id": "planetary_general",
-      "label": "其他行星/行星综合",
-      "category": "research_object",
-      "patterns": [
-        "planetary science",
-        "multi-planet",
-        "multi planet",
-        "行星比较",
-        "行星综合"
-      ],
-      "inference_scope": "title"
+      "id": "x_pattern",
+      "label": "对象/电离层/X-Pattern",
+      "category": "research_object"
     },
     {
-      "id": "geomagnetic_storm",
-      "label": "磁暴",
-      "category": "event_driver",
-      "aliases": [
-        "扰动/磁暴"
-      ],
-      "patterns": [
-        "geomagnetic storm",
-        "magnetic storm",
-        "storm-time",
-        "storm time",
-        "superstorm",
-        "磁暴"
-      ]
+      "id": "epb_2",
+      "label": "对象/电离层/EPB",
+      "category": "research_object"
     },
     {
-      "id": "cir_storm",
-      "label": "磁暴/CIR",
-      "category": "event_driver",
-      "patterns": [
-        "\\bcir\\b",
-        "corotating interaction region",
-        "corotating interaction regions"
-      ]
+      "id": "sed_2",
+      "label": "对象/电离层/SED",
+      "category": "research_object"
     },
     {
-      "id": "cme_storm",
-      "label": "磁暴/CME",
-      "category": "event_driver",
-      "patterns": [
-        "\\bcme\\b",
-        "coronal mass ejection",
-        "coronal mass ejections"
-      ]
+      "id": "sgds_2",
+      "label": "对象/电离层/SGDs",
+      "category": "research_object"
     },
     {
-      "id": "solar_wind_hss",
-      "label": "太阳风/高速流",
-      "category": "event_driver",
-      "patterns": [
-        "high-speed stream",
-        "high speed stream",
-        "高速流"
-      ]
+      "id": "tid_2",
+      "label": "对象/电离层/TID",
+      "category": "research_object"
     },
     {
-      "id": "interplanetary_shock",
-      "label": "行星际激波",
-      "category": "event_driver",
-      "patterns": [
-        "interplanetary shock",
-        "interplanetary shocks",
-        "行星际激波"
-      ]
+      "id": "tag_112",
+      "label": "对象/电离层/离子飘移",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_113",
+      "label": "对象/电离层/长期变化",
+      "category": "research_object"
+    },
+    {
+      "id": "fof2",
+      "label": "对象/电离层/foF2",
+      "category": "research_object"
+    },
+    {
+      "id": "hmf2",
+      "label": "对象/电离层/hmF2",
+      "category": "research_object"
+    },
+    {
+      "id": "ppef",
+      "label": "对象/电离层/PPEF",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_49",
+      "label": "对象/电离层/垂直漂移",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_50",
+      "label": "对象/电离层/顶层电离层",
+      "category": "research_object"
+    },
+    {
+      "id": "f",
+      "label": "对象/电离层/扩展F",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_119",
+      "label": "对象/极区",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_114",
+      "label": "对象/极区/极光",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_115",
+      "label": "对象/极区/等离子体对流",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_116",
+      "label": "对象/极区/对流边界",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_117",
+      "label": "对象/极区/对流电场",
+      "category": "research_object"
+    },
+    {
+      "id": "facs",
+      "label": "对象/极区/FACs",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_118",
+      "label": "对象/极区/焦耳加热",
+      "category": "research_object"
+    },
+    {
+      "id": "hmb_2",
+      "label": "对象/极区/HMB",
+      "category": "research_object"
+    },
+    {
+      "id": "pej_2",
+      "label": "对象/极区/PEJ",
+      "category": "research_object"
+    },
+    {
+      "id": "saps_2",
+      "label": "对象/极区/SAPS",
+      "category": "research_object"
+    },
+    {
+      "id": "cusp_2",
+      "label": "对象/极区/cusp",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_120",
+      "label": "对象/极区/中性-离子摩擦加热",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_121",
+      "label": "对象/极区/极光电集流",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_122",
+      "label": "对象/极区/极盖",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_123",
+      "label": "对象/极区/电场",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_124",
+      "label": "对象/极区/电子密度",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_125",
+      "label": "对象/极区/离子拖曳",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_126",
+      "label": "对象/极区/跨极盖传播",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_132",
+      "label": "对象/磁层",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_127",
+      "label": "对象/磁层/电流体系",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_128",
+      "label": "对象/磁层/太阳风耦合",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_129",
+      "label": "对象/磁层/弓激波",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_130",
+      "label": "对象/磁层/电离层耦合",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_131",
+      "label": "对象/磁层/磁层顶",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_138",
+      "label": "对象/日地耦合",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_139",
+      "label": "对象/重力波",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_51",
+      "label": "对象/重力波/山岳波",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_52",
+      "label": "对象/重力波/斜向传播",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_53",
+      "label": "对象/重力波/次级重力波",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_54",
+      "label": "对象/重力波/湍流耦合",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_55",
+      "label": "对象/重力波/非地形",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_140",
+      "label": "对象/潮汐",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_141",
+      "label": "对象/其他行星",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_133",
+      "label": "对象/其他行星/月球",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_134",
+      "label": "对象/其他行星/水星",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_135",
+      "label": "对象/其他行星/金星",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_136",
+      "label": "对象/其他行星/火星",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_137",
+      "label": "对象/其他行星/火星/行星际-电离层耦合",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_142",
+      "label": "对象/其他行星/火星/逃逸",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_143",
+      "label": "对象/其他行星/木星",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_144",
+      "label": "对象/其他行星/土星",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_145",
+      "label": "对象/其他行星/天王星",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_146",
+      "label": "对象/其他行星/海王星",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_147",
+      "label": "对象/其他行星/行星综合",
+      "category": "research_object"
+    },
+    {
+      "id": "alfven",
+      "label": "对象/Alfven波",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_153",
+      "label": "对象/中间层",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_154",
+      "label": "对象/动力学过程",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_155",
+      "label": "对象/周期扰动",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_156",
+      "label": "对象/地磁",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_157",
+      "label": "对象/环电流",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_158",
+      "label": "对象/电子沉降",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_159",
+      "label": "对象/等离子体层",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_160",
+      "label": "对象/粒子注入",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_161",
+      "label": "对象/逃逸层",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_148",
+      "label": "对象/逃逸层/温度",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_163",
+      "label": "对象/太阳风",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_149",
+      "label": "对象/太阳风/动压",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_150",
+      "label": "对象/太阳风/高速流",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_166",
+      "label": "对象/行星际激波",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_23",
+      "label": "对象/场论",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_25",
+      "label": "对象/行星空间环境",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_27",
+      "label": "对象/太阳",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_28",
+      "label": "对象/太阳/日冕",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_29",
+      "label": "对象/太阳/活动区",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_30",
+      "label": "对象/太阳/冕洞",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_31",
+      "label": "对象/太阳/日球层",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_32",
+      "label": "对象/太阳/色球",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_33",
+      "label": "对象/高能粒子",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_34",
+      "label": "对象/高能粒子/电子",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_47",
+      "label": "对象/高能粒子/质子",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_35",
+      "label": "对象/波粒相互作用",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_36",
+      "label": "对象/波粒相互作用/合声波",
+      "category": "research_object"
+    },
+    {
+      "id": "tds",
+      "label": "对象/波粒相互作用/TDS",
+      "category": "research_object"
+    },
+    {
+      "id": "ulf",
+      "label": "对象/波粒相互作用/ULF波",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_41",
+      "label": "对象/波粒相互作用/非线性散射",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_37",
+      "label": "对象/相对论电子",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_38",
+      "label": "对象/波动",
+      "category": "research_object"
+    },
+    {
+      "id": "emic",
+      "label": "对象/波动/EMIC波",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_39",
+      "label": "对象/波动/声重力波",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_40",
+      "label": "对象/波动/离子回旋波",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_42",
+      "label": "对象/速度分布",
+      "category": "research_object"
+    },
+    {
+      "id": "maxwell",
+      "label": "对象/速度分布/Maxwell",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_43",
+      "label": "对象/速度分布/壳分布",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_44",
+      "label": "对象/速度分布/环分布",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_45",
+      "label": "对象/速度分布/锤头型",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_46",
+      "label": "对象/速度分布/非麦克斯韦",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_48",
+      "label": "对象/气辉",
+      "category": "research_object"
+    },
+    {
+      "id": "oh",
+      "label": "对象/气辉/OH",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_56",
+      "label": "对象/重离子",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_57",
+      "label": "对象/重离子/电荷态",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_58",
+      "label": "对象/长期变化",
+      "category": "research_object"
+    },
+    {
+      "id": "tag_67",
+      "label": "对象/外逸层",
+      "category": "research_object"
+    },
+    {
+      "id": "tag",
+      "label": "事件",
+      "category": "event_driver"
+    },
+    {
+      "id": "sep",
+      "label": "事件/SEP",
+      "category": "event_driver"
+    },
+    {
+      "id": "spacex",
+      "label": "事件/SpaceX事件",
+      "category": "event_driver"
+    },
+    {
+      "id": "tag_2",
+      "label": "事件/太空台风",
+      "category": "event_driver"
+    },
+    {
+      "id": "tag_3",
+      "label": "事件/磁暴",
+      "category": "event_driver"
+    },
+    {
+      "id": "tag_151",
+      "label": "事件/磁暴/小磁暴",
+      "category": "event_driver"
+    },
+    {
+      "id": "tag_152",
+      "label": "事件/磁暴/急始",
+      "category": "event_driver"
+    },
+    {
+      "id": "tag_162",
+      "label": "事件/磁暴/恢复相",
+      "category": "event_driver"
+    },
+    {
+      "id": "tag_164",
+      "label": "事件/磁暴/扰动发电机",
+      "category": "event_driver"
+    },
+    {
+      "id": "tag_165",
+      "label": "事件/磁暴/穿透电场",
+      "category": "event_driver"
+    },
+    {
+      "id": "cir",
+      "label": "事件/磁暴/CIR",
+      "category": "event_driver"
+    },
+    {
+      "id": "cme",
+      "label": "事件/磁暴/CME",
+      "category": "event_driver"
+    },
+    {
+      "id": "tag_69",
+      "label": "事件/磁暴/正暴",
+      "category": "event_driver"
+    },
+    {
+      "id": "tag_70",
+      "label": "事件/磁暴/负暴",
+      "category": "event_driver"
+    },
+    {
+      "id": "hildcaas",
+      "label": "事件/HILDCAAs",
+      "category": "event_driver"
     },
     {
       "id": "ssw",
-      "label": "SSW",
-      "category": "event_driver",
-      "patterns": [
-        "\\bssw\\b",
-        "sudden stratospheric warming",
-        "sudden stratospheric warmings"
-      ]
+      "label": "事件/SSW",
+      "category": "event_driver"
     },
     {
-      "id": "substorm",
-      "label": "亚暴",
-      "category": "event_driver",
-      "patterns": [
-        "substorm",
-        "substorms",
-        "亚暴"
-      ],
-      "inference_scope": "title"
+      "id": "tag_13",
+      "label": "事件/亚暴",
+      "category": "event_driver"
     },
     {
-      "id": "magnetic_reconnection",
-      "label": "磁重联",
-      "category": "event_driver",
-      "patterns": [
-        "magnetic reconnection",
-        "reconnection",
-        "磁重联"
-      ]
+      "id": "tag_14",
+      "label": "事件/磁重联",
+      "category": "event_driver"
+    },
+    {
+      "id": "tag_26",
+      "label": "事件/磁云",
+      "category": "event_driver"
+    },
+    {
+      "id": "tag_59",
+      "label": "事件/太阳耀斑",
+      "category": "event_driver"
+    },
+    {
+      "id": "icme",
+      "label": "事件/ICME",
+      "category": "event_driver"
+    },
+    {
+      "id": "tag_15",
+      "label": "指数",
+      "category": "index_control"
     },
     {
       "id": "imf",
       "label": "指数/IMF",
-      "category": "index_control",
-      "patterns": [
-        "\\bimf\\b",
-        "interplanetary magnetic field"
-      ]
+      "category": "index_control"
     },
     {
       "id": "imf_bx",
       "label": "指数/IMF/Bx",
-      "category": "index_control",
-      "patterns": [
-        "\\bbx\\b",
-        "imf bx"
-      ]
+      "category": "index_control"
     },
     {
       "id": "imf_by",
       "label": "指数/IMF/By",
-      "category": "index_control",
-      "patterns": [
-        "imf by",
-        "\\bimf\\s*by\\b",
-        "\\bb_y\\b",
-        "\\bby component\\b"
-      ]
+      "category": "index_control"
     },
     {
       "id": "imf_bz",
       "label": "指数/IMF/Bz",
-      "category": "index_control",
-      "patterns": [
-        "\\bbz\\b",
-        "imf bz"
-      ]
+      "category": "index_control"
     },
     {
       "id": "dst",
       "label": "指数/Dst",
-      "category": "index_control",
-      "patterns": [
-        "\\bdst\\b"
-      ]
+      "category": "index_control"
     },
     {
-      "id": "symh",
+      "id": "sym_h",
       "label": "指数/SYM-H",
-      "category": "index_control",
-      "patterns": [
-        "sym-h",
-        "\\bsymh\\b"
-      ]
+      "category": "index_control"
     },
     {
       "id": "ae",
       "label": "指数/AE",
-      "category": "index_control",
-      "patterns": [
-        "\\bae\\b"
-      ]
+      "category": "index_control"
     },
     {
       "id": "f107",
       "label": "指数/F107",
-      "category": "index_control",
-      "patterns": [
-        "f10.7",
-        "\\bf107\\b"
-      ]
+      "category": "index_control"
     },
     {
       "id": "roti",
       "label": "指数/ROTI",
-      "category": "index_control",
-      "aliases": [
-        "GNSS/ROTI"
-      ],
-      "patterns": [
-        "\\broti\\b",
-        "roti data",
-        "gnss/?roti"
-      ]
+      "category": "index_control"
+    },
+    {
+      "id": "al",
+      "label": "指数/AL",
+      "category": "index_control"
+    },
+    {
+      "id": "au",
+      "label": "指数/AU",
+      "category": "index_control"
+    },
+    {
+      "id": "ap",
+      "label": "指数/Ap",
+      "category": "index_control"
+    },
+    {
+      "id": "mgii",
+      "label": "指数/MgII",
+      "category": "index_control"
+    },
+    {
+      "id": "pcn",
+      "label": "指数/PCN",
+      "category": "index_control"
+    },
+    {
+      "id": "cpcp",
+      "label": "指数/CPCP",
+      "category": "index_control"
+    },
+    {
+      "id": "hp",
+      "label": "指数/HP",
+      "category": "index_control"
+    },
+    {
+      "id": "smr",
+      "label": "指数/SMR",
+      "category": "index_control"
+    },
+    {
+      "id": "euv",
+      "label": "指数/EUV",
+      "category": "index_control"
+    },
+    {
+      "id": "tag_6",
+      "label": "仪器",
+      "category": "instrument_data"
     },
     {
       "id": "fpi",
@@ -778,6 +977,20 @@
       ]
     },
     {
+      "id": "gnss",
+      "label": "仪器/GNSS",
+      "category": "instrument_data",
+      "aliases": [
+        "GNSS"
+      ],
+      "patterns": [
+        "\\bgnss\\b",
+        "\\bgps\\b",
+        "\\bbeidou\\b",
+        "\\bgalileo\\b"
+      ]
+    },
+    {
       "id": "champ",
       "label": "仪器/CHAMP",
       "category": "instrument_data",
@@ -788,6 +1001,11 @@
       "patterns": [
         "\\bchamp\\b"
       ]
+    },
+    {
+      "id": "swarm",
+      "label": "仪器/Swarm",
+      "category": "instrument_data"
     },
     {
       "id": "grace",
@@ -813,20 +1031,6 @@
       "patterns": [
         "\\bgrace-fo\\b",
         "grace follow-on"
-      ]
-    },
-    {
-      "id": "gnss",
-      "label": "仪器/GNSS",
-      "category": "instrument_data",
-      "aliases": [
-        "GNSS"
-      ],
-      "patterns": [
-        "\\bgnss\\b",
-        "\\bgps\\b",
-        "\\bbeidou\\b",
-        "\\bgalileo\\b"
       ]
     },
     {
@@ -912,16 +1116,14 @@
       ]
     },
     {
-      "id": "radar",
-      "label": "仪器/雷达",
-      "category": "instrument_data",
-      "aliases": [
-        "雷达"
-      ],
-      "patterns": [
-        "\\bradar\\b",
-        "radars"
-      ]
+      "id": "tag_71",
+      "label": "仪器/气辉仪",
+      "category": "instrument_data"
+    },
+    {
+      "id": "tag_72",
+      "label": "仪器/流星雷达",
+      "category": "instrument_data"
     },
     {
       "id": "auroral_imager",
@@ -983,17 +1185,14 @@
       ]
     },
     {
-      "id": "radio_s_band",
+      "id": "tag_7",
+      "label": "仪器/射电",
+      "category": "instrument_data"
+    },
+    {
+      "id": "s_2",
       "label": "仪器/射电/S波段",
-      "category": "instrument_data",
-      "aliases": [
-        "射电/S波段"
-      ],
-      "patterns": [
-        "s-band",
-        "s波段",
-        "频段/?s波段"
-      ]
+      "category": "instrument_data"
     },
     {
       "id": "lunar_gravity_model",
@@ -1021,98 +1220,404 @@
       ]
     },
     {
-      "id": "machine_learning",
-      "label": "建模/机器学习",
-      "category": "model_method",
-      "patterns": [
-        "machine learning",
-        "机器学习"
-      ]
+      "id": "ace",
+      "label": "仪器/ACE",
+      "category": "instrument_data"
     },
     {
-      "id": "deep_learning",
-      "label": "深度学习",
-      "category": "model_method",
-      "aliases": [
-        "模型/深度学习",
-        "模型/残差网络",
-        "残差网络"
-      ],
-      "patterns": [
-        "deep learning",
-        "深度学习",
-        "residual network",
-        "\\bresnet\\b"
-      ]
+      "id": "apod",
+      "label": "仪器/APOD",
+      "category": "instrument_data"
     },
     {
-      "id": "glm",
-      "label": "建模/统计模型/GLM",
-      "category": "model_method",
-      "aliases": [
-        "GLM"
-      ],
-      "patterns": [
-        "generalized linear model",
-        "广义线性模型",
-        "\\bglm\\b"
-      ]
+      "id": "chn_sat",
+      "label": "仪器/CHN-sat",
+      "category": "instrument_data"
     },
     {
-      "id": "numerical_modeling",
-      "label": "建模/数值模拟",
-      "category": "model_method",
-      "aliases": [
-        "模式模拟"
-      ],
-      "patterns": [
-        "first-principles",
-        "first principles",
-        "physics-based model",
-        "general circulation model",
-        "mhd model",
-        "\\bgitm\\b",
-        "m-gitm",
-        "\\btie-gcm\\b",
-        "\\bwaccm-x\\b",
-        "\\bctipe\\b",
-        "\\bswmf\\b",
-        "\\bsami2\\b",
-        "\\bsami3\\b",
-        "\\bgaia\\b",
-        "\\bbats-r-us\\b"
-      ]
+      "id": "cosmic_2",
+      "label": "仪器/COSMIC-2",
+      "category": "instrument_data"
     },
     {
-      "id": "empirical_modeling",
-      "label": "建模/经验模型",
-      "category": "model_method",
-      "aliases": [
-        "经验模式",
-        "经验模型"
-      ],
-      "patterns": [
-        "empirical model",
-        "\\bmsis\\b",
-        "\\bnrlmsise\\b",
-        "\\bhasdm\\b",
-        "\\bhwm\\b",
-        "\\bjb2008\\b",
-        "\\biri\\b"
-      ]
+      "id": "de_1",
+      "label": "仪器/DE-1",
+      "category": "instrument_data"
     },
     {
-      "id": "orbit_reconstruction",
-      "label": "建模/轨道重建",
-      "category": "model_method",
-      "aliases": [
-        "轨道/重建"
-      ],
-      "patterns": [
-        "orbit reconstruction",
-        "轨道重建",
-        "orbit determination"
-      ]
+      "id": "de_2",
+      "label": "仪器/DE-2",
+      "category": "instrument_data"
+    },
+    {
+      "id": "eiscat",
+      "label": "仪器/EISCAT",
+      "category": "instrument_data"
+    },
+    {
+      "id": "formosat",
+      "label": "仪器/Formosat",
+      "category": "instrument_data"
+    },
+    {
+      "id": "goce",
+      "label": "仪器/GOCE",
+      "category": "instrument_data"
+    },
+    {
+      "id": "gold",
+      "label": "仪器/GOLD",
+      "category": "instrument_data"
+    },
+    {
+      "id": "guvi",
+      "label": "仪器/GUVI",
+      "category": "instrument_data"
+    },
+    {
+      "id": "geotail",
+      "label": "仪器/Geotail",
+      "category": "instrument_data"
+    },
+    {
+      "id": "isr",
+      "label": "仪器/ISR",
+      "category": "instrument_data"
+    },
+    {
+      "id": "interball_1",
+      "label": "仪器/Interball-1",
+      "category": "instrument_data"
+    },
+    {
+      "id": "maven",
+      "label": "仪器/MAVEN",
+      "category": "instrument_data"
+    },
+    {
+      "id": "magion4",
+      "label": "仪器/Magion4",
+      "category": "instrument_data"
+    },
+    {
+      "id": "saber",
+      "label": "仪器/SABER",
+      "category": "instrument_data"
+    },
+    {
+      "id": "ssusi",
+      "label": "仪器/SSUSI",
+      "category": "instrument_data"
+    },
+    {
+      "id": "supermag",
+      "label": "仪器/SuperMAG",
+      "category": "instrument_data"
+    },
+    {
+      "id": "themis_a_e",
+      "label": "仪器/THEMIS_A-E",
+      "category": "instrument_data"
+    },
+    {
+      "id": "timed",
+      "label": "仪器/TIMED",
+      "category": "instrument_data"
+    },
+    {
+      "id": "tag_68",
+      "label": "仪器/中国空间站",
+      "category": "instrument_data"
+    },
+    {
+      "id": "parkersolarprobe",
+      "label": "仪器/ParkerSolarProbe",
+      "category": "instrument_data"
+    },
+    {
+      "id": "arase",
+      "label": "仪器/Arase",
+      "category": "instrument_data"
+    },
+    {
+      "id": "juno",
+      "label": "仪器/Juno",
+      "category": "instrument_data"
+    },
+    {
+      "id": "solarorbiter",
+      "label": "仪器/SolarOrbiter",
+      "category": "instrument_data"
+    },
+    {
+      "id": "psp",
+      "label": "仪器/PSP",
+      "category": "instrument_data"
+    },
+    {
+      "id": "fy_4b",
+      "label": "仪器/FY-4B",
+      "category": "instrument_data"
+    },
+    {
+      "id": "goes",
+      "label": "仪器/GOES",
+      "category": "instrument_data"
+    },
+    {
+      "id": "tag_60",
+      "label": "仪器/地磁仪",
+      "category": "instrument_data"
+    },
+    {
+      "id": "tag_61",
+      "label": "仪器/探空火箭",
+      "category": "instrument_data"
+    },
+    {
+      "id": "soho",
+      "label": "仪器/SOHO",
+      "category": "instrument_data"
+    },
+    {
+      "id": "starlink",
+      "label": "仪器/Starlink",
+      "category": "instrument_data"
+    },
+    {
+      "id": "tag_62",
+      "label": "仪器/天问一号",
+      "category": "instrument_data"
+    },
+    {
+      "id": "tag_167",
+      "label": "数据",
+      "category": "instrument_data"
+    },
+    {
+      "id": "tag_168",
+      "label": "数据/数据对比",
+      "category": "instrument_data"
+    },
+    {
+      "id": "tle",
+      "label": "数据/TLE",
+      "category": "instrument_data"
+    },
+    {
+      "id": "tag_169",
+      "label": "方法",
+      "category": "model_method"
+    },
+    {
+      "id": "tag_170",
+      "label": "方法/可解释模型",
+      "category": "model_method"
+    },
+    {
+      "id": "shap_2",
+      "label": "方法/SHAP",
+      "category": "model_method"
+    },
+    {
+      "id": "tag_171",
+      "label": "方法/数据同化",
+      "category": "model_method"
+    },
+    {
+      "id": "tag_172",
+      "label": "方法/数值模拟",
+      "category": "model_method"
+    },
+    {
+      "id": "tag_174",
+      "label": "方法/统计研究",
+      "category": "model_method"
+    },
+    {
+      "id": "tag_175",
+      "label": "方法/误差估计",
+      "category": "model_method"
+    },
+    {
+      "id": "glm_2",
+      "label": "方法/GLM",
+      "category": "model_method"
+    },
+    {
+      "id": "tag_176",
+      "label": "方法/轨道重建",
+      "category": "model_method"
+    },
+    {
+      "id": "tag_177",
+      "label": "方法/建模",
+      "category": "model_method"
+    },
+    {
+      "id": "tag_178",
+      "label": "方法/建模/经验模型",
+      "category": "model_method"
+    },
+    {
+      "id": "tag_179",
+      "label": "方法/建模/理论模型",
+      "category": "model_method"
+    },
+    {
+      "id": "tag_180",
+      "label": "方法/建模/机器学习",
+      "category": "model_method"
+    },
+    {
+      "id": "lstm_2",
+      "label": "方法/建模/机器学习/LSTM",
+      "category": "model_method"
+    },
+    {
+      "id": "pinn",
+      "label": "方法/建模/机器学习/PINN",
+      "category": "model_method"
+    },
+    {
+      "id": "tag_63",
+      "label": "方法/图像处理",
+      "category": "model_method"
+    },
+    {
+      "id": "tag_64",
+      "label": "方法/图像处理/图像分割",
+      "category": "model_method"
+    },
+    {
+      "id": "tag_65",
+      "label": "方法/图像处理/目标检测",
+      "category": "model_method"
+    },
+    {
+      "id": "tag_74",
+      "label": "模型",
+      "category": "model_method"
+    },
+    {
+      "id": "amie",
+      "label": "模型/AMIE",
+      "category": "model_method"
+    },
+    {
+      "id": "ampere",
+      "label": "模型/AMPERE",
+      "category": "model_method"
+    },
+    {
+      "id": "cmit",
+      "label": "模型/CMIT",
+      "category": "model_method"
+    },
+    {
+      "id": "ctipe",
+      "label": "模型/CTIPe",
+      "category": "model_method"
+    },
+    {
+      "id": "dtm",
+      "label": "模型/DTM",
+      "category": "model_method"
+    },
+    {
+      "id": "gitm",
+      "label": "模型/GITM",
+      "category": "model_method"
+    },
+    {
+      "id": "hasdm",
+      "label": "模型/HASDM",
+      "category": "model_method"
+    },
+    {
+      "id": "ipwm",
+      "label": "模型/IPWM",
+      "category": "model_method"
+    },
+    {
+      "id": "jb2008",
+      "label": "模型/JB2008",
+      "category": "model_method"
+    },
+    {
+      "id": "lfm",
+      "label": "模型/LFM",
+      "category": "model_method"
+    },
+    {
+      "id": "mage",
+      "label": "模型/MAGE",
+      "category": "model_method"
+    },
+    {
+      "id": "mix",
+      "label": "模型/MIX",
+      "category": "model_method"
+    },
+    {
+      "id": "msis",
+      "label": "模型/MSIS",
+      "category": "model_method"
+    },
+    {
+      "id": "tag_181",
+      "label": "模型/修正",
+      "category": "model_method"
+    },
+    {
+      "id": "ppmlr_mhd",
+      "label": "模型/PPMLR-MHD",
+      "category": "model_method"
+    },
+    {
+      "id": "tdim",
+      "label": "模型/TDIM",
+      "category": "model_method"
+    },
+    {
+      "id": "tiegcm",
+      "label": "模型/TIEGCM",
+      "category": "model_method"
+    },
+    {
+      "id": "timegcm",
+      "label": "模型/TIMEGCM",
+      "category": "model_method"
+    },
+    {
+      "id": "waccm_x",
+      "label": "模型/WACCM-X",
+      "category": "model_method"
+    },
+    {
+      "id": "wam_ipe",
+      "label": "模型/WAM-IPE",
+      "category": "model_method"
+    },
+    {
+      "id": "windmi",
+      "label": "模型/WINDMI",
+      "category": "model_method"
+    },
+    {
+      "id": "weimer",
+      "label": "模型/Weimer",
+      "category": "model_method"
+    },
+    {
+      "id": "tag_16",
+      "label": "工具",
+      "category": "model_method"
+    },
+    {
+      "id": "tag_10",
+      "label": "特征",
+      "category": "result_feature"
     },
     {
       "id": "auroral_intensity",
@@ -1158,6 +1663,11 @@
       ]
     },
     {
+      "id": "tag_83",
+      "label": "特征/昼夜差异",
+      "category": "result_feature"
+    },
+    {
       "id": "dawn_dusk_asymmetry",
       "label": "特征/晨昏不对称性",
       "category": "result_feature",
@@ -1168,57 +1678,124 @@
       ]
     },
     {
-      "id": "equatorial_mass_density_anomaly",
-      "label": "特征/赤道质量密度异常",
-      "category": "result_feature",
-      "aliases": [
-        "赤道/质量密度异常"
-      ],
-      "patterns": [
-        "equatorial mass density anomaly",
-        "equatorial thermosphere anomaly",
-        "赤道质量密度异常",
-        "赤道热层异常"
-      ]
+      "id": "tag_82",
+      "label": "特征/春秋不对称性",
+      "category": "result_feature"
     },
     {
-      "id": "space_weather",
-      "label": "空间天气",
-      "category": "application_impact",
-      "patterns": [
-        "space weather",
-        "空间天气"
-      ]
+      "id": "dzm",
+      "label": "特征/DZM",
+      "category": "result_feature"
     },
     {
-      "id": "satellite_impact",
-      "label": "卫星影响",
-      "category": "application_impact",
-      "aliases": [
-        "卫星/阻力"
-      ],
-      "patterns": [
-        "satellite drag",
-        "satellite impact",
-        "orbital decay",
-        "orbit decay",
-        "轨道环境",
-        "轨道衰减",
-        "卫星影响",
-        "卫星阻力"
-      ]
+      "id": "day_to_day",
+      "label": "特征/Day-to-Day",
+      "category": "result_feature"
     },
     {
-      "id": "operational_forecast",
-      "label": "业务化预报",
-      "category": "application_impact",
-      "patterns": [
-        "operational forecast",
-        "operational forecasting",
-        "forecast system",
-        "业务化预报",
-        "业务化"
-      ]
+      "id": "tag_75",
+      "label": "特征/中小尺度扰动",
+      "category": "result_feature"
+    },
+    {
+      "id": "tag_77",
+      "label": "特征/四波结构",
+      "category": "result_feature"
+    },
+    {
+      "id": "tag_78",
+      "label": "特征/太阳辐射影响",
+      "category": "result_feature"
+    },
+    {
+      "id": "tag_79",
+      "label": "特征/太阳辐射终止线",
+      "category": "result_feature"
+    },
+    {
+      "id": "tag_80",
+      "label": "特征/季节变化",
+      "category": "result_feature"
+    },
+    {
+      "id": "tag_81",
+      "label": "特征/日出终止线",
+      "category": "result_feature"
+    },
+    {
+      "id": "tag_84",
+      "label": "特征/极区热层密度极小值",
+      "category": "result_feature"
+    },
+    {
+      "id": "tag_85",
+      "label": "特征/纬度差异",
+      "category": "result_feature"
+    },
+    {
+      "id": "tag_86",
+      "label": "特征/经度结构",
+      "category": "result_feature"
+    },
+    {
+      "id": "tag_87",
+      "label": "特征/背景影响",
+      "category": "result_feature"
+    },
+    {
+      "id": "tag_88",
+      "label": "特征/高度差异",
+      "category": "result_feature"
+    },
+    {
+      "id": "tag_17",
+      "label": "应用",
+      "category": "application_impact"
+    },
+    {
+      "id": "tag_18",
+      "label": "应用/空间天气",
+      "category": "application_impact"
+    },
+    {
+      "id": "tag_19",
+      "label": "应用/卫星影响",
+      "category": "application_impact"
+    },
+    {
+      "id": "tag_20",
+      "label": "应用/业务化预报",
+      "category": "application_impact"
+    },
+    {
+      "id": "tag_21",
+      "label": "应用/卫星轨道衰减",
+      "category": "application_impact"
+    },
+    {
+      "id": "tag_22",
+      "label": "应用/空间天气影响",
+      "category": "application_impact"
+    },
+    {
+      "id": "tag_24",
+      "label": "应用/预测",
+      "category": "application_impact"
+    },
+    {
+      "id": "tag_66",
+      "label": "应用/基础设施",
+      "category": "application_impact"
+    },
+    {
+      "id": "tag_73",
+      "label": "应用/卫星轨道",
+      "category": "application_impact"
+    },
+    {
+      "id": "tag_11",
+      "label": "信息来源",
+      "category": "status"
     },
     {
       "id": "abstract_only",
@@ -1230,6 +1807,32 @@
       ],
       "patterns": [
         "information source/abstract only"
+      ]
+    },
+    {
+      "id": "metadata_only",
+      "label": "信息来源/仅元数据",
+      "category": "status",
+      "aliases": [
+        "仅元数据",
+        "metadata-only"
+      ],
+      "patterns": [
+        "information source/metadata only"
+      ]
+    },
+    {
+      "id": "gpt_summary_source",
+      "label": "信息来源/GPT总结",
+      "category": "status",
+      "aliases": [
+        "GPT总结",
+        "ChatGPT总结",
+        "chatgpt-web-manual"
+      ],
+      "patterns": [
+        "information source/gpt summary",
+        "chatgpt_web_manual"
       ]
     },
     {
@@ -1257,6 +1860,16 @@
       "patterns": [
         "^重要$"
       ]
+    },
+    {
+      "id": "tag_92",
+      "label": "展望",
+      "category": "status"
+    },
+    {
+      "id": "tag_93",
+      "label": "科学思考",
+      "category": "status"
     }
   ],
   "paper_examples": [

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .article_summary_markdown import sanitize_filename
 from .config import chatgpt_web_manual_responses_root, load_runtime_config
+from .config_ui_report_jobs import execute_report_action, start_report_action
 from .config_ui_support import (
     create_manual_request_from_ui,
     import_manual_response_and_generate,
@@ -15,47 +16,27 @@ from .deep_reads import run_deep_read
 from .pipeline import ScienceMonitor
 
 
-def _run_report_action(project: Path, form: dict[str, list[str]]) -> dict[str, str]:
-    report_date = _date_field(form, "report_date")
-    window_days = _int_field(form, "report_window_days_run", minimum=1)
-    run_update = _bool_field(form, "run_update_before_report")
-    hydrate = _bool_field(form, "report_update_hydrate")
-    max_per_source = _int_field(form, "report_max_per_source_run", minimum=1)
-    update_days_back = _int_field(form, "report_update_days_back", minimum=1)
-    source_ids = _source_ids_field(form, "report_source_ids")
+def _start_report_action(project: Path, form: dict[str, list[str]]) -> dict[str, str]:
+    params = _parse_report_form(form)
+    return start_report_action(project, params)
 
-    monitor = ScienceMonitor(project)
-    try:
-        if run_update:
-            update_result, report_path, stats = monitor.run_daily(
-                report_date=report_date,
-                days_back=update_days_back,
-                max_per_source=max_per_source,
-                hydrate=hydrate,
-                source_ids=source_ids or None,
-            )
-            message = (
-                f"已完成更新并生成周报。候选 {update_result.fetched_count} 条，保留 {update_result.kept_count} 篇；"
-                f"周报覆盖 {stats.get('paper_count', 0)} 篇论文、{stats.get('journal_count', 0)} 本期刊。"
-            )
-            if update_result.error_count:
-                message += f" 另有 {update_result.error_count} 个来源报错，请再检查日志。"
-        else:
-            report_path, stats = monitor.generate_windowed_report(report_date=report_date, window_days=window_days)
-            message = (
-                f"已基于当前数据库重建周报，窗口 {window_days} 天；"
-                f"覆盖 {stats.get('paper_count', 0)} 篇论文、{stats.get('journal_count', 0)} 本期刊。"
-            )
-            if source_ids:
-                message += " 注意：未勾选“先更新再生成”时，限定期刊 source_ids 不生效。"
-        return {
-            "kind": "ok",
-            "title": "周报生成完成",
-            "message": message,
-            "path": str(report_path),
-        }
-    finally:
-        monitor.close()
+
+def _run_report_action(project: Path, form: dict[str, list[str]]) -> dict[str, str]:
+    params = _parse_report_form(form)
+    return execute_report_action(project, params)
+
+
+def _parse_report_form(form: dict[str, list[str]]) -> dict[str, object]:
+    return {
+        "report_date": _date_field(form, "report_date"),
+        "window_days": _int_field(form, "report_window_days_run", minimum=1),
+        "run_update": _bool_field(form, "run_update_before_report"),
+        "hydrate": _bool_field(form, "report_update_hydrate"),
+        "reuse_existing_summaries": _bool_field(form, "reuse_existing_summaries"),
+        "max_per_source": _int_field(form, "report_max_per_source_run", minimum=1),
+        "update_days_back": _int_field(form, "report_update_days_back", minimum=1),
+        "source_ids": _source_ids_field(form, "report_source_ids"),
+    }
 
 
 def _run_deep_read_action(

@@ -21,6 +21,8 @@ from sciencemonitor.golden_eval import GoldenEvalCaseResult
 from sciencemonitor.harness_audit import HarnessAuditReport
 from sciencemonitor.harness import HarnessCheckReport
 from sciencemonitor.maintenance import SubprocessCheckResult, run_maintenance_cycle
+from sciencemonitor.tag_governance_review import TagGovernanceReviewReport
+from sciencemonitor.tag_review import TagReviewAuditReport
 
 
 def _entropy_report(passed: bool) -> EntropyCheckReport:
@@ -48,6 +50,8 @@ def _harness_report(passed: bool) -> HarnessCheckReport:
             issues=[],
         ),
         docs_review_report=DocsReviewReport(passed=True, issues=[]),
+        tag_governance_report=TagGovernanceReviewReport(passed=True, issues=[]),
+        tag_output_review_report=TagReviewAuditReport(passed=True, scanned_files=0, issues=[]),
         config_ui_review_report=ConfigUIReviewReport(passed=True, issues=[]),
         config_ui_functional_review_report=ConfigUIFunctionalReviewReport(passed=True, issues=[]),
         config_ui_visual_review_report=ConfigUIVisualReviewReport(passed=True, issues=[], artifacts=[]),

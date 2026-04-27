@@ -152,6 +152,39 @@ class ArticleFetchTest(unittest.TestCase):
             self.assertIsNotNone(cached)
             self.assertEqual(cached["scientific_text"], "Full text from local PDF with methods and results.")
 
+    def test_resolve_summary_source_material_ignores_redirect_page_title(self) -> None:
+        html = """
+        <html>
+          <head>
+            <title>Redirecting</title>
+          </head>
+          <body></body>
+        </html>
+        """
+        material = resolve_summary_source_material(
+            doi="10.1000/example",
+            url="https://doi.org/10.1000/example",
+            title="Stored Title",
+            journal="JGR: Space Physics",
+            abstract="",
+            authors=[],
+            published_date="2026-03-14",
+            http=FakeHTTPClient({"https://doi.org/10.1000/example": html}),
+            crossref=FakeCrossrefClient(
+                by_doi={
+                    "doi": "10.1000/example",
+                    "title": "Crossref Title",
+                    "journal": "JGR: Space Physics",
+                    "url": "https://example.org/landing",
+                    "authors": ["A Author"],
+                    "published_date": "2026-03-14",
+                    "abstract": "",
+                    "pdf_urls": [],
+                }
+            ),
+        )
+        self.assertEqual(material.title, "Crossref Title")
+
     def test_compact_pdf_text_for_summary_prefers_abstract_and_plain_language_summary(self) -> None:
         raw_text = """
         Cover page and author block.

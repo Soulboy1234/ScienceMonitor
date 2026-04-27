@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 import json
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -96,6 +97,22 @@ class DoctorTest(unittest.TestCase):
 
             self.assertFalse(any("PATH 首项不是 .venv/bin" in item for item in report["warnings"]))
             self.assertFalse(any("当前解释器不是项目 .venv/bin/python" in item for item in report["warnings"]))
+
+    def test_warns_when_ollama_provider_is_selected_but_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            _write_doctor_project(root)
+            analysis_path = root / "config" / "analysis.json"
+            analysis = json.loads(analysis_path.read_text(encoding="utf-8"))
+            analysis["provider"] = "ollama_api"
+            analysis_path.write_text(json.dumps(analysis, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            with mock.patch("sciencemonitor.llm.check_ollama_available", return_value=False):
+                report = run_doctor(root, strict_runtime=True)
+
+            self.assertEqual(report["provider_status"]["provider"], "ollama_api")
+            self.assertFalse(report["provider_status"]["ollama_available"])
+            self.assertTrue(any("Ollama" in item for item in report["warnings"]))
 
 
 if __name__ == "__main__":

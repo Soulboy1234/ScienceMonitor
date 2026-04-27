@@ -17,11 +17,13 @@
 - 调研默认时间范围、每个来源抓取上限等由下方 `config/runtime.json` 同步块控制
 - 输出目录由下方 `config/paths.json` 同步块控制
 - 本机私人输出路径可写到 `config/local.paths.json`；该文件不会上传 GitHub，且优先级高于 `config/paths.json`
+- 默认不会删除 `output_root` 下的输出文件；如确需允许删除，需在 `config/runtime.json` 同步块中显式开启 `safety.allow_output_deletions`
+- `codex_local.sandbox` 只约束 Codex 子进程，不等于项目对输出目录的文件保护范围
 
 ## 你通常会调的设置
 
-- 切换 LLM 模式：修改 `provider` 为 `codex_local`、`openai_api` 或 `openrouter_api`；人工中转不在这里切换
-- 切换模型：修改 `codex_local.model`、`openai_api.model` 或 `openrouter_api.model`
+- 切换 LLM 模式：修改 `provider` 为 `codex_local`、`openai_api`、`openrouter_api` 或 `ollama_api`；人工中转不在这里切换
+- 切换模型：修改 `codex_local.model`、`openai_api.model`、`openrouter_api.model` 或 `ollama_api.model`
 - 调整 Codex 推理强度：修改 `article_summaries.reasoning_effort`、`report.reasoning_effort`、`deep_reads.reasoning_effort`
 - 配置 API key：优先使用环境变量；也可写入 `openai_api.api_key` 或 `openrouter_api.api_key`
 - 调整默认调研窗口：修改 `cli_defaults.*_days_back` 或 `cli_defaults.*_window_days`
@@ -36,6 +38,7 @@
 - 如果你想在不同电脑上得到更稳定一致的结果，建议直接把 `codex_local.model` 写死。
 - `openai_api` 适合直接使用 OpenAI Responses API。
 - `openrouter_api` 适合通过 OpenRouter 接入其他模型 API。
+- `ollama_api` 适合调用本机 Ollama 服务，默认模型为 `gemma4:26b`。
 
 ## Sync: config/runtime.json
 ```json
@@ -57,6 +60,9 @@
   "deep_read": {
     "search_full_text_when_pdf_missing": true,
     "pdf_page_limit": 40
+  },
+  "safety": {
+    "allow_output_deletions": true
   }
 }
 ```
@@ -72,6 +78,7 @@
 - `update_hydrate`：抓取时是否默认补抓 DOI 落地页摘要
 - `deep_read.search_full_text_when_pdf_missing`：没给 PDF 时是否自动按 DOI/题目找全文
 - `deep_read.pdf_page_limit`：深度解读最多读取 PDF 的前多少页
+- `safety.allow_output_deletions`：是否允许程序删除 `output_root` 下的文件；默认 `false`，改成 `true` 视为你已审核这类删除动作
 
 ## Sync: config/analysis.json
 ```json
@@ -108,18 +115,24 @@
     "app_name": "ScienceMonitor",
     "timeout_seconds": 120
   },
+  "ollama_api": {
+    "model": "gemma4:26b",
+    "base_url": "http://127.0.0.1:11434/api/chat",
+    "timeout_seconds": 300
+  },
   "chatgpt_web_manual": {}
 }
 ```
 
 说明：
-- `provider`：当前自动分析后端。常规设置只切 `codex_local`、`openai_api`、`openrouter_api`；底层配置仍兼容 `chatgpt_web_manual`。
+- `provider`：当前自动分析后端。常规设置只切 `codex_local`、`openai_api`、`openrouter_api`、`ollama_api`；底层配置仍兼容 `chatgpt_web_manual`。
 - `article_summaries.reasoning_effort`：单篇总结使用 codex_local 时的推理强度
 - `report.reasoning_effort`：周报使用 codex_local 时的推理强度
 - `deep_reads.reasoning_effort`：深度解读使用 codex_local 时的推理强度
 - `codex_local.executable`：手动指定 `codex` 可执行文件路径
 - `openai_api.*`：OpenAI Responses API 相关配置
 - `openrouter_api.*`：OpenRouter chat completions 兼容接口配置
+- `ollama_api.*`：Ollama 本地 chat API 配置；默认请求 `http://127.0.0.1:11434/api/chat`
 - `chatgpt_web_manual`：人工中转模式。底层仍支持，但常规使用建议进入“人工中转”页面或命令工作流生成请求包并导入响应
 
 ## Sync: config/paths.json
@@ -177,11 +190,21 @@
 - `provider`：`chatgpt_web_manual`（仅在需要直接改底层配置时使用）
 - 更推荐直接进入“人工中转”页面或运行相关命令，处理 `data/chatgpt_web_manual/requests/` 下的请求包，再用 `manual-llm-import` 导入响应
 
+### 配置档 F：Ollama 本地模型
+
+适合使用本机 Ollama 降低外部 API 和 Codex 消耗。
+
+- `provider`：`ollama_api`
+- `ollama_api.model`：`gemma4:26b`
+- `ollama_api.base_url`：`http://127.0.0.1:11434/api/chat`
+- `ollama_api.timeout_seconds`：`300`
+
 ## 建议的模型策略
 
 - `codex_local.model` 留空：使用本机 Codex 默认模型，最省心，但不同机器上不一定完全一致。
 - `codex_local.model` 写死：结果更稳定，更适合长期运行和多机部署。
 - `openai_api.model`：适合需要跨机器一致、且明确控制外部接口模型的情况。
+- `ollama_api.model`：适合本机离线或低成本运行；质量和 JSON 稳定性取决于本机模型能力。
 - `chatgpt_web_manual`：适合把高消耗分析分流到 ChatGPT 网页人工处理中转。它更像一条人工工作流，而不是常规设置页里的自动 provider。
 
 ## 其他可配置文件

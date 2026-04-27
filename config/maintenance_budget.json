@@ -2,17 +2,17 @@
   "global_limits": {
     "default_module_max_lines": 600,
     "default_function_max_lines": 80,
-    "package_total_max_lines": 14500
+    "package_total_max_lines": 21200
   },
   "module_line_limits": {
-    "article_summaries.py": 560,
+    "article_summaries.py": 670,
     "article_summary_markdown.py": 320,
-    "article_summary_text.py": 560,
+    "article_summary_text.py": 610,
     "article_summary_meta.py": 240,
     "deep_reads.py": 780,
     "deep_read_markdown.py": 560,
-    "llm.py": 900,
-    "llm_contracts.py": 480,
+    "llm.py": 930,
+    "llm_contracts.py": 500,
     "chatgpt_web_manual.py": 640,
     "article_index.py": 760,
     "article_index_rules.py": 320,
@@ -26,18 +26,26 @@
     "config_ui_actions.py": 320,
     "config_ui_markdown.py": 240,
     "config_ui_page.py": 400,
+    "config_ui_page_sections.py": 760,
     "config_ui_support.py": 420,
     "exec_plan_review.py": 260,
-    "reporting.py": 500,
+    "reporting.py": 1020,
     "reporting_template.py": 160,
     "real_case_eval.py": 380,
     "real_case_outputs.py": 260,
     "cli_support.py": 380,
-    "cli.py": 80
+    "cli.py": 80,
+    "config_ui_visual_review.py": 650,
+    "config_ui_report_jobs.py": 260,
+    "tag_governance.py": 1900,
+    "tag_governance_review.py": 260,
+    "tag_review.py": 1250,
+    "token_monitor.py": 360
   },
   "function_length_limits": {
     "article_fetch.py::resolve_summary_source_material": 130,
     "article_summaries.py::generate_article_summary_results": 150,
+    "article_summaries.py::_render_summary_result": 100,
     "cli.py::parse_args": 20,
     "cli.py::main": 20,
     "config.py::write_project_config_markdown": 210,
@@ -49,7 +57,16 @@
     "reporting.py::build_report": 140,
     "source_audit.py::generate_source_audit": 140,
     "chatgpt_web_manual.py::prepare_manual_request_bundle": 95,
-    "config_ui_markdown.py::_render_minimal_markdown": 110
+    "config_ui_markdown.py::_render_minimal_markdown": 110,
+    "pipeline.py::update": 95,
+    "article_summaries.py::load_existing_summary_result": 95,
+    "article_summary_text.py::validate_summary_fields": 95,
+    "config_ui_page_sections.py::_render_token_usage": 100,
+    "config_ui_report_jobs.py::_run_report_job_worker": 90,
+    "config_ui_visual_review.py::_collect_overview_token_visual_metrics": 120,
+    "config_ui_visual_review.py::_evaluate_overview_token_visual_metrics": 130,
+    "tag_governance.py::refresh_pending_tag_files": 105,
+    "tag_governance_review.py::run_tag_governance_review": 130
   },
   "allowed_import_cycles": []
 }

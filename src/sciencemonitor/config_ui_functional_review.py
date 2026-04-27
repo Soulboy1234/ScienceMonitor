@@ -48,11 +48,17 @@ def _snapshot_ui_state(page) -> dict[str, object]:
           const activeNav = document.querySelector('.nav-link.active');
           const main = document.querySelector('.main');
           const title = document.querySelector('[data-current-title]');
+          const hasFormalLink = !!Array.from(document.querySelectorAll('a')).find((node) => node.textContent.trim() === '显示正式标签');
+          const hasPendingLink = !!Array.from(document.querySelectorAll('a')).find((node) => node.textContent.trim() === '显示预选标签');
+          const hasPromoteButton = !!Array.from(document.querySelectorAll('button')).find((node) => node.textContent.trim() === '标签转正');
           return {
             active_view: activeView ? activeView.getAttribute('data-view') : '',
             active_nav: activeNav ? activeNav.getAttribute('data-nav-target') : '',
             title: title ? title.textContent.trim() : '',
             scroll_top: main ? main.scrollTop : -1,
+            has_formal_link: hasFormalLink,
+            has_pending_link: hasPendingLink,
+            has_promote_button: hasPromoteButton,
           };
         }
         """
@@ -73,6 +79,7 @@ def _provider_visibility_state(page) -> dict[str, bool]:
             codex_visible: visible('codex_local'),
             openai_visible: visible('openai_api'),
             openrouter_visible: visible('openrouter_api'),
+            ollama_visible: visible('ollama_api'),
           };
         }
         """
@@ -124,7 +131,7 @@ def _run_functional_browser_session(project: Path, sync_playwright) -> dict[str,
 
 def _collect_provider_states(page) -> dict[str, dict[str, bool]]:
     states: dict[str, dict[str, bool]] = {}
-    for provider in ("codex_local", "openai_api", "openrouter_api"):
+    for provider in ("codex_local", "openai_api", "openrouter_api", "ollama_api"):
         page.select_option("[data-provider-select]", provider)
         page.wait_for_timeout(60)
         states[provider] = _provider_visibility_state(page)
@@ -155,9 +162,16 @@ def _evaluate_functional_states(states: dict[str, dict[str, object]]) -> list[Co
         issues.append(ConfigUIFunctionalReviewIssue("settings_title", f"设置页标题异常：{settings['title']}"))
     if settings["active_view"] != "settings":
         issues.append(ConfigUIFunctionalReviewIssue("settings_view", f"设置页 active view 异常：{settings['active_view']}"))
-    issues.extend(_evaluate_provider_state("codex", states["codex_local"], {"codex_visible": True, "openai_visible": False, "openrouter_visible": False}))
-    issues.extend(_evaluate_provider_state("openai", states["openai_api"], {"codex_visible": False, "openai_visible": True, "openrouter_visible": False}))
-    issues.extend(_evaluate_provider_state("openrouter", states["openrouter_api"], {"codex_visible": False, "openai_visible": False, "openrouter_visible": True}))
+    if not settings["has_formal_link"]:
+        issues.append(ConfigUIFunctionalReviewIssue("settings_formal_link", "设置页缺少“显示正式标签”入口。"))
+    if not settings["has_pending_link"]:
+        issues.append(ConfigUIFunctionalReviewIssue("settings_pending_link", "设置页缺少“显示预选标签”入口。"))
+    if not settings["has_promote_button"]:
+        issues.append(ConfigUIFunctionalReviewIssue("settings_promote_button", "设置页缺少“标签转正”按钮。"))
+    issues.extend(_evaluate_provider_state("codex", states["codex_local"], {"codex_visible": True, "openai_visible": False, "openrouter_visible": False, "ollama_visible": False}))
+    issues.extend(_evaluate_provider_state("openai", states["openai_api"], {"codex_visible": False, "openai_visible": True, "openrouter_visible": False, "ollama_visible": False}))
+    issues.extend(_evaluate_provider_state("openrouter", states["openrouter_api"], {"codex_visible": False, "openai_visible": False, "openrouter_visible": True, "ollama_visible": False}))
+    issues.extend(_evaluate_provider_state("ollama", states["ollama_api"], {"codex_visible": False, "openai_visible": False, "openrouter_visible": False, "ollama_visible": True}))
     return issues
 
 

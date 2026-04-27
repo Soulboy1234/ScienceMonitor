@@ -1,6 +1,6 @@
 # 论文深度阅读报告
 ----
-- [[auto/deep_reads_pdf/sample|PDF]] #热层/密度 #卫星影响
+- [[auto/deep_reads_pdf/sample|PDF]] #应用/卫星影响
 - _Smith, A., & Chen, B. (2026). Example Paper. JGR: Space Physics. https://doi.org/10.1000/example_
 
 ## 论文信息

@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .config import obsidian_target as configured_obsidian_target
+from .config import can_delete_output_path, obsidian_target as configured_obsidian_target
 
 if TYPE_CHECKING:
     from .models import ArticleSummaryResult
@@ -34,6 +34,13 @@ ARTICLE_SUMMARY_TEMPLATE_REQUIRED_VARS = {
 DOI_URL_RE = re.compile(r"https://doi\.org/([^\s_]+)", re.IGNORECASE)
 HASH_TAG_RE = re.compile(r"(?<!\w)#([^\s#]+)")
 RELATED_REPORTS_HEADER = "- 「关联报告」"
+OBSIDIAN_SAFE_TAG_CHAR_MAP = {
+    "+": "＋",
+    ".": "．",
+    "&": "＆",
+}
+OBSIDIAN_SAFE_TAG_TRANSLATION = str.maketrans(OBSIDIAN_SAFE_TAG_CHAR_MAP)
+OBSIDIAN_SAFE_TAG_REVERSE_TRANSLATION = str.maketrans({value: key for key, value in OBSIDIAN_SAFE_TAG_CHAR_MAP.items()})
 
 
 def obsidian_target(path: Path, root: Path | None = None) -> str:
@@ -91,18 +98,33 @@ def extract_related_report_links(markdown: str) -> list[str]:
     return [item.strip() for item in re.findall(r"\[\[[^\]]+\]\]", match.group(1))]
 
 
-def index_existing_summary_files(output_dir: Path) -> dict[str, Path]:
-    indexed: dict[str, Path] = {}
+def extract_summary_doi(markdown: str) -> str:
+    match = DOI_URL_RE.search(markdown)
+    if not match:
+        return ""
+    return normalize_doi(match.group(1))
+
+
+def index_existing_summary_files(output_dir: Path, *, root: Path | None = None) -> dict[str, Path]:
+    grouped: dict[str, list[Path]] = {}
     if not output_dir.exists():
-        return indexed
+        return {}
     for path in output_dir.glob("*.md"):
         text = path.read_text(encoding="utf-8")
-        match = DOI_URL_RE.search(text)
-        if not match:
+        doi = extract_summary_doi(text)
+        if not doi:
             continue
-        doi = normalize_doi(match.group(1))
-        if doi and doi not in indexed:
-            indexed[doi] = path
+        grouped.setdefault(doi, []).append(path)
+
+    indexed: dict[str, Path] = {}
+    for doi, candidates in grouped.items():
+        canonical = max(candidates, key=lambda item: (item.stat().st_mtime, item.name))
+        indexed[doi] = canonical
+        for duplicate in candidates:
+            if duplicate == canonical:
+                continue
+            if can_delete_output_path(duplicate, root):
+                duplicate.unlink(missing_ok=True)
     return indexed
 
 
@@ -148,9 +170,9 @@ def extract_line_value(text: str, prefix: str) -> str:
 def extract_summary_tags(text: str) -> list[str]:
     for line in text.splitlines():
         if line.startswith("- ") and "#" in line:
-            return [item for item in HASH_TAG_RE.findall(line)]
+            return [decode_obsidian_tag(item) for item in HASH_TAG_RE.findall(line)]
         if line.startswith("- 标签："):
-            return [item.lstrip("#") for item in line.split() if item.startswith("#")]
+            return [decode_obsidian_tag(item.lstrip("#")) for item in line.split() if item.startswith("#")]
     return []
 
 
@@ -262,8 +284,18 @@ def sanitize_filename(text: str) -> str:
     return clean or "untitled"
 
 
+def encode_obsidian_tag(tag: str) -> str:
+    compact = re.sub(r"\s+", "", str(tag or ""))
+    return compact.translate(OBSIDIAN_SAFE_TAG_TRANSLATION)
+
+
+def decode_obsidian_tag(tag: str) -> str:
+    compact = re.sub(r"\s+", "", str(tag or ""))
+    return compact.translate(OBSIDIAN_SAFE_TAG_REVERSE_TRANSLATION)
+
+
 def format_tag(tag: str) -> str:
-    return "#" + re.sub(r"\s+", "", tag)
+    return "#" + encode_obsidian_tag(tag)
 
 
 def build_tag_line(tags: list[str]) -> str:

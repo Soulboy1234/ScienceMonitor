@@ -6,6 +6,7 @@ from sqlite3 import Row
 
 from .models import ArticleSummaryResult
 from .research_preferences import UserPreferenceProfile
+from .reporting_support import top_theme_labels_for_schema
 from .utils import clean_abstract_text, clean_title_text
 
 
@@ -24,8 +25,12 @@ ARTICLE_PROMPT_REQUIREMENTS = [
 REPORT_PROMPT_REQUIREMENTS = [
     "1. 只根据提供的单篇总结、标题、期刊、标签和主题概括，不要编造全文细节。",
     "2. 输出适合科研工作周报，语气简洁、专业。",
-    "3. 概览和建议要突出真正值得关注的主题、事件、仪器、方法或趋势。",
-    "4. 需要结合当前用户研究偏好，优先提醒热层密度、卫星影响、应用影响、业务化预报，以及不局限于漠河的热层风研究。",
+    "3. 先客观总结这周论文的主要方向、共性、交叉点和新的切入角度，不要一开始就围绕用户研究偏好展开。",
+    "4. 再单独指出与当前用户研究偏好最贴近的内容，优先提醒热层密度、卫星影响、应用影响、业务化预报，以及不局限于漠河的热层风研究。",
+    "5. topic_insights 要尽量使用给定的具体主题候选，避免只写“电离层”“热层”这类宽泛分类。",
+    "6. daily_suggestions 不再写泛泛建议，应优先输出值得继续关注的事件、物理过程、方法趋势或对当前工作的启发。",
+    "7. preference_overview 单独对应“与当前工作相关的重点”，只写与用户当前工作直接相关的内容；背景性提及、间接应用场景或泛泛空间天气联系都不要写进去。",
+    "8. work_implication 单独对应“对当前工作的可能启发”，要写具体的阅读价值、方法借鉴或后续工作启发，不要复述 preference_overview。",
 ]
 
 DEEP_READ_PROMPT_REQUIREMENTS = [
@@ -33,7 +38,7 @@ DEEP_READ_PROMPT_REQUIREMENTS = [
     "2. “关键结果”内部固定使用这四个小标题：硬结论、次级结论、合理推论、需进一步研究讨论的结论。",
     "3. 要说明：为什么做、怎么做、最关键结果、贡献、局限、可复现性、与已有工作的关系。",
     "4. 这类深度解读大多是空间物理论文，但也可能是与空间物理主线研究相关的人工智能或其他支撑学科论文。请先判断论文所属领域，再使用该领域合适的简洁标签。",
-    "5. 如果是空间物理论文，标签优先用层级标签，例如 热层/密度、电离层/TEC、仪器/GNSS、其他行星/月球；如果是相关人工智能或交叉学科论文，则使用该领域自然、稳定、便于检索的简洁标签，不要硬套空间物理标签。",
+    "5. 如果是空间物理论文，标签优先用层级标签，例如 对象/热层/密度、对象/电离层/TEC、仪器/GNSS、对象/其他行星/月球；如果是相关人工智能或交叉学科论文，则使用该领域自然、稳定、便于检索的简洁标签，不要硬套空间物理标签。",
     "6. 如果证据边界明显，要在局限或需要人工复核中明确写出，不要编造。",
     "7. 一句话总述必须直接说明研究目标、关键数据/方法和核心结果，优先用“这篇文章针对……”“这篇文章关注……”或“作者研究的是……”，不要用“不是……而是……”这类对比式开头。",
     "8. 除专有名词、仪器名、模型名、指数名、变量名和期刊名外，正文尽量使用中文，不要大量中英混写。",
@@ -59,6 +64,10 @@ ARTICLE_ANALYSIS_REQUIRED_FIELDS = [
 REPORT_ANALYSIS_REQUIRED_FIELDS = [
     "overview_bullets",
     "daily_suggestions",
+    "preference_overview",
+    "work_implication",
+    "preference_paper_indices",
+    "work_implication_paper_indices",
     "topic_insights",
     "journal_insights",
 ]
@@ -143,6 +152,7 @@ def build_report_prompt(
     summaries: list[ArticleSummaryResult],
     user_preferences: UserPreferenceProfile,
 ) -> str:
+    theme_candidates = top_theme_labels_for_schema(summaries, limit=10)
     blocks = [
         "请基于下面近7天已经完成的单篇空间物理论文总结，为周报生成中文分析。",
         "要求：",
@@ -158,9 +168,16 @@ def build_report_prompt(
     if user_preferences.priority_alerts:
         blocks.append("特别提醒主题：")
         blocks.extend(f"- {item}" for item in user_preferences.priority_alerts[:8])
+    if theme_candidates:
+        blocks.extend(["", "候选具体主题（优先从中选择 topic_insights.label）："])
+        blocks.extend(f"- {item}" for item in theme_candidates)
     blocks.extend(["", "单篇总结清单："])
     for index, summary in enumerate(summaries, start=1):
         row = summary.row
+        core_body = re.sub(r"\s+", " ", str(summary.body or "")).strip()
+        if len(core_body) > 220:
+            core_body = core_body[:220].rsplit(" ", 1)[0].strip() + " ..."
+        tags = ", ".join(summary.tags[:8])
         blocks.extend(
             [
                 f"[{index}] 期刊：{row['source_name']}",
@@ -168,13 +185,22 @@ def build_report_prompt(
                 f"中文概括：{summary.chinese_title}",
                 f"日期：{row['published_date']}",
                 f"主题：{row['topic_labels'].replace(chr(10), ', ')}",
-                f"标签：{', '.join(summary.tags)}",
-                f"一句话总结：{summary.one_sentence}",
-                f"正文总结：{summary.body}",
-                f"补充信息：{summary.supplement}",
+                f"标签：{tags}",
+                f"核心信息：{summary.one_sentence} {core_body}".strip(),
                 "",
             ]
         )
+    blocks.extend(
+        [
+            "输出字段提醒：",
+            "1. overview_bullets 用于客观概览。",
+            "2. daily_suggestions 用于值得继续关注的事件、过程或方法趋势。",
+            "3. preference_overview 单独对应“与当前工作相关的重点”，只写直接相关内容。",
+            "4. work_implication 单独对应“对当前工作的可能启发”，写具体启发，不要重复上一字段。",
+            "5. preference_paper_indices 用整数编号返回最能支撑 preference_overview 的论文序号。",
+            "6. work_implication_paper_indices 用整数编号返回最能支撑 work_implication 的论文序号。",
+        ]
+    )
     return "\n".join(blocks)
 
 
@@ -210,6 +236,7 @@ def build_manual_report_prompt(
     report_date: date,
     summaries: list[ArticleSummaryResult],
 ) -> str:
+    theme_candidates = top_theme_labels_for_schema(summaries, limit=10)
     lines = [
         "任务：基于下面这批论文生成一份中文科研周报。",
         "你需要优先根据 DOI、网页或题目自行检索论文；不要假设本地还有别的上下文。",
@@ -217,6 +244,15 @@ def build_manual_report_prompt(
         "",
         f"报告日期：{report_date.isoformat()}",
         f"论文数：{len(summaries)}",
+        "",
+        "周报风格要求：",
+        "1. 先客观总结本周论文的方向分布、共性和新切入点，再单独写与用户当前工作最贴近的内容。",
+        "2. 推荐论文部分要突出英文题目、期刊、中文题目和推荐理由。",
+        "3. 主题推荐要优先落在具体科学问题，而不是宽泛分类。",
+        "4. 各期刊主题汇总要写清楚该期刊本周有几篇文章分别关注什么问题。",
+        "",
+        "候选具体主题：",
+        *([f"- {item}" for item in theme_candidates] if theme_candidates else ["- 暂无"]),
         "",
         "论文清单：",
     ]
@@ -237,7 +273,11 @@ def build_manual_report_prompt(
             "输出要求补充：",
             "1. 周报只根据你实际查到的内容写，不要把单篇不存在的结果扩成趋势。",
             "2. 重点关注真正重复出现的研究主题、事件、仪器、方法和现象。",
-            "3. overview_bullets 和 daily_suggestions 用简洁可执行表述。",
+            "3. overview_bullets 用于客观概览，daily_suggestions 用于值得继续关注的事件、过程或工作启发。",
+            "4. preference_overview 单独对应“与当前工作相关的重点”，只写直接相关内容。",
+            "5. work_implication 单独对应“对当前工作的可能启发”，写具体启发，不要重复上一字段。",
+            "6. preference_paper_indices 用整数编号返回最能支撑 preference_overview 的论文序号。",
+            "7. work_implication_paper_indices 用整数编号返回最能支撑 work_implication 的论文序号。",
         ]
     )
     return "\n".join(lines)
@@ -380,9 +420,7 @@ def build_article_schema() -> dict:
 
 def build_report_schema(summaries: list[ArticleSummaryResult]) -> dict:
     journals = sorted({str(summary.row["source_name"]) for summary in summaries})[:12]
-    labels = sorted(
-        {label for summary in summaries for label in str(summary.row["topic_labels"]).split("\n") if label}
-    )[:12]
+    labels = top_theme_labels_for_schema(summaries, limit=12)
     return {
         "name": "report_analysis",
         "schema": {
@@ -398,6 +436,22 @@ def build_report_schema(summaries: list[ArticleSummaryResult]) -> dict:
                     "type": "array",
                     "items": {"type": "string"},
                     "minItems": 2,
+                    "maxItems": 4,
+                },
+                "preference_overview": {
+                    "type": "string",
+                },
+                "work_implication": {
+                    "type": "string",
+                },
+                "preference_paper_indices": {
+                    "type": "array",
+                    "items": {"type": "integer", "minimum": 1, "maximum": len(summaries) if summaries else 1},
+                    "maxItems": 4,
+                },
+                "work_implication_paper_indices": {
+                    "type": "array",
+                    "items": {"type": "integer", "minimum": 1, "maximum": len(summaries) if summaries else 1},
                     "maxItems": 4,
                 },
                 "topic_insights": {

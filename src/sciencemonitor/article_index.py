@@ -36,6 +36,7 @@ from .article_index_rules import (
 from .config import (
     article_index_root,
     article_sub_index_root,
+    can_delete_output_path,
     data_root,
     output_root,
     project_root,
@@ -146,7 +147,7 @@ PLANET_PAGE_MAP = {
     "行星综合": "6.9 - 行星综合",
 }
 
-PLANET_TAG_MAP = {planet: f"其他行星/{planet}" for planet in PLANET_PAGE_MAP}
+PLANET_TAG_MAP = {planet: f"对象/其他行星/{planet}" for planet in PLANET_PAGE_MAP}
 PLANETARY_PAGE_NAMES = set(PLANET_PAGE_MAP.values()) | {"6.4.1 - 行星际环境的影响"}
 
 KEYWORD_PAGE_RULES: list[tuple[str, list[str]]] = [
@@ -276,12 +277,16 @@ def migrate_legacy_sub_index_files(root: Path) -> int:
         if not source.exists():
             continue
         if not target.exists():
-            source.rename(target)
+            if can_delete_output_path(source, root):
+                source.rename(target)
+            else:
+                target.write_text(source.read_text(encoding="utf-8", errors="ignore"), encoding="utf-8")
             created += 1
             continue
         if source.read_text(encoding="utf-8", errors="ignore").strip() and not target.read_text(encoding="utf-8", errors="ignore").strip():
             target.write_text(source.read_text(encoding="utf-8", errors="ignore"), encoding="utf-8")
-        source.unlink()
+        if can_delete_output_path(source, root):
+            source.unlink()
     return created
 
 

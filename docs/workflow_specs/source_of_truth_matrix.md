@@ -32,14 +32,14 @@
 | 用户研究偏好、重点提醒 | `config/research_preferences.json` | `PROJECT_CONFIG.md`、`reporting.py`、`llm.py` | 运行时以这份 JSON 为准；日常编辑入口在 `PROJECT_CONFIG.md` 的研究偏好同步段 |
 | 期刊监控范围 | `config/sources.json` | `README.md`、用户说明 | 监测什么期刊最终以 `sources.json` 为准 |
 | 主题分类与保留逻辑 | `config/topics.json` + `src/sciencemonitor/topics.py` | `docs/workflow_specs/rules.md` | 主题和相关性判断是“配置 + 代码”共同决定，说明文档只是原则层 |
-| 标签归一化与同义词映射 | `config/focus_tags.json` + `src/sciencemonitor/tags.py` + `src/sciencemonitor/llm.py` + `src/sciencemonitor/article_summaries.py` | `docs/workflow_specs/literature_note_style_guide.md`、`docs/workflow_specs/hierarchical_tag_reference.md` | `focus_tags.json` 现在定义首选词表、canonical 命名、开放词表约束和候选记录路径；说明文档继续负责人工阅读和风格参考 |
+| 标签归一化与同义词映射 | 正式 tag：`config/tag/formal_tags.md`；机器规则与运行词表：`config/focus_tags.json`；预选 tag：`config/tag/pending_tags.md` + `config/pending_tags.json`；执行层：`src/sciencemonitor/tags.py` + `src/sciencemonitor/tag_review.py` + `src/sciencemonitor/tag_governance.py` | `docs/workflow_specs/literature_note_style_guide.md`、`docs/workflow_specs/hierarchical_tag_reference.md` | 正式 canonical tag 的人工 source of truth 是 `formal_tags.md`；机器规则仍保留在 `focus_tags.json`；运行时新增 tag 会先经过标签审核层，尽量归并 formal；无法覆盖时才进入 pending |
 | 代码熵预算 | `config/maintenance_budget.json` + `src/sciencemonitor/entropy.py` | `docs/user_guides/maintenance_governance_runbook.md`、`docs/exec_plans/tech_debt_tracker.md` | 代码体量、超长函数和 import cycle 的预算以 `maintenance_budget.json` 为准；runbook 只解释如何使用 |
 | 单篇总结最终 Markdown 展示结构 | `config/templates/article_summary_template.md` + `src/sciencemonitor/article_summaries.py` 的模板渲染器 | `docs/workflow_specs/article_summary_template_guide.md`、`docs/workflow_specs/literature_note_style_guide.md` | 模板现在控制区块顺序和展示版式；代码继续提供字段内容、兼容修复和校验契约 |
-| 周报最终 Markdown 展示结构 | `config/templates/daily_report_template.md` + `src/sciencemonitor/reporting.py` 的模板渲染器 | `docs/workflow_specs/daily_report_template_guide.md`、`docs/workflow_specs/literature_note_style_guide.md` | 模板现在控制正式区块顺序和展示版式；代码继续负责筛选逻辑、统计和块级内容生成 |
+| 周报最终 Markdown 展示结构 | `config/templates/daily_report_template.md` + `src/sciencemonitor/reporting.py` 的模板渲染器 | `docs/workflow_specs/daily_report_template_guide.md`、`docs/workflow_specs/literature_note_style_guide.md` | 模板控制“周报信息 / 今日概览 / 文章推荐 / 主题推荐 / 各期刊主题汇总 / 其他”的正式结构；代码负责统计、主题聚类和块级内容生成 |
 | 深度解读最终 Markdown 展示结构 | `config/templates/deep_reading_report_template.md` + `src/sciencemonitor/deep_reads.py` 的模板渲染器 | `docs/workflow_specs/deep_reading_template_guide.md`、`docs/workflow_specs/literature_note_style_guide.md` | 模板现在控制正式区块顺序和展示版式；代码继续负责 schema、字段归一化和输出校验 |
 | LLM 单篇总结提示词 | `src/sciencemonitor/llm.py::_build_article_prompt` | `docs/workflow_specs/llm_prompt_contracts.md`、`docs/workflow_specs/article_summary_template_guide.md`、`docs/workflow_specs/literature_note_style_guide.md` | 单篇总结 prompt 当前并不直接读取运行时模板 |
 | LLM 周报提示词 | `src/sciencemonitor/llm.py::_build_report_prompt` | `docs/workflow_specs/llm_prompt_contracts.md`、`docs/workflow_specs/daily_report_template_guide.md`、`config/research_preferences.json` | 展示结构由模板控制，但提示词和研究偏好仍由代码与运行上下文主导 |
-| 周报 Markdown 合法性检查 | `src/sciencemonitor/reporting.py` | `config/templates/daily_report_template.md` | 必需标题、固定说明和未替换占位符当前都由代码校验 |
+| 周报 Markdown 合法性检查 | `src/sciencemonitor/reporting_template.py` + `src/sciencemonitor/reporting.py` | `config/templates/daily_report_template.md`、`docs/workflow_specs/report_review_rules.md` | 必需标题、表格结构、固定说明和未替换占位符由 review loop 与代码共同校验 |
 | LLM 深度解读提示词与字段 schema | `src/sciencemonitor/llm.py::_build_deep_read_prompt` + `_deep_read_schema` | `docs/workflow_specs/llm_prompt_contracts.md`、`docs/workflow_specs/deep_reading_template_guide.md`、`config/research_preferences.json` | 这是当前深度解读最核心的控制面之一 |
 | 深度解读 Markdown 合法性检查 | `src/sciencemonitor/deep_reads.py` | `config/templates/deep_reading_report_template.md` | 必需标题、禁用旧区块、文本收口当前都由代码校验 |
 | 报告生成后格式审核规则 | `src/sciencemonitor/article_summaries.py` + `src/sciencemonitor/deep_read_markdown.py` + `src/sciencemonitor/reporting_template.py` | `docs/workflow_specs/report_review_rules.md`、`config/templates/*.md`、相关测试 | 模板表达静态骨架；编号换行、否定转折清理、摘要级来源说明、eval 链接语义等动态规则由 Python 审核层强制执行 |
@@ -140,14 +140,17 @@
 
 优先修改：
 
-- `config/topics.json`
-- `config/focus_tags.json`
+- 主题分类：`config/topics.json`
+- 正式 canonical tag 集合：`config/tag/formal_tags.md`
+- 预选 tag 审阅与转正：`config/tag/pending_tags.md`
+- 机器规则、别名、patterns、suppression：`config/focus_tags.json`
 
 必要时再修改：
 
 - `src/sciencemonitor/topics.py`
 - `src/sciencemonitor/article_summaries.py`
 - `src/sciencemonitor/llm.py`
+- `src/sciencemonitor/tag_governance.py`
 
 ### 5. 改提示词但不想改最终 Markdown 结构
 

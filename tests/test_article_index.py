@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import pathlib
 import sys
 import tempfile
@@ -90,7 +91,7 @@ class ArticleIndexTest(unittest.TestCase):
                 "\n".join(
                     [
                         "----",
-                        "- [[paper.pdf|PDF]] #综述 #热层/密度 #其他行星/月球",
+                        "- [[paper.pdf|PDF]] #综述 #热层/密度 #对象/其他行星/月球",
                         "- _Liu, A. (2017). Important review. Space Weather. https://doi.org/10.1000/review_",
                         "- 这篇文章讨论地球热层密度与太阳风-磁层驱动。",
                         "- 「补充信息」",
@@ -132,10 +133,10 @@ class ArticleIndexTest(unittest.TestCase):
             sync_out_library(root)
 
             earth_text = earth_note.read_text(encoding="utf-8")
-            self.assertNotIn("#其他行星/月球", earth_text)
+            self.assertNotIn("#对象/其他行星/月球", earth_text)
 
             moon_text = moon_note.read_text(encoding="utf-8")
-            self.assertIn("#其他行星/月球", moon_text)
+            self.assertIn("#对象/其他行星/月球", moon_text)
 
             summary_page = (root / "out" / "article_index" / "sub_index" / "2.1 - 综述.md").read_text(encoding="utf-8")
             self.assertIn(
@@ -159,7 +160,7 @@ class ArticleIndexTest(unittest.TestCase):
                 "\n".join(
                     [
                         "----",
-                        "- [DOI](https://doi.org/10.1186/s40623-026-02412-z) #其他行星/月球",
+                        "- [DOI](https://doi.org/10.1186/s40623-026-02412-z) #对象/其他行星/月球",
                         "- _Chang, P.-Y. (2026). Example. Earth, Planets and Space. https://doi.org/10.1186/s40623-026-02412-z_",
                         "- 示例正文。",
                         "",
@@ -180,6 +181,50 @@ class ArticleIndexTest(unittest.TestCase):
                 "[[auto/article_summaries/Chang 2026 - EPS - 月幔电阻率揭示深部非均一与局部熔融|Moon mantle]]",
                 repaired_report,
             )
+
+    def test_sync_out_library_keeps_legacy_sub_index_source_when_output_delete_not_approved(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            sub_index_dir = root / "out" / "article_index" / "sub_index"
+            sub_index_dir.mkdir(parents=True)
+            source = sub_index_dir / "太阳与日球层.md"
+            target = sub_index_dir / "7 - 太阳与日球层.md"
+            source.write_text("旧页内容\n", encoding="utf-8")
+
+            sync_out_library(root)
+
+            self.assertTrue(source.exists())
+            self.assertTrue(target.exists())
+            self.assertIn("旧页内容\n", target.read_text(encoding="utf-8"))
+
+    def test_sync_out_library_removes_legacy_sub_index_source_when_output_delete_approved(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            (root / "config").mkdir(parents=True, exist_ok=True)
+            (root / "config" / "runtime.json").write_text(
+                json.dumps(
+                    {
+                        "safety": {
+                            "allow_output_deletions": True,
+                        }
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            sub_index_dir = root / "out" / "article_index" / "sub_index"
+            sub_index_dir.mkdir(parents=True)
+            source = sub_index_dir / "太阳与日球层.md"
+            target = sub_index_dir / "7 - 太阳与日球层.md"
+            source.write_text("旧页内容\n", encoding="utf-8")
+
+            sync_out_library(root)
+
+            self.assertFalse(source.exists())
+            self.assertTrue(target.exists())
+            self.assertIn("旧页内容\n", target.read_text(encoding="utf-8"))
 
     def test_sync_out_library_repairs_manual_asset_links_with_normalized_filenames(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

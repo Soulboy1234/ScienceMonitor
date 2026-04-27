@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import cgi
 import json
-import os
 import webbrowser
-from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -16,7 +14,6 @@ from .chatgpt_web_manual import (
     list_manual_requests,
 )
 from .config import (
-    config_ui_state_path,
     local_path_config_path,
     load_runtime_config,
     output_root,
@@ -32,7 +29,7 @@ from .config_ui_actions import (
     _run_manual_create_action,
     _run_manual_import_action,
     _run_manual_import_upload_action,
-    _run_report_action,
+    _start_report_action,
     _text_field,
 )
 from .config_ui_page import (
@@ -40,11 +37,20 @@ from .config_ui_page import (
     render_page as _render_page,
     render_shutdown_page as _render_shutdown_page,
 )
+from .config_ui_page_sections import _render_token_usage
+from .config_ui_result_cards import render_latest_result_content, result_file_revision
+from .config_ui_runtime import (
+    active_config_ui_task,
+    clear_config_ui_runtime_state,
+    read_config_ui_runtime_state,
+    write_config_ui_runtime_state,
+)
 from .config_ui_support import (
     collect_config_ui_state,
 )
 from .doctor import run_doctor
 from .llm import DEFAULT_ANALYSIS_CONFIG
+from .tag_governance import ensure_tag_governance_files, promote_selected_pending_tags
 
 
 def serve_config_ui(
@@ -56,7 +62,7 @@ def serve_config_ui(
     project = root or project_root()
     server = ThreadingHTTPServer((host, port), _build_handler(project))
     url = f"http://{host}:{port}/"
-    _write_config_ui_state(project, host=host, port=port, url=url)
+    write_config_ui_runtime_state(project, host=host, port=port, url=url)
     print(f"ScienceMonitor config UI is running at {url}")
     print("Press Ctrl-C to stop.")
     if open_browser:
@@ -67,7 +73,7 @@ def serve_config_ui(
         pass
     finally:
         server.server_close()
-        _clear_config_ui_state(project)
+        clear_config_ui_runtime_state(project)
 
 
 def _build_handler(project: Path):
@@ -89,6 +95,14 @@ def _build_handler(project: Path):
             self.end_headers()
             self.wfile.write(encoded)
 
+        def _send_json(self, payload: dict, status: HTTPStatus = HTTPStatus.OK) -> None:
+            encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
         def _send_local_file(self, parsed) -> None:
             _serve_local_file(self, project, parsed)
 
@@ -100,7 +114,34 @@ def _handle_get_request(handler: BaseHTTPRequestHandler, project: Path) -> None:
     if parsed.path == "/local-file":
         handler._send_local_file(parsed)  # type: ignore[attr-defined]
         return
+    if parsed.path == "/ui-status":
+        ui_state = collect_config_ui_state(project)
+        runtime_state = read_config_ui_runtime_state(project)
+        handler._send_json(  # type: ignore[attr-defined]
+            {
+                "report_job": ui_state.get("report_job", {}),
+                "active_task": ui_state.get("active_task", {}),
+                "manual_pending": _manual_pending_count(project),
+                "latest_results": _latest_result_descriptors(ui_state),
+                "latest_report": ui_state.get("latest_report", ""),
+                "latest_deep_read": ui_state.get("latest_deep_read", ""),
+                "latest_manual_result": ui_state.get("latest_manual_result", ""),
+                "counts": ui_state.get("counts", {}),
+                "token_usage": ui_state.get("token_usage", "今天 0（0次） / 本周 0（0次） / 本月 0（0次）"),
+                "token_usage_periods": ui_state.get("token_usage_periods", {}),
+                "token_usage_chart": ui_state.get("token_usage_chart", {}),
+                "token_usage_html": _render_token_usage(ui_state),
+                "ui_url": runtime_state.get("url", ""),
+            }
+        )
+        return
+    if parsed.path == "/latest-result":
+        ui_state = collect_config_ui_state(project)
+        payload = _latest_result_payload(project, ui_state, parse_qs(parsed.query).get("kind", [""])[0])
+        handler._send_json(payload)  # type: ignore[attr-defined]
+        return
     sync_configs_from_project_markdown(project)
+    ensure_tag_governance_files(project, refresh_pending=True)
     query = parse_qs(parsed.query)
     status = _status_payload_from_query(query)
     doctor = run_doctor(project, strict_runtime=False)
@@ -125,6 +166,7 @@ def _handle_get_request(handler: BaseHTTPRequestHandler, project: Path) -> None:
 def _handle_post_request(handler: BaseHTTPRequestHandler, project: Path) -> None:
     action = urlparse(handler.path).path or "/save-config"
     try:
+        _guard_no_conflicting_ui_task(project, action)
         if action == "/shutdown-ui":
             payload = _render_shutdown_page(project)
             handler._send_html(payload)  # type: ignore[attr-defined]
@@ -135,8 +177,26 @@ def _handle_post_request(handler: BaseHTTPRequestHandler, project: Path) -> None
         if action == "/save-config":
             _save_from_form(project, form)
             params = {"kind": "ok", "title": "配置已保存", "message": "配置已保存，并同步回 PROJECT_CONFIG.md。"}
+        elif action == "/promote-pending-tags":
+            result = promote_selected_pending_tags(project)
+            count = len(result.promoted_tags)
+            if count:
+                params = {
+                    "kind": "ok",
+                    "title": "预选tag已转正",
+                    "message": f"已转正 {count} 个 tag，并从预选列表中剔除。",
+                    "path": str(result.formal_markdown_path),
+                    "extra_path": str(result.pending_markdown_path),
+                }
+            else:
+                params = {
+                    "kind": "ok",
+                    "title": "没有可转正的tag",
+                    "message": "当前预选文件里没有被勾选的 tag。",
+                    "path": str(result.pending_markdown_path),
+                }
         elif action == "/run-report":
-            params = _run_report_action(project, form)
+            params = _start_report_action(project, form)
         elif action == "/run-deep-read":
             params = _run_deep_read_action(project, form, files)
         elif action == "/manual-llm-create":
@@ -154,9 +214,82 @@ def _handle_post_request(handler: BaseHTTPRequestHandler, project: Path) -> None
         handler._send_html(payload, status=HTTPStatus.BAD_REQUEST)  # type: ignore[attr-defined]
         return
 
+    redirect_fragment = _redirect_fragment_for_action(action)
+    location = "/?" + urlencode(params)
+    if redirect_fragment:
+        location += f"#{redirect_fragment}"
     handler.send_response(HTTPStatus.SEE_OTHER)
-    handler.send_header("Location", "/?" + urlencode(params))
+    handler.send_header("Location", location)
     handler.end_headers()
+
+
+def _redirect_fragment_for_action(action: str) -> str:
+    mapping = {
+        "/run-report": "weekly-report",
+        "/run-deep-read": "deep-read",
+        "/manual-llm-create": "manual-llm",
+        "/manual-llm-import": "manual-llm",
+        "/manual-llm-import-upload": "manual-llm",
+        "/save-config": "settings",
+        "/promote-pending-tags": "settings",
+    }
+    return mapping.get(action, "")
+
+
+def _manual_pending_count(project: Path) -> int:
+    return sum(1 for item in list_manual_requests(project, limit=0) if item.status == "pending")
+
+
+def _latest_result_descriptors(ui_state: dict) -> dict[str, dict[str, str]]:
+    mapping = {
+        "weekly_report": str(ui_state.get("latest_report", "") or ""),
+        "deep_read": str(ui_state.get("latest_deep_read", "") or ""),
+        "manual_result": str(ui_state.get("latest_manual_result", "") or ""),
+    }
+    return {
+        key: {
+            "path": path,
+            "revision": result_file_revision(path),
+        }
+        for key, path in mapping.items()
+    }
+
+
+def _latest_result_payload(project: Path, ui_state: dict, kind: str) -> dict[str, str]:
+    config = {
+        "weekly_report": ("latest_report", "当前没有周报结果。"),
+        "deep_read": ("latest_deep_read", "当前没有深度解读结果。"),
+        "manual_result": ("latest_manual_result", "当前没有人工中转生成结果。"),
+    }
+    if kind not in config:
+        return {"kind": kind, "path": "", "revision": "", "html": "未知最新结果类型。"}
+    state_key, empty_text = config[kind]
+    path_value = str(ui_state.get(state_key, "") or "")
+    return {
+        "kind": kind,
+        "path": path_value,
+        "revision": result_file_revision(path_value),
+        "html": render_latest_result_content(project, path_value, empty_text),
+    }
+
+
+def _guard_no_conflicting_ui_task(project: Path, action: str) -> None:
+    guarded_actions = {
+        "/run-report",
+        "/run-deep-read",
+        "/manual-llm-create",
+        "/manual-llm-import",
+        "/manual-llm-import-upload",
+    }
+    if action not in guarded_actions:
+        return
+    active_task = active_config_ui_task(project)
+    if not active_task:
+        return
+    label = str(active_task.get("label", "任务") or "任务")
+    step = str(active_task.get("step", "") or "")
+    suffix = f"（当前步骤：{step}）" if step else ""
+    raise ValueError(f"当前已有{label}正在运行{suffix}，请等待当前任务结束后再启动新的任务。")
 
 
 def _serve_local_file(handler: BaseHTTPRequestHandler, project: Path, parsed) -> None:
@@ -167,7 +300,7 @@ def _serve_local_file(handler: BaseHTTPRequestHandler, project: Path, parsed) ->
     target = Path(unquote(raw_path)).expanduser().resolve()
     allowed_roots = [project.resolve(), output_root(project).resolve()]
     if not any(_is_relative_to(target, base) for base in allowed_roots):
-        handler._send_html(_render_error_page(project, "只允许访问项目目录内的文件。"), status=HTTPStatus.FORBIDDEN)  # type: ignore[attr-defined]
+        handler._send_html(_render_error_page(project, "只允许访问项目目录或输出目录内的文件。"), status=HTTPStatus.FORBIDDEN)  # type: ignore[attr-defined]
         return
     if not target.exists() or not target.is_file():
         handler._send_html(_render_error_page(project, f"文件不存在：{target}"), status=HTTPStatus.NOT_FOUND)  # type: ignore[attr-defined]
@@ -202,6 +335,7 @@ def _save_from_form(project: Path, form: dict[str, list[str]]) -> None:
     analysis.setdefault("codex_local", {})
     analysis.setdefault("openai_api", {})
     analysis.setdefault("openrouter_api", {})
+    analysis.setdefault("ollama_api", {})
     analysis.setdefault("chatgpt_web_manual", {})
     analysis["article_summaries"].pop("fallback_to_rules", None)
     analysis["article_summaries"].pop("enabled", None)
@@ -238,6 +372,9 @@ def _save_from_form(project: Path, form: dict[str, list[str]]) -> None:
     analysis["openrouter_api"]["site_url"] = _text_field(form, "openrouter_site_url") or str(analysis["openrouter_api"].get("site_url", "") or "")
     analysis["openrouter_api"]["app_name"] = _text_field(form, "openrouter_app_name") or str(analysis["openrouter_api"].get("app_name", "ScienceMonitor") or "ScienceMonitor")
     analysis["openrouter_api"]["timeout_seconds"] = _optional_int_field(form, "openrouter_timeout_seconds", int(analysis["openrouter_api"].get("timeout_seconds", 120) or 120), minimum=30)
+    analysis["ollama_api"]["model"] = _text_field(form, "ollama_model") or str(analysis["ollama_api"].get("model", "gemma4:26b") or "gemma4:26b")
+    analysis["ollama_api"]["base_url"] = _text_field(form, "ollama_base_url") or str(analysis["ollama_api"].get("base_url", "http://127.0.0.1:11434/api/chat") or "http://127.0.0.1:11434/api/chat")
+    analysis["ollama_api"]["timeout_seconds"] = _optional_int_field(form, "ollama_timeout_seconds", int(analysis["ollama_api"].get("timeout_seconds", 300) or 300), minimum=30)
 
     local_output_root = _text_field(form, "local_output_root")
     public_paths = {
@@ -300,32 +437,6 @@ def _status_payload_from_query(query: dict[str, list[str]]) -> dict[str, str]:
         "path": query.get("path", [""])[0],
         "extra_path": query.get("extra_path", [""])[0],
     }
-
-
-def _write_config_ui_state(project: Path, host: str, port: int, url: str) -> None:
-    payload = {
-        "pid": os.getpid(),
-        "host": host,
-        "port": port,
-        "url": url,
-        "started_at": datetime.now().isoformat(timespec="seconds"),
-    }
-    path = config_ui_state_path(project)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
-def _clear_config_ui_state(project: Path) -> None:
-    path = config_ui_state_path(project)
-    if not path.exists():
-        return
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        path.unlink(missing_ok=True)
-        return
-    if int(payload.get("pid", -1)) == os.getpid():
-        path.unlink(missing_ok=True)
 
 
 def _parse_form_data(handler: BaseHTTPRequestHandler) -> tuple[dict[str, list[str]], dict[str, cgi.FieldStorage]]:

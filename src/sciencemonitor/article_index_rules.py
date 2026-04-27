@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 WIKILINK_RE = re.compile(r"(!)?\[\[(.+?)(?:\|([^\]]+))?\]\]")
-OTHER_PLANET_TAG_RE = re.compile(r"(?<!\w)#其他行星/[^\s#]+")
+OTHER_PLANET_TAG_RE = re.compile(r"(?<!\w)#(?:对象/)?其他行星/[^\s#]+")
 DISPLAY_STATUS_SUFFIX_RE = re.compile(r"\s*-\s*(重要|Todo|TODO|待读|待读|待整理|可做)$")
 
 PLANETARY_ROOT_PAGE = "6 - 其他行星"
@@ -91,7 +91,7 @@ PLANET_PAGE_MAP = {
     "行星综合": "6.9 - 行星综合",
 }
 
-PLANET_TAG_MAP = {planet: f"其他行星/{planet}" for planet in PLANET_PAGE_MAP}
+PLANET_TAG_MAP = {planet: f"对象/其他行星/{planet}" for planet in PLANET_PAGE_MAP}
 PLANETARY_PAGE_NAMES = set(PLANET_PAGE_MAP.values()) | {"6.4.1 - 行星际环境的影响"}
 
 PLANET_KEYWORDS = {

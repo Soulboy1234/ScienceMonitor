@@ -10,7 +10,7 @@ STATE_PATH="$SUPPORT_ROOT/config_ui_state.json"
 HOST="127.0.0.1"
 BASE_PORT=8765
 MAX_PORT_OFFSET=9
-TITLE_MARKER="<title>ScienceMonitor Config UI</title>"
+TITLE_MARKER='<meta name="sciencemonitor-ui" content="config-ui">'
 
 mkdir -p "$SUPPORT_ROOT"
 cd "$PROJECT_ROOT" || exit 0

@@ -15,12 +15,14 @@ from .article_summary_meta import (
     format_authors_apa,
     get_override,
     parse_authors,
+    row_value,
     sentence_case_title,
     topic_labels,
 )
 from .llm import ArticleAnalysis
 from .models import ArticleSummaryResult
-from .tags import clean_tag_text, group_tags, infer_preferred_tags_from_text, normalize_tags
+from .tag_review import review_generated_tags, should_keep_formal_tag
+from .tags import clean_tag_text, group_tags, infer_preferred_tags_from_text
 from .utils import clean_title_text
 
 INVALID_OUTPUT_SNIPPETS = ("oops", "todo", "tbd", "placeholder")
@@ -35,16 +37,28 @@ GENERIC_SENTENCE_FRAGMENTS = (
 ABSTRACT_ONLY_TAG = "信息来源/仅摘要"
 ABSTRACT_ONLY_NOTICE = "当前总结仅基于摘要和元数据生成，未获得全文，结论需按摘要级别理解。"
 ABSTRACT_ONLY_RE = re.compile(r"仅基于摘要|仅基于论文题目页|仅基于题目页|仅基于元数据|未获取到可靠的全文|未获得全文")
+METADATA_ONLY_TAG = "信息来源/仅元数据"
+METADATA_ONLY_NOTICE = "当前总结仅基于元数据生成，未获得有效摘要或全文，结论仅作待核验记录。"
+GPT_SUMMARY_TAG = "信息来源/GPT总结"
+METADATA_ONLY_TITLE_FRAGMENTS = (
+    "重定向页面",
+    "文献信息缺失",
+    "资料缺失",
+    "无法判断具体研究内容",
+    "无法判定具体研究内容",
+    "文献信息待核验",
+)
+INVALID_METADATA_TITLES = {"redirecting", "redirect", "loading", "just a moment", "access denied", "please wait"}
 
 TOPIC_TO_TAG = {
-    "电离层": "电离层",
-    "热层": "热层",
-    "日地耦合": "日地耦合",
-    "低层大气波动上传": "重力波/潮汐",
-    "磁层-电离层-热层耦合": "磁层-电离层耦合",
-    "行星际环境驱动": "太阳风/高速流",
-    "空间天气": "空间天气",
-    "行星空间环境": "其他行星/行星综合",
+    "电离层": "对象/电离层",
+    "热层": "对象/热层",
+    "日地耦合": "对象/日地耦合",
+    "低层大气波动上传": "对象/重力波",
+    "磁层-电离层-热层耦合": "对象/磁层/电离层耦合",
+    "行星际环境驱动": "对象/太阳风/高速流",
+    "空间天气": "应用/空间天气",
+    "行星空间环境": "对象/其他行星/行星综合",
 }
 
 TAG_GROUP_IDS = (
@@ -58,7 +72,7 @@ TAG_GROUP_IDS = (
     "status",
 )
 
-FULL_TEXT_SOURCE_KINDS = {"html_full_text", "local_pdf_full_text"}
+FULL_TEXT_SOURCE_KINDS = {"html_full_text", "local_pdf_full_text", "chatgpt_web_manual_search"}
 
 
 def sanitize_generation_text(text: str) -> str:
@@ -80,13 +94,19 @@ def sanitize_tags(
     max_tags: int = 14,
     context: str = "",
     record_candidates: bool = False,
+    title_text: str = "",
+    body_text: str = "",
+    extra_text: str = "",
 ) -> list[str]:
-    return normalize_tags(
+    return review_generated_tags(
         tags,
         root=root,
         max_tags=max_tags,
         context=context,
         record_candidates=record_candidates,
+        title_text=title_text,
+        body_text=body_text,
+        extra_text=extra_text,
     )
 
 
@@ -101,7 +121,9 @@ def prefer_more_specific_tags(tags: list[str]) -> list[str]:
 
 def is_placeholder_title(text: str) -> bool:
     cleaned = sanitize_generation_text(text)
-    return not cleaned or cleaned in PLACEHOLDER_TITLES
+    if not cleaned or cleaned in PLACEHOLDER_TITLES:
+        return True
+    return any(fragment in cleaned for fragment in METADATA_ONLY_TITLE_FRAGMENTS)
 
 
 def is_generic_sentence(text: str) -> bool:
@@ -141,7 +163,28 @@ def validate_summary_fields(
     root: Path | None = None,
     candidate_context: str = "",
 ) -> tuple[str, list[str], str, str, str, str]:
-    cleaned_tags = sanitize_tags(tags, root=root, context=candidate_context, record_candidates=bool(root))
+    title_context = display_title(row)
+    extra_context = "\n".join(filter(None, [clean_text(row["notes"]), "\n".join(topic_labels(row))]))
+    if is_metadata_only_record(row):
+        cleaned_tags = sanitize_tags(
+            [METADATA_ONLY_TAG],
+            root=root,
+            context=candidate_context,
+            record_candidates=bool(root),
+            title_text=title_context,
+            body_text=clean_text(row["abstract"]),
+            extra_text=extra_context,
+        )
+    else:
+        cleaned_tags = sanitize_tags(
+            tags,
+            root=root,
+            context=candidate_context,
+            record_candidates=bool(root),
+            title_text=title_context,
+            body_text="\n".join(filter(None, [clean_text(row["abstract"]), body])),
+            extra_text="\n".join(filter(None, [extra_context, supplement, recommendation, one_sentence])),
+        )
     if not cleaned_tags:
         cleaned_tags = sanitize_tags(get_focus_tags(row, analysis=None, root=root), root=root)
 
@@ -159,8 +202,26 @@ def validate_summary_fields(
     if not cleaned_supplement:
         cleaned_supplement = build_supplement_text(row, analysis=None, root=root)
     cleaned_supplement = normalize_summary_supplement(row, cleaned_supplement)
-    if supplement_claims_abstract_only(cleaned_supplement):
-        cleaned_tags = sanitize_tags(cleaned_tags + [ABSTRACT_ONLY_TAG], root=root, context=candidate_context, record_candidates=bool(root))
+    if is_metadata_only_record(row) or supplement_claims_metadata_only(cleaned_supplement):
+        cleaned_tags = sanitize_tags(
+            [METADATA_ONLY_TAG],
+            root=root,
+            context=candidate_context,
+            record_candidates=bool(root),
+            title_text=title_context,
+            body_text=cleaned_body,
+            extra_text=cleaned_supplement,
+        )
+    elif supplement_claims_abstract_only(cleaned_supplement):
+        cleaned_tags = sanitize_tags(
+            cleaned_tags + [ABSTRACT_ONLY_TAG],
+            root=root,
+            context=candidate_context,
+            record_candidates=bool(root),
+            title_text=title_context,
+            body_text=cleaned_body,
+            extra_text=cleaned_supplement,
+        )
 
     cleaned_recommendation = sanitize_generation_text(recommendation)
     if is_generic_sentence(cleaned_recommendation):
@@ -212,7 +273,7 @@ def _tag_phrase_for_sentence(tag: str) -> str:
     parts = [item for item in tag.split("/") if item]
     if not parts:
         return tag
-    if parts[0] in {"仪器", "指数", "模型", "建模", "特征", "应用", "状态"} and len(parts) > 1:
+    if parts[0] in {"对象", "事件", "仪器", "指数", "模型", "建模", "特征", "应用", "状态", "信息来源", "方法"} and len(parts) > 1:
         return "/".join(parts[1:])
     if parts[0] == "其他行星" and len(parts) > 1:
         return parts[-1]
@@ -223,7 +284,7 @@ def _tag_phrase_for_title(tag: str) -> str:
     parts = [item for item in tag.split("/") if item]
     if not parts:
         return tag
-    if parts[0] in {"仪器", "指数", "模型", "建模", "特征", "应用", "状态"} and len(parts) > 1:
+    if parts[0] in {"对象", "事件", "仪器", "指数", "模型", "建模", "特征", "应用", "状态", "信息来源", "方法"} and len(parts) > 1:
         return "".join(parts[1:])
     if parts[0] == "其他行星" and len(parts) > 1:
         return parts[-1]
@@ -249,6 +310,8 @@ def build_chinese_title(row: Row, analysis: ArticleAnalysis | None = None, root:
         return override["chinese_title"]
     if analysis:
         return analysis.chinese_title
+    if is_metadata_only_record(row):
+        return "文献信息待核验"
 
     grouped = get_focus_tags_by_group(row, root=root)
     research_tags = _prefer_deeper_tags(grouped["research_object"])
@@ -263,22 +326,34 @@ def build_chinese_title(row: Row, analysis: ArticleAnalysis | None = None, root:
 
 
 def get_focus_tags(row: Row, analysis: ArticleAnalysis | None = None, root: Path | None = None) -> list[str]:
+    title_context = display_title(row)
+    abstract_context = clean_text(row["abstract"])
+    extra_context = "\n".join(filter(None, [clean_text(row["notes"]), "\n".join(topic_labels(row))]))
     override = get_override(row)
     if override and "tags" in override:
-        return sanitize_tags(list(override["tags"]), root=root)
+        return sanitize_tags(list(override["tags"]), root=root, title_text=title_context, body_text=abstract_context, extra_text=extra_context)
+    if is_metadata_only_record(row):
+        return sanitize_tags([METADATA_ONLY_TAG], root=root, title_text=title_context, body_text=abstract_context, extra_text=extra_context)
     if analysis:
-        inferred = infer_preferred_tags_from_text(
+        inferred = infer_tags_from_parts(
             title_text=display_title(row),
+            body_text=abstract_context,
             extra_text="\n".join(filter(None, [clean_text(row["notes"]), "\n".join(topic_labels(row))])),
             root=root,
         )
-        source_inferred = infer_preferred_tags_from_text(
+        source_inferred = infer_tags_from_parts(
             body_text=clean_text(row["abstract"]),
             root=root,
         )
         source_grouped = group_tags(source_inferred, root=root)
         body_driver_tags = source_grouped.get("event_driver", [])
-        return sanitize_tags(list(analysis.tags) + inferred + body_driver_tags, root=root)
+        return sanitize_tags(
+            list(analysis.tags) + inferred + body_driver_tags,
+            root=root,
+            title_text=title_context,
+            body_text=abstract_context,
+            extra_text=extra_context,
+        )
 
     grouped = get_focus_tags_by_group(row, root=root)
     tags = (
@@ -293,11 +368,11 @@ def get_focus_tags(row: Row, analysis: ArticleAnalysis | None = None, root: Path
     )
     if not tags:
         tags = fallback_tags_from_topics(row, root=root)
-    return sanitize_tags(dedupe(tags), root=root)
+    return sanitize_tags(dedupe(tags), root=root, title_text=title_context, body_text=abstract_context, extra_text=extra_context)
 
 
 def get_focus_tags_by_group(row: Row, root: Path | None = None) -> dict[str, list[str]]:
-    inferred = infer_preferred_tags_from_text(
+    inferred = infer_tags_from_parts(
         title_text=display_title(row),
         body_text=clean_text(row["abstract"]),
         extra_text="\n".join(filter(None, [clean_text(row["notes"]), "\n".join(topic_labels(row))])),
@@ -314,7 +389,7 @@ def get_focus_tags_by_group(row: Row, root: Path | None = None) -> dict[str, lis
 
 
 def infer_tags_from_text(text: str, root: Path | None = None) -> list[str]:
-    return infer_preferred_tags_from_text(
+    return infer_tags_from_parts(
         title_text=text,
         body_text=text,
         root=root,
@@ -371,11 +446,15 @@ def normalize_summary_supplement(row: Row, supplement: str) -> str:
     clean_supplement = sanitize_generation_text(supplement)
     clean_supplement = clean_supplement.replace("结果片段", "相关内容")
     clean_supplement = clean_supplement.replace("关键章节", "相关内容")
+    if is_metadata_only_record(row) or supplement_claims_metadata_only(clean_supplement):
+        if METADATA_ONLY_NOTICE in clean_supplement:
+            return clean_supplement
+        return f"{METADATA_ONLY_NOTICE} {clean_supplement}".strip() if clean_supplement else METADATA_ONLY_NOTICE
     if supplement_claims_abstract_only(clean_supplement):
         if ABSTRACT_ONLY_NOTICE in clean_supplement:
             return clean_supplement
         return f"{ABSTRACT_ONLY_NOTICE} {clean_supplement}".strip()
-    source_kind = str(row.get("summary_source_kind", "") or "").strip().lower()
+    source_kind = str(row_value(row, "summary_source_kind", "") or "").strip().lower()
     if source_kind not in FULL_TEXT_SOURCE_KINDS:
         return clean_supplement
 
@@ -406,6 +485,11 @@ def normalize_summary_supplement(row: Row, supplement: str) -> str:
 
 def supplement_claims_abstract_only(supplement: str) -> bool:
     return bool(ABSTRACT_ONLY_RE.search(sanitize_generation_text(supplement)))
+
+
+def supplement_claims_metadata_only(supplement: str) -> bool:
+    text = sanitize_generation_text(supplement)
+    return "仅基于元数据" in text or "来源文本缺失" in text or "题名异常" in text or "待核验" in text
 
 
 def build_recommendation(row: Row, analysis: ArticleAnalysis | None = None, root: Path | None = None) -> str:
@@ -493,13 +577,109 @@ def normalize_haystack(row: Row) -> str:
     return f" {display_title(row).lower()} {clean_text(row['abstract']).lower()} "
 
 
+def infer_tags_from_parts(
+    *,
+    title_text: str = "",
+    body_text: str = "",
+    extra_text: str = "",
+    root: Path | None = None,
+) -> list[str]:
+    inferred = infer_preferred_tags_from_text(
+        title_text=title_text,
+        body_text=body_text,
+        extra_text=extra_text,
+        root=root,
+    )
+    heuristic = infer_rule_based_tags_from_parts(
+        title_text=title_text,
+        body_text=body_text,
+        extra_text=extra_text,
+        root=root,
+    )
+    return sanitize_tags(
+        dedupe(inferred + heuristic),
+        root=root,
+        title_text=title_text,
+        body_text=body_text,
+        extra_text=extra_text,
+    )
+
+
+def infer_rule_based_tags_from_parts(
+    *,
+    title_text: str = "",
+    body_text: str = "",
+    extra_text: str = "",
+    root: Path | None = None,
+) -> list[str]:
+    haystack = f" {title_text.lower()} {body_text.lower()} {extra_text.lower()} "
+    candidate_tags: list[str] = []
+    if any(keyword in haystack for keyword in ("thermosphere", "thermospheric", "热层")):
+        if any(
+            keyword in haystack
+            for keyword in (
+                "thermospheric density",
+                "thermospheric mass density",
+                "mass density",
+                "neutral density",
+                "热层密度",
+                "热层质量密度",
+                "质量密度",
+                "中性密度",
+            )
+        ):
+            candidate_tags.append("对象/热层/密度")
+        if any(keyword in haystack for keyword in ("wind", "winds", "风场", "中性风")):
+            candidate_tags.append("对象/热层/风场")
+    if any(keyword in haystack for keyword in ("ionosphere", "ionospheric", "电离层", "equatorial ionosphere", "低纬电离层")):
+        if any(keyword in haystack for keyword in ("tec",)):
+            candidate_tags.append("对象/电离层/TEC")
+        if any(keyword in haystack for keyword in ("electron density", "电子密度")):
+            candidate_tags.append("对象/电离层/电子密度")
+    if any(keyword in haystack for keyword in ("geomagnetic storm", "geomagnetic storms", "磁暴", "storm-time")):
+        candidate_tags.append("事件/磁暴")
+    if any(keyword in haystack for keyword in ("substorm", "亚暴")):
+        candidate_tags.append("事件/亚暴")
+    if any(keyword in haystack for keyword in ("champ",)):
+        candidate_tags.append("仪器/CHAMP")
+    if any(keyword in haystack for keyword in ("grace-fo",)):
+        candidate_tags.append("仪器/GRACE-FO")
+    if any(keyword in haystack for keyword in ("grace",)):
+        candidate_tags.append("仪器/GRACE")
+    if any(keyword in haystack for keyword in ("gnss", "gps")):
+        candidate_tags.append("仪器/GNSS")
+    if any(keyword in haystack for keyword in ("fpi",)):
+        candidate_tags.append("仪器/FPI")
+    if any(keyword in haystack for keyword in ("deep learning", "machine learning", "neural network", "resnet", "深度学习", "机器学习")):
+        candidate_tags.append("方法/建模/机器学习")
+    if should_keep_formal_tag("应用/卫星影响", title_text=title_text, body_text=body_text, extra_text=extra_text):
+        candidate_tags.append("应用/卫星影响")
+    tags = [
+        tag
+        for tag in candidate_tags
+        if should_keep_formal_tag(tag, title_text=title_text, body_text=body_text, extra_text=extra_text)
+    ]
+    return sanitize_tags(tags, root=root, title_text=title_text, body_text=body_text, extra_text=extra_text)
+
+
+def is_metadata_only_record(row: Row | dict) -> bool:
+    title = sanitize_generation_text(display_title(row)).strip().lower()
+    abstract = clean_text(row_value(row, "abstract", ""))
+    source_kind = str(row_value(row, "summary_source_kind", "") or "").strip().lower()
+    if not abstract and source_kind not in FULL_TEXT_SOURCE_KINDS:
+        return True
+    if title in INVALID_METADATA_TITLES or title.startswith("redirecting"):
+        return not abstract
+    return False
+
+
 def fallback_tags_from_topics(row: Row, root: Path | None = None) -> list[str]:
     tags: list[str] = []
     for label in topic_labels(row):
         mapped = TOPIC_TO_TAG.get(label)
         if mapped:
             tags.append(mapped)
-    return sanitize_tags(tags, root=root)
+    return sanitize_tags(tags, root=root, title_text=display_title(row), body_text=clean_text(row["abstract"]))
 
 
 def build_filename(row: Row, analysis: ArticleAnalysis | None = None) -> str:

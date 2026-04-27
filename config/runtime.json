@@ -16,5 +16,8 @@
   "deep_read": {
     "search_full_text_when_pdf_missing": true,
     "pdf_page_limit": 40
+  },
+  "safety": {
+    "allow_output_deletions": true
   }
 }

@@ -31,5 +31,10 @@
     "app_name": "ScienceMonitor",
     "timeout_seconds": 120
   },
+  "ollama_api": {
+    "model": "gemma4:26b",
+    "base_url": "http://127.0.0.1:11434/api/chat",
+    "timeout_seconds": 300
+  },
   "chatgpt_web_manual": {}
 }

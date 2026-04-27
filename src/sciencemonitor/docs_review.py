@@ -35,10 +35,12 @@ WORKFLOW_SPEC_FILES = {
 ROOT_DOC_REQUIRED_SNIPPETS = {
     "README.md": (
         "openrouter_api",
+        "ollama_api",
         "manual-llm-import",
     ),
     "PROJECT_CONFIG.md": (
         "openrouter_api",
+        "ollama_api",
         "chatgpt_web_manual",
     ),
 }

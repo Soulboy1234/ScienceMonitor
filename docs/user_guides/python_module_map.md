@@ -45,6 +45,21 @@
 - [config_ui_page.py](../../src/sciencemonitor/config_ui_page.py)
   配置面板渲染层。负责配置 UI 的页面布局、状态条、操作卡片和表单 HTML 片段。
 
+- [config_ui_actions.py](../../src/sciencemonitor/config_ui_actions.py)
+  配置面板动作层。负责把表单输入转换成周报、深度解读和人工中转导入等实际运行命令。
+
+- [config_ui_result_cards.py](../../src/sciencemonitor/config_ui_result_cards.py)
+  配置面板结果卡片层。负责把最新周报、深度解读和人工中转结果渲染成 UI 中可刷新的 Markdown 结果面板。
+
+- [config_ui_runtime.py](../../src/sciencemonitor/config_ui_runtime.py)
+  配置面板运行态层。负责保存 UI 服务地址、后台周报任务状态和当前运行任务状态。
+
+- [config_ui_state_summary.py](../../src/sciencemonitor/config_ui_state_summary.py)
+  配置面板状态摘要层。负责统计输出文件数量、人工中转最新结果、监测期刊分组、最近维护状态，并从 `token_monitor` 读取 token 汇总。
+
+- [config_ui_support.py](../../src/sciencemonitor/config_ui_support.py)
+  配置面板业务支撑层。负责人工中转请求生成、响应导入后的文章总结/深度解读落地，以及 UI 所需状态的聚合。
+
 - [config_ui_review.py](../../src/sciencemonitor/config_ui_review.py)
   配置面板结构审查层。负责检查 UI 的关键 HTML 片段、关键 CSS/JS 片段是否存在，避免说明、类名和交互钩子悄悄回退。
 
@@ -136,14 +151,26 @@
 - [llm.py](../../src/sciencemonitor/llm.py)
   LLM 分析主流程。负责 provider 选择、缓存、结构化执行和 LLM 返回结果标准化。现在也负责把 `chatgpt_web_manual` 接到现有分析链路。
 
+- [token_monitor.py](../../src/sciencemonitor/token_monitor.py)
+  Token 监测模块。负责把 `codex_local` 的 stderr 日志和 API provider 的 usage 记录汇总到 `log/token_monitor/`，并生成 UI 直接消费的日级图表快照。
+
 - [llm_contracts.py](../../src/sciencemonitor/llm_contracts.py)
   LLM 合同层。负责单篇总结、周报、深度解读的 prompt 约束、schema 构造和输入文本整理工具。
 
 - [tags.py](../../src/sciencemonitor/tags.py)
-  标签执行层。负责 canonical 标签归一化、排序、父子压制、开放词表控制和候选标签记录。
+  标签执行层。负责 canonical 标签归一化、排序、父子压制、开放词表控制，以及把新 tag 送入预选体系。
+
+- [tag_review.py](../../src/sciencemonitor/tag_review.py)
+  标签审核层。负责把模型生成的标签尽量归并到 formal 标签风格、按上下文选择更合适的正式标签、把无法覆盖的标签风格化后保留到 pending，并提供 auto 输出重审与标签输出审查入口。
+
+- [tag_governance.py](../../src/sciencemonitor/tag_governance.py)
+  标签治理层。负责 formal/pending 标签文件同步、预选统计、Markdown 渲染和转正动作。
+
+- [tag_governance_review.py](../../src/sciencemonitor/tag_governance_review.py)
+  标签治理审查层。负责检查 formal/pending 文件一致性、正式/预选重叠和预选使用次数漂移，并供 harness 调用。
 
 - [tag_candidates.py](../../src/sciencemonitor/tag_candidates.py)
-  候选标签审阅层。负责读取运行中积累的新标签候选，并输出审阅报告。
+  预选标签兼容入口。为 CLI 和旧调用点提供 `pending_tags` 工作流的兼容包装。
 
 - [article_index.py](../../src/sciencemonitor/article_index.py)
   输出索引与链接修复主流程。负责维护 Obsidian 输出目录下的 `article_index/`、同步子索引、目录页和链接修复编排。
@@ -216,7 +243,10 @@
   测试周报生成、模板契约和输出结构。
 
 - [test_tag_candidates.py](../../tests/test_tag_candidates.py)
-  测试候选标签统计和审阅报告输出。
+  测试预选标签统计、Markdown 渲染和转正流程。
+
+- [test_tag_governance_review.py](../../tests/test_tag_governance_review.py)
+  测试标签治理审查模块能识别 formal/pending 漂移。
 
 - [test_topics.py](../../tests/test_topics.py)
   测试主题分类和保留逻辑。
@@ -230,4 +260,4 @@
 - 想知道“主流程怎么串”：看 [pipeline.py](../../src/sciencemonitor/pipeline.py)
 - 想知道“输出为什么长这样”：看 [article_summaries.py](../../src/sciencemonitor/article_summaries.py)、[reporting.py](../../src/sciencemonitor/reporting.py)、[deep_reads.py](../../src/sciencemonitor/deep_reads.py)
 - 想知道“配置为什么这么生效”：看 [config.py](../../src/sciencemonitor/config.py) 和 [doctor.py](../../src/sciencemonitor/doctor.py)
-- 想知道“标签为什么被打成这样”：看 [tags.py](../../src/sciencemonitor/tags.py) 和 [tag_candidates.py](../../src/sciencemonitor/tag_candidates.py)
+- 想知道“标签为什么被打成这样”：看 [tags.py](../../src/sciencemonitor/tags.py) 和 [tag_governance.py](../../src/sciencemonitor/tag_governance.py)

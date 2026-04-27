@@ -6,6 +6,7 @@ import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from typing import Callable
 
 from .article_fetch import resolve_summary_source_material
 from .config import (
@@ -31,9 +32,11 @@ from .topics import TopicClassifier
 from .utils import build_fingerprint, clean_abstract_text
 
 NON_RESEARCH_TITLE_PATTERNS = [
-    r"^issue information$",
-    r"^thank you to our \d{4} reviewers$",
-    r"^editorial$",
+    r"^issue information(?: and (?:table of )?contents?)?$",
+    r"^thank you to (?:our|the) (?:peer )?reviewers(?: (?:in|for))? \d{4}$",
+    r"^thank you to (?:our|the) (?:peer )?reviewers$",
+    r"^editorial(?: note)?$",
+    r"^guest editorial$",
     r"^corrigendum\b",
     r"^erratum\b",
     r"^retraction\b",
@@ -103,44 +106,81 @@ class ScienceMonitor:
         max_per_source: int,
         hydrate: bool = True,
         source_ids: set[str] | None = None,
+        progress_callback: Callable[[dict], None] | None = None,
     ) -> UpdateResult:
         since_date = report_date - timedelta(days=max(days_back - 1, 0))
         fetched_total = 0
         kept: list[Paper] = []
         errors: list[str] = []
+        sources = self._iter_sources(source_ids)
 
-        for source in self._iter_sources(source_ids):
+        self._emit_progress(
+            progress_callback,
+            stage="fetch_prepare",
+            source_total=len(sources),
+            source_index=0,
+            fetched_count=0,
+            kept_count=0,
+        )
+
+        for index, source in enumerate(sources, start=1):
+            self._emit_progress(
+                progress_callback,
+                stage="fetching",
+                source_total=len(sources),
+                source_index=index,
+                current_source=source.id,
+                fetched_count=fetched_total,
+                kept_count=len(kept),
+            )
             try:
                 papers = self._fetch_recent_works(source, since_date, report_date, max_per_source)
             except Exception as exc:
                 errors.append(f"{source.id}: {exc}")
+                self._emit_progress(
+                    progress_callback,
+                    stage="fetching",
+                    source_total=len(sources),
+                    source_index=index,
+                    current_source=source.id,
+                    fetched_count=fetched_total,
+                    kept_count=len(kept),
+                    last_error=str(exc),
+                )
                 continue
             fetched_total += len(papers)
-            for paper in papers:
-                result = self.classifier.classify(paper, source)
-                if hydrate and self._should_hydrate_paper(paper, source, result):
-                    self._hydrate_paper(paper)
-                    result = self.classifier.classify(paper, source)
-                if self._should_drop_paper(paper, source, result):
-                    continue
-                if not self.classifier.should_keep(result, source):
-                    continue
-                paper.topics = result.topics
-                paper.topic_labels = result.topic_labels
-                paper.relevance_score = result.relevance_score
-                paper.notes = result.matched_keywords
-                if paper.doi or paper.title:
-                    paper.fingerprint = build_fingerprint(
-                        paper.source_id,
-                        paper.title,
-                        paper.published_date,
-                        paper.doi,
-                    )
-                kept.append(paper)
+            kept.extend(self._collect_kept_papers_from_source(papers, source, hydrate))
+
+            self._emit_progress(
+                progress_callback,
+                stage="fetching",
+                source_total=len(sources),
+                source_index=index,
+                current_source=source.id,
+                fetched_count=fetched_total,
+                kept_count=len(kept),
+            )
 
         # Deduplicate across sources by DOI first, then title/date.
+        self._emit_progress(
+            progress_callback,
+            stage="deduplicating",
+            source_total=len(sources),
+            source_index=len(sources),
+            fetched_count=fetched_total,
+            kept_count=len(kept),
+        )
         deduped = self._deduplicate(kept)
         self.storage.upsert_papers(deduped)
+        self._emit_progress(
+            progress_callback,
+            stage="update_complete",
+            source_total=len(sources),
+            source_index=len(sources),
+            fetched_count=fetched_total,
+            kept_count=len(deduped),
+            error_count=len(errors),
+        )
         return UpdateResult(
             fetched_count=fetched_total,
             kept_count=len(deduped),
@@ -152,13 +192,33 @@ class ScienceMonitor:
     def generate_report(self, report_date: date) -> tuple[Path, dict]:
         return self.generate_windowed_report(report_date=report_date, window_days=7)
 
-    def generate_windowed_report(self, report_date: date, window_days: int = 7) -> tuple[Path, dict]:
+    def generate_windowed_report(
+        self,
+        report_date: date,
+        window_days: int = 7,
+        progress_callback: Callable[[dict], None] | None = None,
+        reuse_existing_summaries: bool = True,
+    ) -> tuple[Path, dict]:
         if not self.weekly_report_enabled():
             raise RuntimeError("Weekly report generation is disabled in config/runtime.json.")
-        summary_results = self.generate_article_summary_results(report_date=report_date, window_days=window_days)
+        self._emit_progress(progress_callback, stage="summary_generation", report_date=report_date.isoformat(), window_days=window_days)
+        summary_results = self.generate_article_summary_results(
+            report_date=report_date,
+            window_days=window_days,
+            progress_callback=progress_callback,
+            reuse_existing_summaries=reuse_existing_summaries,
+        )
+        self._emit_progress(
+            progress_callback,
+            stage="report_render",
+            report_date=report_date.isoformat(),
+            window_days=window_days,
+            summary_count=len(summary_results),
+        )
         markdown, stats = build_report(
             report_date,
             summary_results,
+            missing_source_rows=self._missing_source_rows_for_report(report_date, window_days, summary_results),
             window_days=window_days,
             analysis_engine=self.analysis_engine,
             root=self.root,
@@ -173,6 +233,14 @@ class ScienceMonitor:
             stats=stats,
             created_at=datetime.utcnow().isoformat(timespec="seconds"),
         )
+        self._emit_progress(
+            progress_callback,
+            stage="sync_output",
+            report_date=report_date.isoformat(),
+            window_days=window_days,
+            paper_count=stats.get("paper_count", 0),
+            journal_count=stats.get("journal_count", 0),
+        )
         sync_out_library(self.root)
         return report_path, stats
 
@@ -181,7 +249,13 @@ class ScienceMonitor:
         sync_out_library(self.root)
         return [item.output_path for item in results]
 
-    def generate_article_summary_results(self, report_date: date, window_days: int = 7):
+    def generate_article_summary_results(
+        self,
+        report_date: date,
+        window_days: int = 7,
+        progress_callback: Callable[[dict], None] | None = None,
+        reuse_existing_summaries: bool = True,
+    ):
         start_date = report_date - timedelta(days=max(window_days - 1, 0))
         rows = self.storage.get_recent_papers(start_date, report_date)
         rows = [row for row in rows if not self._row_is_non_research(row)]
@@ -193,7 +267,29 @@ class ScienceMonitor:
             root=self.root,
             enable_live_fetch=True,
             require_analysis=True,
+            progress_callback=progress_callback,
+            reuse_existing_summaries=reuse_existing_summaries,
         )
+
+    def _missing_source_rows_for_report(
+        self,
+        report_date: date,
+        window_days: int,
+        summary_results: list,
+    ) -> list:
+        start_date = report_date - timedelta(days=max(window_days - 1, 0))
+        rows = [row for row in self.storage.get_recent_papers(start_date, report_date) if not self._row_is_non_research(row)]
+        summarized_dois = {str(item.row["doi"] or "").strip().lower() for item in summary_results if str(item.row["doi"] or "").strip()}
+        summarized_titles = {str(item.row["title"] or "").strip().lower() for item in summary_results if str(item.row["title"] or "").strip()}
+        missing = []
+        for row in rows:
+            doi = str(row["doi"] or "").strip().lower()
+            title = str(row["title"] or "").strip().lower()
+            if (doi and doi in summarized_dois) or (not doi and title and title in summarized_titles):
+                continue
+            if not str(row["abstract"] or "").strip():
+                missing.append(row)
+        return missing
 
     def sync_output_library(self):
         return sync_out_library(self.root)
@@ -205,16 +301,39 @@ class ScienceMonitor:
         max_per_source: int = 20,
         hydrate: bool = True,
         source_ids: set[str] | None = None,
+        progress_callback: Callable[[dict], None] | None = None,
+        reuse_existing_summaries: bool = True,
     ) -> tuple[UpdateResult, Path | None, dict]:
+        self._emit_progress(
+            progress_callback,
+            stage="starting",
+            report_date=report_date.isoformat(),
+            days_back=days_back,
+            max_per_source=max_per_source,
+            hydrate=hydrate,
+        )
         update_result = self.update(
             report_date=report_date,
             days_back=days_back,
             max_per_source=max_per_source,
             hydrate=hydrate,
             source_ids=source_ids,
+            progress_callback=progress_callback,
         )
         if not self.weekly_report_enabled():
-            self.generate_article_summary_results(report_date, window_days=days_back)
+            self._emit_progress(
+                progress_callback,
+                stage="summary_generation",
+                report_date=report_date.isoformat(),
+                window_days=days_back,
+            )
+            self.generate_article_summary_results(
+                report_date,
+                window_days=days_back,
+                progress_callback=progress_callback,
+                reuse_existing_summaries=reuse_existing_summaries,
+            )
+            self._emit_progress(progress_callback, stage="sync_output", report_date=report_date.isoformat(), window_days=days_back)
             sync_out_library(self.root)
             return (
                 update_result,
@@ -227,7 +346,30 @@ class ScienceMonitor:
                     "highlight_count": 0,
                 },
             )
-        report_path, stats = self.generate_windowed_report(report_date, window_days=days_back)
+        self._emit_progress(
+            progress_callback,
+            stage="building_report",
+            report_date=report_date.isoformat(),
+            window_days=days_back,
+            fetched_count=update_result.fetched_count,
+            kept_count=update_result.kept_count,
+        )
+        report_path, stats = self.generate_windowed_report(
+            report_date,
+            window_days=days_back,
+            progress_callback=progress_callback,
+            reuse_existing_summaries=reuse_existing_summaries,
+        )
+        self._emit_progress(
+            progress_callback,
+            stage="done",
+            report_date=report_date.isoformat(),
+            window_days=days_back,
+            fetched_count=update_result.fetched_count,
+            kept_count=update_result.kept_count,
+            paper_count=stats.get("paper_count", 0),
+            journal_count=stats.get("journal_count", 0),
+        )
         return update_result, report_path, stats
 
     def weekly_report_enabled(self) -> bool:
@@ -240,6 +382,41 @@ class ScienceMonitor:
         if not source_ids:
             return list(self.sources)
         return [source for source in self.sources if source.id in source_ids]
+
+    def _emit_progress(self, callback: Callable[[dict], None] | None, **payload) -> None:
+        if callback is None:
+            return
+        callback(payload)
+
+    def _collect_kept_papers_from_source(
+        self,
+        papers: list[Paper],
+        source: SourceConfig,
+        hydrate: bool,
+    ) -> list[Paper]:
+        kept: list[Paper] = []
+        for paper in papers:
+            result = self.classifier.classify(paper, source)
+            if hydrate and self._should_hydrate_paper(paper, source, result):
+                self._hydrate_paper(paper)
+                result = self.classifier.classify(paper, source)
+            if self._should_drop_paper(paper, source, result):
+                continue
+            if not self.classifier.should_keep(result, source):
+                continue
+            paper.topics = result.topics
+            paper.topic_labels = result.topic_labels
+            paper.relevance_score = result.relevance_score
+            paper.notes = result.matched_keywords
+            if paper.doi or paper.title:
+                paper.fingerprint = build_fingerprint(
+                    paper.source_id,
+                    paper.title,
+                    paper.published_date,
+                    paper.doi,
+                )
+            kept.append(paper)
+        return kept
 
     def _fetch_recent_works(
         self,

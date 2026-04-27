@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import signal
 import ssl
+import threading
 from contextlib import contextmanager
 from typing import Any
 from urllib import parse, request
@@ -68,4 +69,8 @@ class HTTPClient:
             signal.signal(signal.SIGALRM, previous_handler)
 
     def _supports_signal_deadline(self) -> bool:
-        return hasattr(signal, "SIGALRM") and hasattr(signal, "setitimer")
+        return (
+            hasattr(signal, "SIGALRM")
+            and hasattr(signal, "setitimer")
+            and threading.current_thread() is threading.main_thread()
+        )

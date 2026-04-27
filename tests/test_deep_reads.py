@@ -377,6 +377,58 @@ class DeepReadTest(unittest.TestCase):
         self.assertIn("[单篇总结](../article_summaries/summary.md)", markdown)
         self.assertNotIn("[[log/real_case_eval/", markdown)
 
+    def test_render_deep_read_markdown_uses_obsidian_safe_tags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            _write_minimal_project(root)
+            note_path = root / "out" / "deep_reads" / "deep_read.md"
+            note_path.parent.mkdir(parents=True, exist_ok=True)
+            pdf_path = root / "papers" / "example.pdf"
+            pdf_path.parent.mkdir(parents=True, exist_ok=True)
+            pdf_path.write_bytes(b"%PDF-1.4")
+            analysis = DeepReadAnalysis(
+                chinese_title="测试",
+                tags=["He+波段", "指数/F10.7"],
+                paper_type="研究论文",
+                one_sentence_overview="测试。",
+                why="作者要解决的问题是：测试。",
+                how="测试。",
+                key_results="#### 硬结论\n1. 测试。",
+                contribution="测试。",
+                limitations="测试。",
+                reproducibility="测试。",
+                relation="测试。",
+                final_conclusion="测试。",
+                relation_to_my_work="测试。",
+                follow_up_questions="测试。",
+                needs_manual_review="测试。",
+                knowledge_position="测试。",
+            )
+            markdown = _render_deep_read_markdown(
+                project=root,
+                template_text=(root / "config" / "templates" / "deep_reading_report_template.md").read_text(encoding="utf-8"),
+                metadata={
+                    "doi": "10.1000/example",
+                    "title": "Example Paper",
+                    "journal": "JGR: Space Physics",
+                    "authors": "A Author",
+                    "raw_authors": "A Author",
+                    "published_date": "2026-03-31",
+                    "url": "https://example.org/paper",
+                },
+                analysis=analysis,
+                related_summary=None,
+                note_path=note_path,
+                pdf_path=pdf_path,
+                source_kind="local_pdf_full_text",
+                source_url=str(pdf_path),
+                knowledge_position_text="测试。",
+            )
+
+        self.assertIn("#He＋波段", markdown)
+        self.assertIn("#指数/F10．7", markdown)
+        self.assertNotIn("#He+波段", markdown)
+
     def test_audit_detects_eval_obsidian_links_as_invalid(self) -> None:
         markdown = "\n".join(
             [
@@ -517,7 +569,7 @@ class DeepReadTest(unittest.TestCase):
                 related_summary=related_summary,
             )
 
-        self.assertIn("热层/密度", normalized.tags)
+        self.assertIn("对象/热层/密度", normalized.tags)
         self.assertNotIn("信息来源/仅摘要", normalized.tags)
 
     def test_extract_introduction_excerpt_prefers_introduction_section(self) -> None:
@@ -800,7 +852,7 @@ class DeepReadTest(unittest.TestCase):
             self.assertEqual(result.pdf_output_path.parent, pdf_dir)
             self.assertEqual(result.output_path.name, "Li 2026 - JGR.SP - 示例单篇总结 深度解读.md")
             text = result.output_path.read_text(encoding="utf-8")
-            self.assertIn("#磁暴", text)
+            self.assertIn("#事件/磁暴", text)
             self.assertIn("#仪器/FPI", text)
             sync_mock.assert_not_called()
 

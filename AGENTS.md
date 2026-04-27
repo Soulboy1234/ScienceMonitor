@@ -83,7 +83,9 @@
 - 周报：`src/sciencemonitor/reporting.py`
 - 深读：`src/sciencemonitor/deep_reads.py`
 - 标签执行层：`src/sciencemonitor/tags.py`
-- 候选标签审阅：`src/sciencemonitor/tag_candidates.py`
+- 标签审核层：`src/sciencemonitor/tag_review.py`
+- 标签治理与转正：`src/sciencemonitor/tag_governance.py`
+- 预选标签兼容入口：`src/sciencemonitor/tag_candidates.py`
 - 输出索引：`src/sciencemonitor/article_index.py`
 - 来源审计：`src/sciencemonitor/source_audit.py`
 - 全量 Python 文件说明：`docs/user_guides/python_module_map.md`
@@ -111,7 +113,11 @@
 - 本机私人路径覆盖：`config/local.paths.json`，该文件不会上传 GitHub；公开示例见 `config/local.paths.example.json`
 - 维护预算：`config/maintenance_budget.json`
 - 用户研究偏好：`PROJECT_CONFIG.md` 的研究偏好同步段，运行时落地到 `config/research_preferences.json`
-- 标签归一化：`config/focus_tags.json`
+- 标签归一化与治理：
+  - 正式标签人工入口：`config/tag/formal_tags.md`
+  - 正式标签机器资产：`config/focus_tags.json`
+  - 预选标签人工入口：`config/tag/pending_tags.md`
+  - 预选标签机器资产：`config/pending_tags.json`
 - 期刊源与主题：`config/sources.json`、`config/topics.json`
 
 注意：

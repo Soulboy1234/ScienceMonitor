@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from pathlib import Path
 
 from .article_index import sync_out_library
 from .article_summaries import render_article_summary
 from .article_summary_markdown import load_article_summary_template
-from .article_summary_meta import abbreviate_journal_name
-from .article_summary_text import build_note_title
+from .article_summary_text import GPT_SUMMARY_TAG, build_note_title
 from .chatgpt_web_manual import (
     ManualRequestBundle,
     import_manual_response,
@@ -20,12 +18,22 @@ from .chatgpt_web_manual import (
 )
 from .config import (
     article_summaries_root,
-    chatgpt_web_manual_requests_root,
     chatgpt_web_manual_responses_root,
     deep_reads_root,
-    load_sources,
     reports_root,
     templates_root,
+)
+from .config_ui_runtime import _active_task_from_payload, read_config_ui_runtime_state
+from .config_ui_state_summary import (
+    count_json_files,
+    count_manual_files,
+    count_markdown_files,
+    detect_token_usage,
+    latest_manual_result_file,
+    latest_markdown_file,
+    load_latest_maintenance_status,
+    load_monitored_journal_groups,
+    load_monitored_journal_labels,
 )
 from .deep_read_markdown import _run_deep_read_review_loop, _validate_deep_read_markdown
 from .deep_reads import (
@@ -46,24 +54,32 @@ def collect_config_ui_state(project: Path) -> dict:
     deep_root = deep_reads_root(project)
     report_root = reports_root(project)
     manual_requests = list_manual_requests(project, limit=0)
-    manual_response_count = _count_json_files(chatgpt_web_manual_responses_root(project))
+    manual_response_count = count_json_files(chatgpt_web_manual_responses_root(project))
+    token_usage = detect_token_usage(project)
     counts = {
-        "article_summaries": _count_markdown_files(summary_root),
-        "deep_reads": _count_markdown_files(deep_root),
-        "reports": _count_markdown_files(report_root),
+        "article_summaries": count_markdown_files(summary_root),
+        "deep_reads": count_markdown_files(deep_root),
+        "reports": count_markdown_files(report_root),
         "manual_requests": len(manual_requests),
         "manual_responses": manual_response_count,
-        "manual_files": _count_manual_files(project),
+        "manual_files": count_manual_files(project),
     }
+    runtime_state = read_config_ui_runtime_state(project)
     return {
         "counts": counts,
-        "latest_article_summary": _latest_markdown_file(summary_root),
-        "latest_deep_read": _latest_markdown_file(deep_root),
-        "latest_report": _latest_markdown_file(report_root),
-        "journals": _load_monitored_journal_labels(project),
-        "journal_groups": _load_monitored_journal_groups(project),
-        "token_usage": _detect_token_usage(project),
-        "maintenance_status": _load_latest_maintenance_status(project),
+        "latest_article_summary": latest_markdown_file(summary_root),
+        "latest_deep_read": latest_markdown_file(deep_root),
+        "latest_manual_result": latest_manual_result_file(project),
+        "latest_report": latest_markdown_file(report_root),
+        "journals": load_monitored_journal_labels(project),
+        "journal_groups": load_monitored_journal_groups(project),
+        "token_usage": token_usage["summary_text"],
+        "token_usage_periods": token_usage["periods"],
+        "token_usage_chart": token_usage.get("chart", {}),
+        "token_usage_providers": token_usage.get("providers", {}),
+        "maintenance_status": load_latest_maintenance_status(project),
+        "report_job": runtime_state.get("report_job", {}),
+        "active_task": _active_task_from_payload(runtime_state),
     }
 
 
@@ -218,6 +234,7 @@ def _generate_manual_article_summary(project: Path, metadata: dict, payload: dic
     row["authors"] = str(hints.get("authors", "") or "").replace(", ", "\n")
     row["topic_labels"] = str(hints.get("topic_labels", "") or "").replace("、", "\n")
     tags = [str(item).strip() for item in payload.get("tags", []) if str(item).strip()]
+    tags.append(GPT_SUMMARY_TAG)
     source_kind = "chatgpt_web_manual_search"
     if "信息来源/仅摘要" in tags or "仅基于摘要/元数据整理" in str(payload.get("supplement", "")):
         source_kind = "manual_web_abstract"
@@ -347,92 +364,3 @@ def _load_request_metadata(project: Path, request_id: str) -> dict:
         raise ValueError(f"未找到 request_id={request_id} 的 metadata 文件。")
     payload = json.loads(path.read_text(encoding="utf-8"))
     return payload if isinstance(payload, dict) else {}
-
-
-def _count_markdown_files(directory: Path) -> int:
-    if not directory.exists():
-        return 0
-    return len(list(directory.glob("*.md")))
-
-
-def _count_json_files(directory: Path) -> int:
-    if not directory.exists():
-        return 0
-    return len(list(directory.glob("*.json")))
-
-
-def _latest_markdown_file(directory: Path) -> str:
-    if not directory.exists():
-        return ""
-    paths = [path for path in directory.glob("*.md") if path.is_file()]
-    if not paths:
-        return ""
-    latest = max(paths, key=lambda path: path.stat().st_mtime)
-    return str(latest)
-
-
-def _load_monitored_journal_labels(project: Path) -> list[str]:
-    return sorted({abbreviate_journal_name(source.journal_title) for source in load_sources(project / "config" / "sources.json")})
-
-
-def _load_monitored_journal_groups(project: Path) -> list[dict[str, object]]:
-    tier_order = {"core": 0, "related": 1, "watchlist": 2}
-    tier_labels = {"core": "核心监测", "related": "相关扩展", "watchlist": "观察列表"}
-    grouped: dict[str, list[str]] = {"core": [], "related": [], "watchlist": []}
-    sources = sorted(
-        load_sources(project / "config" / "sources.json"),
-        key=lambda source: (tier_order.get(source.tier, 99), source.priority, abbreviate_journal_name(source.journal_title)),
-    )
-    for source in sources:
-        grouped.setdefault(source.tier, [])
-        grouped[source.tier].append(abbreviate_journal_name(source.journal_title))
-    return [
-        {"label": tier_labels.get(tier, tier), "items": items}
-        for tier, items in grouped.items()
-        if items
-    ]
-
-
-def _detect_token_usage(project: Path) -> str:
-    token_logs = sorted(project.glob("log/**/*token*usage*.md"))
-    if not token_logs:
-        return "未记录"
-    latest = max(token_logs, key=lambda path: path.stat().st_mtime)
-    text = latest.read_text(encoding="utf-8", errors="ignore")
-    match = re.search(r"total_tokens[^0-9]*(\d+)", text, flags=re.IGNORECASE)
-    if match:
-        return f"{match.group(1)}（最近记录）"
-    return f"已记录：{latest.name}"
-
-
-def _count_manual_files(project: Path) -> int:
-    requests = chatgpt_web_manual_requests_root(project)
-    responses = chatgpt_web_manual_responses_root(project)
-    request_files = len(list(requests.glob("*/prompt.md"))) if requests.exists() else 0
-    response_files = len(list(responses.glob("*.json"))) if responses.exists() else 0
-    return request_files + response_files
-
-
-def _load_latest_maintenance_status(project: Path) -> dict[str, str]:
-    latest_path = project / "log" / "maintenance" / "latest.md"
-    if not latest_path.exists():
-        return {"overall": "unknown", "path": "", "doctor": "", "pytest": "", "harness": "", "entropy": ""}
-    text = latest_path.read_text(encoding="utf-8", errors="ignore")
-
-    def _extract(name: str) -> str:
-        match = re.search(rf"^- {re.escape(name)}=(\w+)", text, flags=re.MULTILINE)
-        return match.group(1) if match else ""
-
-    overall = _extract("overall")
-    doctor = _extract("doctor")
-    pytest = _extract("pytest")
-    harness = _extract("harness")
-    entropy = _extract("entropy")
-    return {
-        "overall": overall or "unknown",
-        "path": str(latest_path),
-        "doctor": doctor or "",
-        "pytest": pytest or "",
-        "harness": harness or "",
-        "entropy": entropy or "",
-    }

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-AUTOMATIC_ANALYSIS_PROVIDERS = ("codex_local", "openai_api", "openrouter_api")
+AUTOMATIC_ANALYSIS_PROVIDERS = ("codex_local", "openai_api", "openrouter_api", "ollama_api")
 MANUAL_ANALYSIS_PROVIDER = "chatgpt_web_manual"
 SUPPORTED_ANALYSIS_PROVIDERS = AUTOMATIC_ANALYSIS_PROVIDERS + (MANUAL_ANALYSIS_PROVIDER,)
 
@@ -8,6 +8,7 @@ AUTOMATIC_PROVIDER_LABELS = {
     "codex_local": "Codex 本地",
     "openai_api": "OpenAI API",
     "openrouter_api": "OpenRouter API",
+    "ollama_api": "Ollama 本地",
 }
 
 ALL_PROVIDER_LABELS = {

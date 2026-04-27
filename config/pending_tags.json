@@ -1,0 +1,424 @@
+{
+  "version": 2,
+  "description": "Pending tags normalized into review families after runtime outputs are cleaned and deduplicated.",
+  "tags": {
+    "对象/电离层/E区": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 174,
+      "first_seen": "2026-04-17T01:09:51Z",
+      "last_seen": "2026-04-23T23:28:16Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 84,
+        "article_summary_repair": 87
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "仪器/SRG": {
+      "category": "instrument_data",
+      "family": "instruments_missions_observations",
+      "count": 193,
+      "first_seen": "2026-04-17T01:11:49Z",
+      "last_seen": "2026-04-23T23:28:16Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 98,
+        "article_summary_repair": 92
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/电离层/MUF": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 209,
+      "first_seen": "2026-04-17T01:13:53Z",
+      "last_seen": "2026-04-23T23:28:16Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 104,
+        "article_summary_repair": 102
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "仪器/天琴": {
+      "category": "instrument_data",
+      "family": "instruments_missions_observations",
+      "count": 206,
+      "first_seen": "2026-04-17T01:14:36Z",
+      "last_seen": "2026-04-23T23:28:16Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 101,
+        "article_summary_repair": 102
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "应用/影响/指向误差": {
+      "category": "application_impact",
+      "family": "applications_impacts",
+      "count": 206,
+      "first_seen": "2026-04-17T01:14:36Z",
+      "last_seen": "2026-04-23T23:28:16Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 101,
+        "article_summary_repair": 102
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "仪器/AIRS亮温扰动": {
+      "category": "instrument_data",
+      "family": "instruments_missions_observations",
+      "count": 199,
+      "first_seen": "2026-04-17T01:17:23Z",
+      "last_seen": "2026-04-23T23:28:16Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 100,
+        "article_summary_repair": 96
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/波动/嘶声": {
+      "category": "research_object",
+      "family": "magnetosphere_particles",
+      "count": 199,
+      "first_seen": "2026-04-17T01:18:27Z",
+      "last_seen": "2026-04-23T23:28:17Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 97,
+        "article_summary_repair": 99
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "模型/辐射带模型": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 199,
+      "first_seen": "2026-04-17T01:18:27Z",
+      "last_seen": "2026-04-23T23:28:17Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 97,
+        "article_summary_repair": 99
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "模型/GED": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 249,
+      "first_seen": "2026-04-17T01:20:28Z",
+      "last_seen": "2026-04-27T23:04:50Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 124,
+        "article_summary_repair": 122
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "方法/多通带滤波": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 96,
+      "first_seen": "2026-04-17T01:24:18Z",
+      "last_seen": "2026-04-23T23:28:17Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 48,
+        "article_summary_repair": 47
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "仪器/RGB传感器": {
+      "category": "instrument_data",
+      "family": "instruments_missions_observations",
+      "count": 96,
+      "first_seen": "2026-04-17T01:24:18Z",
+      "last_seen": "2026-04-23T23:28:17Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 48,
+        "article_summary_repair": 47
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "指数/SML": {
+      "category": "index_control",
+      "family": "magnetosphere_particles",
+      "count": 201,
+      "first_seen": "2026-04-17T01:25:12Z",
+      "last_seen": "2026-04-23T23:28:17Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 100,
+        "article_summary_repair": 98
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/磁层/感应磁层": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 261,
+      "first_seen": "2026-04-17T01:26:59Z",
+      "last_seen": "2026-04-27T23:04:50Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 132,
+        "article_summary_repair": 126
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/磁层/压缩": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 204,
+      "first_seen": "2026-04-17T01:30:28Z",
+      "last_seen": "2026-04-23T23:28:17Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 100,
+        "article_summary_repair": 101
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "数据/中子监测器": {
+      "category": "instrument_data",
+      "family": "data_assets",
+      "count": 204,
+      "first_seen": "2026-04-17T01:30:28Z",
+      "last_seen": "2026-04-23T23:28:17Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 100,
+        "article_summary_repair": 101
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/太阳射电/III型暴": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 102,
+      "first_seen": "2026-04-17T01:32:46Z",
+      "last_seen": "2026-04-23T23:28:17Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 51,
+        "article_summary_repair": 50
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "模型/MS-GWaM": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 205,
+      "first_seen": "2026-04-17T01:34:01Z",
+      "last_seen": "2026-04-23T23:28:18Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 102,
+        "article_summary_repair": 100
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "仪器/EOS-08": {
+      "category": "instrument_data",
+      "family": "instruments_missions_observations",
+      "count": 104,
+      "first_seen": "2026-04-17T01:34:51Z",
+      "last_seen": "2026-04-23T23:28:18Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 52,
+        "article_summary_repair": 51
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/电离层/电导": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 209,
+      "first_seen": "2026-04-17T01:37:25Z",
+      "last_seen": "2026-04-23T23:28:18Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 104,
+        "article_summary_repair": 102
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "模型/GLOW": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 209,
+      "first_seen": "2026-04-17T01:37:25Z",
+      "last_seen": "2026-04-23T23:28:18Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 104,
+        "article_summary_repair": 102
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/磁鞘/喷流": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 201,
+      "first_seen": "2026-04-17T03:15:00Z",
+      "last_seen": "2026-04-23T23:28:18Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 100,
+        "article_summary_repair": 98
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/等离子体/超热离子": {
+      "category": "research_object",
+      "family": "magnetosphere_particles",
+      "count": 100,
+      "first_seen": "2026-04-17T03:15:54Z",
+      "last_seen": "2026-04-23T23:28:18Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 50,
+        "article_summary_repair": 49
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    }
+  }
+}

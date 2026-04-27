@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -28,29 +29,7 @@ def _sample_rendered_html(project: Path) -> str:
             "cli_defaults": {"daily_days_back": 7, "daily_max_per_source": 20, "report_window_days": 7},
             "deep_read": {"search_full_text_when_pdf_missing": True, "pdf_page_limit": 0},
         },
-        analysis={
-            "provider": "openrouter_api",
-            "article_summaries": {"reasoning_effort": "medium"},
-            "report": {"reasoning_effort": "medium"},
-            "deep_reads": {"reasoning_effort": "high"},
-            "codex_local": {"model": "", "sandbox": "read-only", "timeout_seconds": 180},
-            "openai_api": {
-                "model": "gpt-5-mini",
-                "base_url": "https://api.openai.com/v1/responses",
-                "api_key_env": "SCIENCEMONITOR_OPENAI_API_KEY",
-                "api_key": "",
-                "timeout_seconds": 120,
-            },
-            "openrouter_api": {
-                "model": "openai/gpt-5-mini",
-                "base_url": "https://openrouter.ai/api/v1/chat/completions",
-                "api_key_env": "SCIENCEMONITOR_OPENROUTER_API_KEY",
-                "api_key": "",
-                "site_url": "https://example.com",
-                "app_name": "ScienceMonitor",
-                "timeout_seconds": 120,
-            },
-        },
+        analysis=_sample_analysis_config(),
         paths={
             "output_root": "out",
             "local_output_root": "/tmp/private-vault",
@@ -77,23 +56,103 @@ def _sample_rendered_html(project: Path) -> str:
                 response_filename="sample.json",
             )
         ],
-        ui_state={
-            "counts": {"article_summaries": 1, "deep_reads": 2, "reports": 3, "manual_files": 4},
-            "journal_groups": [{"label": "核心监测", "items": ["JGR.SP", "SW"]}],
-            "token_usage": "1234 tokens",
-            "maintenance_status": {
-                "overall": "ok",
-                "doctor": "ok",
-                "pytest": "ok",
-                "harness": "ok",
-                "entropy": "ok",
-                "path": str(project / "log" / "maintenance" / "latest.md"),
-            },
-            "latest_report": str(project / "README.md"),
-            "latest_deep_read": str(project / "README.md"),
-            "latest_article_summary": str(project / "README.md"),
-        },
+        ui_state=_sample_ui_state(project),
     )
+
+
+def _sample_analysis_config() -> dict:
+    return {
+        "provider": "openrouter_api",
+        "article_summaries": {"reasoning_effort": "medium"},
+        "report": {"reasoning_effort": "medium"},
+        "deep_reads": {"reasoning_effort": "high"},
+        "codex_local": {"model": "", "sandbox": "read-only", "timeout_seconds": 180},
+        "openai_api": {
+            "model": "gpt-5-mini",
+            "base_url": "https://api.openai.com/v1/responses",
+            "api_key_env": "SCIENCEMONITOR_OPENAI_API_KEY",
+            "api_key": "",
+            "timeout_seconds": 120,
+        },
+        "openrouter_api": {
+            "model": "openai/gpt-5-mini",
+            "base_url": "https://openrouter.ai/api/v1/chat/completions",
+            "api_key_env": "SCIENCEMONITOR_OPENROUTER_API_KEY",
+            "api_key": "",
+            "site_url": "https://example.com",
+            "app_name": "ScienceMonitor",
+            "timeout_seconds": 120,
+        },
+    }
+
+
+def _sample_ui_state(project: Path) -> dict:
+    start_day = date(2026, 3, 14)
+    chart_days = []
+    for offset in range(30):
+        current = start_day + timedelta(days=offset)
+        token_count = 0
+        if current.isoformat() == "2026-04-09":
+            token_count = 463894
+        elif current.isoformat() == "2026-04-10":
+            token_count = 438700
+        chart_days.append(
+            {
+                "date": current.isoformat(),
+                "label": f"{current.month}月{current.day}日",
+                "short_label": f"{current.month}/{current.day}",
+                "show_label": offset in {0, 29},
+                "total_tokens": token_count,
+                "runs": 1 if token_count else 0,
+                "providers": {"codex_local": {"tokens": token_count, "label": "Codex 本地", "color": "#d9482b"}},
+            }
+        )
+    return {
+        "counts": {"article_summaries": 1, "deep_reads": 2, "reports": 3, "manual_files": 4},
+        "journal_groups": [{"label": "核心监测", "items": ["JGR.SP", "SW"]}],
+        "token_usage": "今天 0（0次） / 本周 902,594（2次） / 本月 902,594（2次）",
+        "token_usage_periods": {
+            "today": {"label": "今天", "tokens": 0, "runs": 0},
+            "week": {"label": "本周", "tokens": 902594, "runs": 2},
+            "month": {"label": "本月", "tokens": 902594, "runs": 2},
+        },
+        "token_usage_chart": {
+            "max_tokens": 463894,
+            "providers": [{"key": "codex_local", "label": "Codex 本地", "color": "#d9482b"}],
+            "days": chart_days,
+        },
+        "report_job": {
+            "status": "running",
+            "step": "抓取与筛选文章",
+            "message": "正在抓取最新论文。",
+            "elapsed_seconds": 15.0,
+            "estimated_total_seconds": 42.0,
+            "fetched_count": 8,
+            "kept_count": 3,
+            "source_index": 2,
+            "source_total": 6,
+            "current_source": "jgr_space_physics",
+        },
+        "active_task": {
+            "kind": "weekly_report",
+            "label": "周报任务",
+            "step": "抓取与筛选文章",
+            "message": "正在抓取最新论文。",
+            "status": "running",
+        },
+        "maintenance_status": {
+            "overall": "ok",
+            "doctor": "ok",
+            "pytest": "ok",
+            "harness": "ok",
+            "entropy": "ok",
+            "path": str(project / "log" / "maintenance" / "latest.md"),
+        },
+        "latest_report": str(project / "README.md"),
+        "latest_deep_read": str(project / "README.md"),
+        "latest_article_summary": str(project / "README.md"),
+        "latest_manual_result": str(project / "README.md"),
+    }
 
 
 def _load_ui_css(project: Path) -> str:
@@ -116,13 +175,31 @@ def _review_required_fragments(html: str) -> list[ConfigUIReviewIssue]:
         "运行状态检查",
         "代码维护检查",
         "周报生成参数",
+        "周报运行状态",
         "深度解读任务面板",
         "请求生成面板",
         "分析后端与服务",
+        "标签管理",
+        "显示正式标签",
+        "显示预选标签",
+        "标签转正",
         "OpenRouter API",
         "markdown-render",
         "data-tooltip=",
         "form-stack",
+        "运行任务",
+        "运行状态",
+        "Token 使用",
+        "环境检查：",
+        "代码维护检查：",
+        "token-chart-column",
+        "token-chart-axis-y-ticks",
+        "token-chart-axis-y",
+        "token-chart-axis-x",
+        "token-chart-axis-labels",
+        "周报任务 · 抓取与筛选文章",
+        'data-task-trigger="weekly-report"',
+        "跳过已生成总结",
     )
     for fragment in required_fragments:
         if fragment not in html:
@@ -137,6 +214,7 @@ def _review_forbidden_fragments(html: str) -> list[ConfigUIReviewIssue]:
         'value="chatgpt_web_manual"',
         "<h4>输出路径</h4>",
         "deep_read_internal_id",
+        "周报模式",
     )
     for fragment in forbidden_fragments:
         if fragment in html:
@@ -153,6 +231,12 @@ def _review_required_css_fragments(css_text: str) -> list[ConfigUIReviewIssue]:
         ".weekly-report-grid",
         ".weekly-report-form-card",
         ".weekly-report-journals-card",
+        ".status-check-row",
+        ".token-chart-days",
+        ".token-chart-axis-y",
+        ".token-chart-grid",
+        ".token-chart-tooltip",
+        ".token-provider-codex_local",
         "@media (max-width: 1100px)",
     )
     for fragment in required_fragments:
@@ -166,10 +250,27 @@ def _review_required_js_fragments(js_text: str) -> list[ConfigUIReviewIssue]:
     required_fragments = (
         'const mainEl = document.querySelector(".main");',
         'mainEl.scrollTo({ top: 0, left: 0, behavior: "auto" });',
+        'const weeklyReportStatusRoot = document.querySelector("[data-weekly-report-status-root]");',
+        'const activeTaskTextRoot = document.querySelector("[data-active-task-text]");',
+        'const activeTaskDetailRoot = document.querySelector("[data-active-task-detail]");',
+        'const tokenUsageRoot = document.querySelector("[data-token-usage-root]");',
+        'button.disabled = hasRunningTask;',
+        'window.fetch("/ui-status", { cache: "no-store" })',
+        'window.fetch(`/latest-result?kind=${encodeURIComponent(kind)}`, { cache: "no-store" })',
+        'tokenUsageRoot.innerHTML = payload.token_usage_html;',
+        "function handleTokenChartPointer(event) {",
+        "tokenUsageRoot.addEventListener(\"pointermove\", handleTokenChartPointer);",
+        "refreshChangedResults(payload.latest_results || {});",
     )
     for fragment in required_fragments:
         if fragment not in js_text:
             issues.append(ConfigUIReviewIssue("missing_js_fragment", f"缺少 UI 交互关键 JS：{fragment}"))
+    forbidden_fragments = (
+        "window.location.reload()",
+    )
+    for fragment in forbidden_fragments:
+        if fragment in js_text:
+            issues.append(ConfigUIReviewIssue("forbidden_js_fragment", f"不应存在会导致自动刷新的 JS：{fragment}"))
     return issues
 
 

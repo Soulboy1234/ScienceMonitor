@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 
@@ -46,7 +44,10 @@ class TagTaxonomy:
 
         self.allow_open_vocabulary = bool(tag_rules.get("open_vocabulary", True))
         self.default_max_tags = int(tag_rules.get("default_max_tags", 14) or 14)
-        self.candidate_log_path = str(tag_rules.get("candidate_log_path", "data/tag_candidates.json") or "data/tag_candidates.json")
+        self.pending_tags_path = str(
+            tag_rules.get("pending_tags_path", tag_rules.get("candidate_log_path", "config/pending_tags.json"))
+            or "config/pending_tags.json"
+        )
         self.max_unknown_length = int(unknown_policy.get("max_length", 24) or 24)
         self.max_unknown_levels = int(unknown_policy.get("max_levels", 4) or 4)
         self.reject_patterns = [
@@ -78,12 +79,12 @@ class TagTaxonomy:
             self.preferred_labels.add(label)
             if category:
                 self.category_by_label[label] = category
-            self.normalization_rules.append((re.escape(label), label))
+            self.normalization_rules.append((rf"^{re.escape(label)}$", label))
 
             aliases = [str(alias).strip() for alias in item.get("aliases", []) if str(alias).strip()]
             patterns = [str(pattern).strip() for pattern in item.get("patterns", []) if str(pattern).strip()]
             for alias in aliases:
-                self.normalization_rules.append((re.escape(alias), label))
+                self.normalization_rules.append((rf"^{re.escape(alias)}$", label))
             for pattern in patterns:
                 self.normalization_rules.append((pattern, label))
 
@@ -122,6 +123,8 @@ class TagTaxonomy:
             if not canonical:
                 continue
             if canonical.startswith("其他行星/") and any(item.startswith("其他行星/") for item in normalized):
+                continue
+            if canonical.startswith("对象/其他行星/") and any(item.startswith("对象/其他行星/") for item in normalized):
                 continue
             if canonical not in normalized:
                 normalized.append(canonical)
@@ -243,45 +246,10 @@ class TagTaxonomy:
     def _record_candidates(self, root: Path, tags: list[str], context: str) -> None:
         if not tags:
             return
-        now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-        path = (root / self.candidate_log_path).resolve()
-        payload = {
-            "version": 1,
-            "description": "Open-vocabulary tag candidates collected during runtime. Review repeated items before absorbing them into config/focus_tags.json.",
-            "candidates": {},
-        }
-        if path.exists():
-            try:
-                existing = json.loads(path.read_text(encoding="utf-8"))
-                if isinstance(existing, dict):
-                    payload.update(existing)
-            except Exception:
-                pass
-        payload.setdefault("candidates", {})
-        candidates = payload["candidates"]
+        from .tag_governance import record_pending_tags
 
-        for tag in tags:
-            entry = candidates.get(tag)
-            if not isinstance(entry, dict):
-                entry = {
-                    "count": 0,
-                    "first_seen": now,
-                    "last_seen": now,
-                    "contexts": {},
-                }
-            entry["count"] = int(entry.get("count", 0) or 0) + 1
-            entry.setdefault("first_seen", now)
-            entry["last_seen"] = now
-            contexts = entry.get("contexts")
-            if not isinstance(contexts, dict):
-                contexts = {}
-            if context:
-                contexts[context] = int(contexts.get(context, 0) or 0) + 1
-            entry["contexts"] = contexts
-            candidates[tag] = entry
-
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        categories = {tag: self.category_for(tag) for tag in tags}
+        record_pending_tags(root, tags, context=context, categories=categories)
 
 
 def clean_tag_text(tag: str) -> str:
@@ -297,7 +265,8 @@ def normalize_haystack_text(text: str) -> str:
 
 
 @lru_cache(maxsize=16)
-def _load_taxonomy_cached(config_path: str) -> TagTaxonomy:
+def _load_taxonomy_cached(config_path: str, mtime_ns: int) -> TagTaxonomy:
+    del mtime_ns
     path = Path(config_path)
     payload = load_focus_tags(path)
     return TagTaxonomy(payload, path)
@@ -305,7 +274,12 @@ def _load_taxonomy_cached(config_path: str) -> TagTaxonomy:
 
 def load_tag_taxonomy(root: Path | None = None, focus_tags_path: Path | None = None) -> TagTaxonomy:
     path = focus_tags_path or (root or project_root()) / "config" / "focus_tags.json"
-    return _load_taxonomy_cached(str(path.resolve()))
+    resolved = path.resolve()
+    return _load_taxonomy_cached(str(resolved), resolved.stat().st_mtime_ns)
+
+
+def clear_tag_taxonomy_cache() -> None:
+    _load_taxonomy_cached.cache_clear()
 
 
 def normalize_tags(

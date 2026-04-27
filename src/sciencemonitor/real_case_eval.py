@@ -7,6 +7,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from .article_summaries import generate_article_summary_results
+from .article_summary_meta import row_value
 from .config import config_templates_root, logs_root, project_root
 from .deep_reads import run_deep_read
 from .llm import AnalysisEngine
@@ -134,7 +135,7 @@ def run_real_case_eval(
                 continue
 
             summary = summary_results[0]
-            source_kind = str(summary.row.get("summary_source_kind", "") or "missing")
+            source_kind = str(row_value(summary.row, "summary_source_kind", "") or "missing")
             abstract_only = "信息来源/仅摘要" in summary.tags
             report_path: Path | None = None
             stats: dict = {}
@@ -159,11 +160,11 @@ def run_real_case_eval(
                 deep_read_result = run_deep_read(
                     root=project,
                     storage=storage,
-                    doi=str(case.get("doi", "") or summary.row.get("doi", "") or ""),
-                    title=str(case.get("title", "") or summary.row.get("title", "") or ""),
+                    doi=str(case.get("doi", "") or row_value(summary.row, "doi", "") or ""),
+                    title=str(case.get("title", "") or row_value(summary.row, "title", "") or ""),
                     pdf_path=str(seed_row.get("local_pdf_path", "") or ""),
-                    journal=str(case.get("journal", "") or summary.row.get("source_name", "") or ""),
-                    url=str(case.get("url", "") or summary.row.get("url", "") or ""),
+                    journal=str(case.get("journal", "") or row_value(summary.row, "source_name", "") or ""),
+                    url=str(case.get("url", "") or row_value(summary.row, "url", "") or ""),
                     output_dir_override=case_log_root / "deep_reads",
                     pdf_dir_override=case_log_root / "deep_reads_pdf",
                     sync_library=False,
@@ -188,7 +189,7 @@ def run_real_case_eval(
                         "summary_source_kind": source_kind,
                         "summary_tags": summary.tags,
                         "abstract_only": abstract_only,
-                        "source_text_cache_path": str(summary.row.get("source_text_cache_path", "") or ""),
+                        "source_text_cache_path": str(row_value(summary.row, "source_text_cache_path", "") or ""),
                         "provider": analysis_engine.provider,
                         "codex_model": provider_status.get("codex_model", ""),
                         "openai_model": provider_status.get("openai_model", ""),
@@ -210,7 +211,7 @@ def run_real_case_eval(
                 encoding="utf-8",
             )
 
-            abstract_text = clean_abstract_text(str(summary.row.get("abstract", "") or ""))
+            abstract_text = clean_abstract_text(str(row_value(summary.row, "abstract", "") or ""))
             passed = source_kind != "missing" and bool(abstract_text) and deep_read_success
             if abstract_only:
                 message = "未获得全文，已退回摘要生成单篇总结和周报。" if include_report else "未获得全文，已退回摘要生成单篇总结。"
@@ -311,7 +312,7 @@ def _build_seed_row(case: dict, root: Path | None = None) -> dict:
 
 
 def _resolve_report_date(row: dict) -> date:
-    published = str(row.get("published_date", "") or "")
+    published = str(row_value(row, "published_date", "") or "")
     try:
         return date.fromisoformat(published)
     except ValueError:

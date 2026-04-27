@@ -37,13 +37,20 @@
 - `标题：Space Physics Daily Report -`
 - `统计窗口：近`
 - `监控期刊：`
+- `## 周报信息`
 - `## 今日概览`
-- `## 今日搜索的文献的主要关注点分类`
-- `## 今日建议`
-- `### 今日最值得关注的论文`
-- `### 按主题聚焦`
-- `### 按期刊汇总`
-- `## 附注`
+- `### 本周重点方向分布`
+- `### 整体观察`
+- `### 与当前工作相关的重点`
+- `## 文章推荐`
+- `### 推荐论文`
+- `### 建议重点关注的事件或物理过程`
+- `### 对当前工作的可能启发`
+- `## 主题推荐`
+- `## 各期刊主题汇总`
+- `## 其他`
+- `### 未获取摘要/全文的文献`
+- `### 附注`
 - `- 本报告以标题、摘要和元数据为基础生成，后续可结合单篇文献卡片进一步细读。`
 - `- 生成时间：`
 
@@ -58,28 +65,32 @@
 - `{{report_date}}`
 - `{{window_days}}`
 - `{{journals}}`
-- `{{paper_count}}`
-- `{{journal_count}}`
-- `{{overview_bullets_block}}`
-- `{{focus_categories_block}}`
-- `{{daily_suggestions_block}}`
-- `{{highlights_block}}`
-- `{{topics_block}}`
-- `{{journals_block}}`
+- `{{report_info_block}}`
+- `{{overview_table_block}}`
+- `{{objective_overview_block}}`
+- `{{preference_overview_block}}`
+- `{{recommended_papers_block}}`
+- `{{recommended_processes_block}}`
+- `{{work_implications_block}}`
+- `{{theme_recommendations_block}}`
+- `{{journal_roundup_block}}`
+- `{{missing_sources_block}}`
 - `{{generated_at}}`
 
 ## 可以放心改的内容
 
 - 各个正式区块的前后顺序
 - 空行和版式密度
-- 是否先看按期刊汇总再看建议
+- 是否先看各期刊主题汇总再看概览
 - 顶部元信息和附注的摆放方式
 
 ## 风格建议
 
 - 周报仍然要像研究工作周报，而不是大段套话
-- 概览和建议要突出“值得继续跟踪什么”
-- 当前周报只做轻量格式审核；内容层强审核等真实周报案例更多后再补
+- 概览要先客观描述本周论文分布，再单独写与当前工作相关的重点
+- 主题推荐要尽量落到具体科学问题，不要只写热层、电离层这类宽泛分类
+- 文章推荐要简洁可扫读，重点突出英文题目、期刊、中文题目和推荐理由
+- 当前周报已进入“结构与格式强审核，内容正确性后续再增强”的阶段
 - 详细风格和学科约束仍可继续参考：
   - `literature_note_style_guide.md`
   - `rules.md`

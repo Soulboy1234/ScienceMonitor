@@ -11,13 +11,14 @@
 配置文件在 [config/analysis.json](../config/analysis.json)。
 
 核心字段：
-- `provider`：选择默认分析后端，可选 `codex_local`、`openai_api`、`openrouter_api`
+- `provider`：选择默认分析后端，可选 `codex_local`、`openai_api`、`openrouter_api`、`ollama_api`
 - `article_summaries.reasoning_effort`：单篇总结推理强度
 - `report.reasoning_effort`：周报推理强度
 - `deep_reads.reasoning_effort`：深度解读推理强度
 - `codex_local.executable`：可选，手动指定 `codex` 可执行文件
 - `openai_api.*`：OpenAI Responses API 配置
 - `openrouter_api.*`：OpenRouter API 配置
+- `ollama_api.*`：Ollama 本地服务配置
 
 ## 使用本地 Codex
 
@@ -85,6 +86,14 @@
 - 可选的 `openrouter_api.site_url`
 - 可选的 `openrouter_api.app_name`
 
+如果你使用本机 Ollama，把 `provider` 改成 `ollama_api`，并填写：
+
+- `ollama_api.model`，默认 `gemma4:26b`
+- `ollama_api.base_url`，默认 `http://127.0.0.1:11434/api/chat`
+- `ollama_api.timeout_seconds`
+
+Ollama 不需要 API key，但需要先启动本机 Ollama 服务，并确保目标模型已部署。
+
 更推荐的部署方式：
 
 ```bash
@@ -125,7 +134,11 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 - 主题摘要
 - 期刊摘要
 
-标签规范化配置在 [config/focus_tags.json](../config/focus_tags.json)。
+标签规范化配置拆成两层：
+- 正式标签人工入口在 [config/tag/formal_tags.md](../../config/tag/formal_tags.md)
+- 机器规则与别名映射在 [config/focus_tags.json](../../config/focus_tags.json)
+- 预选标签人工入口在 [config/tag/pending_tags.md](../../config/tag/pending_tags.md)
+- 预选标签机器记录在 [config/pending_tags.json](../../config/pending_tags.json)
 提示词与 schema 的审阅视图见 [../workflow_specs/llm_prompt_contracts.md](../workflow_specs/llm_prompt_contracts.md)。
 这里维护的是层级标签表和别名映射，例如：
 - `低纬电离层 -> 电离层/低纬`
@@ -137,11 +150,12 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 - 如果 LLM 失败，单篇总结、周报和深度解读会直接报错
 - 当前也不再维护旧的 `enabled`、`max_items_per_run`、`max_papers_in_prompt`、`max_input_chars` 这些历史配置项
 
-候选标签审阅：
+预选标签审阅：
 
 - 运行 `./scripts/run_science_monitor.sh tag-candidates --min-count 2 --limit 50`
-- 默认会把审阅报告写到 `log/tag_candidates_review.md`
-- 原始候选数据保留在 `data/tag_candidates.json`
+- 默认会同步刷新 `config/tag/pending_tags.md`
+- 原始机器记录保留在 `config/pending_tags.json`
+- 只有在 `pending_tags.md` 中勾选并执行“tag转正”后，标签才会进入正式体系
 
 ## 运行输出
 
@@ -161,6 +175,7 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 - `codex_local` 更适合演示和本机使用。
 - `openai_api` 更适合直接接 OpenAI。
 - `openrouter_api` 更适合接 OpenRouter 或类似的统一 API 平台。
+- `ollama_api` 更适合本机离线或低成本运行，但质量和 JSON 稳定性取决于本地模型能力。
 - `chatgpt_web_manual` 更适合高成本分析的人工作业流，不适合完全无人值守运行。
 - `openai_api.base_url` 默认要求使用 `https`；只有本地 `localhost` 调试接口允许 `http`
 - 当前项目运行并不依赖 Codex skills；skills 只影响我在当前会话里的工作方式，不影响你把程序部署到其他电脑
@@ -180,3 +195,5 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 - 当前 LLM provider 是什么
 - `codex` 是否可用
 - `openai_api` 的 key 是否已准备好
+- `openrouter_api` 的 key 是否已准备好
+- `ollama_api` 的本地服务是否可访问
