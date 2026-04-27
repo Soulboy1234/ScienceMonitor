@@ -23,7 +23,7 @@ Tag: `v1.5.0`
 
 Snapshot commit:
 
-- `TO_BE_FILLED_AFTER_TAG`
+- `9152233795863a69cea8d68f98afee10112a74a0`
 
 版本定位：
 
