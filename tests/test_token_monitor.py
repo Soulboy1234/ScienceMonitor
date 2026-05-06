@@ -12,7 +12,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from sciencemonitor.token_monitor import load_token_usage_snapshot, record_api_usage
+from sciencemonitor.token_monitor import api_usage_record_snapshot, load_token_usage_snapshot, record_api_usage
 
 
 class TokenMonitorTest(unittest.TestCase):
@@ -72,6 +72,35 @@ class TokenMonitorTest(unittest.TestCase):
             self.assertIn("ollama_api", snapshot["providers"])
             chart_providers = [item["key"] for item in snapshot["chart"]["providers"]]
             self.assertIn("ollama_api", chart_providers)
+
+    def test_api_usage_record_snapshot_filters_provider_and_request_prefix(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            record_api_usage(
+                root,
+                provider="ollama_api",
+                model="gemma4:26b",
+                raw_usage={"input_tokens": 100, "output_tokens": 20, "total_tokens": 120},
+                request_name="article_first",
+            )
+            record_api_usage(
+                root,
+                provider="ollama_api",
+                model="gemma4:26b",
+                raw_usage={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+                request_name="report_overview",
+            )
+            record_api_usage(
+                root,
+                provider="openai_api",
+                model="gpt-5-mini",
+                raw_usage={"input_tokens": 7, "output_tokens": 3, "total_tokens": 10},
+                request_name="article_second",
+            )
+
+            snapshot = api_usage_record_snapshot(root, provider="ollama_api", request_prefix="article_")
+
+        self.assertEqual(list(snapshot.values()), [120])
 
     def test_load_token_usage_snapshot_rebuilds_when_schema_version_changes(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

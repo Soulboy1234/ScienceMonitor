@@ -21,6 +21,52 @@
 
 - 下一轮变更待规划。
 
+## [v2.1.0] - 2026-05-06
+
+Tag: `v2.1.0`
+
+Snapshot commit:
+
+- `TO_BE_FILLED_AFTER_TAG`
+
+版本定位：
+
+- `v2.0.0` 之后的正式中版本检查点
+- 目标是把 Ollama 长任务稳定性、深度解读批处理与质量模式、周报摘要兜底、标签治理强化和 config-ui 运行反馈修复收束为新的稳定基线
+
+主要变化：
+
+- 强化 Ollama / API 分析链路稳定性：
+  - 增加长任务 keep-alive、超时跳过续跑、空响应处理和结构化 JSON 失败跳过逻辑
+  - 深度解读支持质量模式，并改善标签、PDF 链接、元数据和批处理反馈
+  - 单篇总结、周报和深度解读的 LLM 合同与兼容修复已补齐测试覆盖
+- 改进网页正文、摘要和周报兜底：
+  - 网页全文抽取失败时更稳健地回落到摘要证据边界
+  - 周报生成可处理未完成总结、当前来源显示、期刊显示名和标签词云相关边界
+  - golden 输出已同步新的周报和深读格式预期
+- 强化标签治理：
+  - formal / pending 标签资产扩充并同步人工入口
+  - 修正流光、行星环境等标签归一化规则
+  - 自动输出标签审核与转正路径补充治理逻辑和测试
+- 优化 config-ui 运行反馈：
+  - 深度解读任务面板拆出独立模块，批量任务、状态卡片和结果卡片反馈更清晰
+  - 周报、深度解读、运行时状态和前端样式脚本同步修复
+  - UI 功能审查、视觉审查和页面结构测试已更新
+- 补齐完成态计划记录：
+  - 归档 Ollama、深度解读、周报、UI 和标签治理相关 ExecPlan
+  - `docs/exec_plans/active/` 保持为空
+- 重校准维护预算：
+  - 清理 entropy 检查发现的未使用导入
+  - `maintenance_budget.json` 已更新到 `v2.1.0` 源码基线，后续增量继续受预算约束
+
+发版时状态：
+
+- `git diff --check`：通过
+- `./scripts/run_science_monitor.sh maintenance-check --auto-repair --max-passes 2`：通过
+- `./scripts/run_science_monitor.sh harness-audit`：通过
+- `./scripts/run_science_monitor.sh harness-check`：通过
+- `./.venv/bin/python -m pytest -q`：通过
+
 ## [v2.0.0] - 2026-04-28
 
 Tag: `v2.0.0`

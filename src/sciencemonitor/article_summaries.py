@@ -4,11 +4,12 @@ from pathlib import Path
 from sqlite3 import Row
 from typing import Callable
 
-from .article_fetch import SummarySourceMaterial, resolve_summary_source_material
+from .article_fetch import SummarySourceMaterial, build_manual_search_urls, resolve_summary_source_material
 from .article_summary_progress import (
     build_summary_progress_tracker,
     emit_summary_progress,
     mark_summary_progress_completed,
+    mark_summary_progress_skipped,
 )
 from .article_summary_markdown import (
     ARTICLE_SUMMARY_TEMPLATE_REQUIRED_MARKERS,
@@ -58,9 +59,9 @@ from .article_summary_text import (
 )
 from .crossref import CrossrefClient
 from .http import HTTPClient
-from .llm import AnalysisEngine, AnalysisQuotaExceeded, ArticleAnalysis
+from .llm import AnalysisEngine, AnalysisProviderInvalidOutput, AnalysisProviderTimeout, AnalysisQuotaExceeded, ArticleAnalysis
 from .chatgpt_web_manual import ManualResponsePending, render_manual_pending_message
-from .models import ArticleSummaryResult
+from .models import ArticleSummaryResult, SkippedArticleSummary
 from .tag_governance import refresh_pending_tag_files
 
 ARTICLE_SUMMARY_REVIEW_MAX_PASSES = 3
@@ -112,6 +113,7 @@ def generate_article_summary_results(
     require_analysis: bool = True,
     progress_callback: Callable[[dict], None] | None = None,
     reuse_existing_summaries: bool = True,
+    skipped_summary_results: list[SkippedArticleSummary] | None = None,
 ) -> list[ArticleSummaryResult]:
     project = resolve_summary_root(root=root, template_path=template_path)
     template_text = load_article_summary_template(template_path)
@@ -131,6 +133,7 @@ def generate_article_summary_results(
             summary_progress,
             current_index=index + 1,
             current_title=display_title(row),
+            current_journal=str(row_value(row, "source_name") or row_value(row, "journal_title") or ""),
         )
         if reuse_existing_summaries and not is_metadata_only_record(row) and (
             existing := load_existing_summary_result(existing_files, row, template_text=template_text, root=project)
@@ -162,6 +165,20 @@ def generate_article_summary_results(
             mark_summary_progress_completed(summary_progress, analysis_engine)
             emit_summary_progress(progress_callback, summary_progress)
             continue
+        except AnalysisProviderTimeout as exc:
+            if not _can_skip_provider_timeout(exc, skipped_summary_results):
+                raise
+            skipped_summary_results.append(_skipped_summary_from_timeout(row, exc))
+            mark_summary_progress_skipped(summary_progress)
+            emit_summary_progress(progress_callback, summary_progress)
+            continue
+        except AnalysisProviderInvalidOutput as exc:
+            if not _can_skip_provider_invalid_output(exc, skipped_summary_results):
+                raise
+            skipped_summary_results.append(_skipped_summary_from_invalid_output(row, exc))
+            mark_summary_progress_skipped(summary_progress)
+            emit_summary_progress(progress_callback, summary_progress)
+            continue
         mark_summary_progress_completed(summary_progress, analysis_engine)
         emit_summary_progress(progress_callback, summary_progress)
 
@@ -169,6 +186,36 @@ def generate_article_summary_results(
     if project is not None:
         refresh_pending_tag_files(project)
     return results
+
+
+def _can_skip_provider_timeout(exc: AnalysisProviderTimeout, skipped_summary_results: list[SkippedArticleSummary] | None) -> bool:
+    return skipped_summary_results is not None and exc.provider == "ollama_api"
+
+
+def _can_skip_provider_invalid_output(
+    exc: AnalysisProviderInvalidOutput, skipped_summary_results: list[SkippedArticleSummary] | None
+) -> bool:
+    return skipped_summary_results is not None and exc.provider == "ollama_api"
+
+
+def _skipped_summary_from_timeout(row: Row, exc: AnalysisProviderTimeout) -> SkippedArticleSummary:
+    return SkippedArticleSummary(
+        row=dict(row),
+        reason=exc.ui_message(),
+        provider=exc.provider,
+        request_name=exc.request_name,
+        error=str(exc),
+    )
+
+
+def _skipped_summary_from_invalid_output(row: Row, exc: AnalysisProviderInvalidOutput) -> SkippedArticleSummary:
+    return SkippedArticleSummary(
+        row=dict(row),
+        reason=exc.ui_message(),
+        provider=exc.provider,
+        request_name=exc.request_name,
+        error=str(exc),
+    )
 
 
 def apply_summary_source_material(row: Row, source_material) -> dict:
@@ -196,6 +243,12 @@ def apply_summary_source_material(row: Row, source_material) -> dict:
     result["summary_source_kind"] = source_material.source_kind
     if source_material.cache_path:
         result["source_text_cache_path"] = source_material.cache_path
+    diagnostics = list(getattr(source_material, "diagnostics", []) or [])
+    if diagnostics:
+        result["summary_source_diagnostics"] = "\n".join(str(item).strip() for item in diagnostics if str(item).strip())
+    manual_search_urls = list(getattr(source_material, "manual_search_urls", []) or [])
+    if manual_search_urls:
+        result["summary_manual_search_urls"] = "\n".join(str(item).strip() for item in manual_search_urls if str(item).strip())
     if getattr(source_material, "error", ""):
         result["summary_source_error"] = getattr(source_material, "error", "")
     return result
@@ -218,6 +271,13 @@ def _fallback_source_material_from_row(row: Row, *, error: Exception) -> Summary
         pdf_urls=[],
         scientific_text="",
         cache_path="",
+        diagnostics=[f"Source resolver: {type(error).__name__}"],
+        manual_search_urls=build_manual_search_urls(
+            doi=clean_text(row["doi"]),
+            title=display_title(row),
+            url=clean_text(row["url"]),
+        ),
+        error=str(error),
     )
 
 

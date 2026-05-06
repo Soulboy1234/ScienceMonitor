@@ -15,6 +15,7 @@ if str(SRC) not in sys.path:
 from sciencemonitor.llm import ReportAnalysis, TopicInsight
 from sciencemonitor.reporting import (
     _run_report_review_loop,
+    build_journal_counts,
     build_report_wordcloud_display_labels,
     build_report,
     build_report_date_range_label,
@@ -28,7 +29,7 @@ from sciencemonitor.reporting import (
 )
 from sciencemonitor.config import UserPreferenceProfile
 from sciencemonitor.llm_contracts import build_report_prompt
-from sciencemonitor.models import ArticleSummaryResult
+from sciencemonitor.models import ArticleSummaryResult, SkippedArticleSummary
 from sciencemonitor.reporting_support import ReportThemeBucket, collect_report_theme_buckets, theme_tags_for_summary, topic_recommendation_buckets
 
 
@@ -90,6 +91,10 @@ def _write_minimal_report_project(root: pathlib.Path) -> None:
         ROOT.joinpath("config", "templates", "daily_report_template.md").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
+    (root / "config" / "runtime.json").write_text(
+        '{"safety": {"allow_output_deletions": true}}\n',
+        encoding="utf-8",
+    )
 
 
 class ReportingTest(unittest.TestCase):
@@ -145,6 +150,33 @@ class ReportingTest(unittest.TestCase):
         self.assertLess(markdown.index("### 对当前工作的可能启发"), markdown.index("## 文章推荐"))
         self.assertLess(markdown.index("![[research_reports/assets/2026-03-14 标签词云.png|960]]"), markdown.index("### 本周重点方向分布"))
 
+    def test_build_report_normalizes_jgr_journal_names(self) -> None:
+        summary = _sample_summary()
+        summary_full_name = summary.__class__(
+            **{
+                **summary.__dict__,
+                "row": {
+                    **summary.row,
+                    "source_name": "Journal of Geophysical Research: Space Physics",
+                    "journal_title": "Journal of Geophysical Research: Space Physics",
+                    "doi": "10.1000/example2",
+                    "fingerprint": "fingerprint2",
+                },
+            }
+        )
+
+        journal_counts = build_journal_counts([summary.row, summary_full_name.row])
+
+        self.assertEqual(journal_counts, [("JGR.SP", 2)])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            _write_minimal_report_project(root)
+            markdown, _ = build_report(date(2026, 3, 14), [summary, summary_full_name], root=root, require_analysis=False)
+
+        self.assertIn("### Journal of Geophysical Research: Space Physics", markdown)
+        self.assertNotIn("### JGR.SP", markdown)
+
     def test_collect_report_tag_frequencies_excludes_management_tags(self) -> None:
         summary = _sample_summary()
         summary = summary.__class__(
@@ -180,6 +212,8 @@ class ReportingTest(unittest.TestCase):
         self.assertFalse(should_include_report_wordcloud_tag("信息来源/仅摘要"))
         self.assertFalse(should_include_report_wordcloud_tag("方法/统计研究"))
         self.assertFalse(should_include_report_wordcloud_tag("方法/数据分析"))
+        self.assertFalse(should_include_report_wordcloud_tag("对象/空间天气/地磁暴"))
+        self.assertFalse(should_include_report_wordcloud_tag("对象/物理机制/Joule加热"))
         self.assertTrue(should_include_report_wordcloud_tag("对象/磁层/弓激波"))
 
     def test_cleanup_unused_report_tag_wordclouds_keeps_only_referenced_assets(self) -> None:
@@ -416,7 +450,7 @@ class ReportingTest(unittest.TestCase):
             output_path=ROOT / "out" / "auto" / "article_summaries" / "theme-a.md",
             note_title="Author 2026 - JGR.SP - 电离层TEC在磁暴期间的响应",
             chinese_title="电离层TEC在磁暴期间的响应",
-            tags=["方法/数据分析", "对象/日地耦合", "对象/电离层/TEC", "事件/磁暴"],
+            tags=["方法/数据分析", "对象/日地耦合", "对象/空间天气/地磁暴", "对象/电离层/TEC", "事件/磁暴"],
             body=base.body,
             supplement=base.supplement,
             recommendation=base.recommendation,
@@ -429,7 +463,7 @@ class ReportingTest(unittest.TestCase):
             output_path=ROOT / "out" / "auto" / "article_summaries" / "theme-b.md",
             note_title="Author 2026 - JGR.SP - 磁暴期间电离层TEC变化统计",
             chinese_title="磁暴期间电离层TEC变化统计",
-            tags=["方法/统计研究", "对象/日地耦合", "对象/电离层/TEC", "事件/磁暴"],
+            tags=["方法/统计研究", "对象/日地耦合", "对象/物理机制/Joule加热", "对象/电离层/TEC", "事件/磁暴"],
             body=base.body,
             supplement=base.supplement,
             recommendation=base.recommendation,
@@ -442,6 +476,7 @@ class ReportingTest(unittest.TestCase):
         self.assertIn("事件/磁暴", theme_tags)
         self.assertNotIn("方法/数据分析", theme_tags)
         self.assertNotIn("对象/日地耦合", theme_tags)
+        self.assertNotIn("对象/空间天气/地磁暴", theme_tags)
 
         topic_buckets = topic_recommendation_buckets([summary_a, summary_b])
         displays = [bucket.display for bucket in topic_buckets]
@@ -450,6 +485,8 @@ class ReportingTest(unittest.TestCase):
         self.assertNotIn("数据分析", displays)
         self.assertNotIn("统计研究", displays)
         self.assertNotIn("日地耦合", displays)
+        self.assertNotIn("空间天气/地磁暴", displays)
+        self.assertNotIn("物理机制/Joule加热", displays)
 
     def test_topic_recommendations_skip_weak_two_paper_broad_object_clusters(self) -> None:
         base = _sample_summary()
@@ -647,7 +684,7 @@ class ReportingTest(unittest.TestCase):
                     "{{theme_recommendations_block}}",
                     "",
                     "## 其他",
-                    "### 未获取摘要/全文的文献",
+                    "### 未完成或未获取摘要/全文的文献",
                     "{{missing_sources_block}}",
                     "",
                     "### 附注",
@@ -703,7 +740,7 @@ class ReportingTest(unittest.TestCase):
                     "## 各期刊主题汇总",
                     "",
                     "## 其他",
-                    "### 未获取摘要/全文的文献",
+                    "### 未完成或未获取摘要/全文的文献",
                     "{{missing_sources_block}}",
                     "",
                     "### 附注",
@@ -738,6 +775,15 @@ class ReportingTest(unittest.TestCase):
             "raw_container_title": "Advances in Space Research",
             "fetched_at": "2026-04-01T00:00:00",
             "notes": "",
+            "summary_source_diagnostics": "Crossref: no abstract\nOpenAlex: no abstract\nScienceDirect: HTTP 403",
+            "summary_manual_search_urls": "\n".join(
+                [
+                    "https://doi.org/10.1016/j.asr.2026.01.082",
+                    "https://www.sciencedirect.com/science/article/pii/S027311772600001X",
+                    "https://scholar.google.com/scholar?q=Severe+geomagnetic+storm",
+                    "https://www.researchgate.net/search/publication?q=Severe+geomagnetic+storm",
+                ]
+            ),
         }
         markdown, stats = build_report(
             date(2026, 4, 6),
@@ -749,10 +795,56 @@ class ReportingTest(unittest.TestCase):
         self.assertEqual(stats["paper_count"], 2)
         self.assertEqual(stats["summarized_count"], 1)
         self.assertEqual(stats["missing_source_count"], 1)
-        self.assertIn("### 未获取摘要/全文的文献", markdown)
+        self.assertIn("### 未完成或未获取摘要/全文的文献", markdown)
         self.assertIn("10.1016/j.asr.2026.01.082", markdown)
-        self.assertIn("Advances in Space Research", markdown)
-        self.assertNotIn("[[auto/article_summaries", markdown.split("### 未获取摘要/全文的文献", 1)[1])
+        self.assertIn("ASR", markdown)
+        self.assertIn("来源诊断：Crossref: no abstract；OpenAlex: no abstract；ScienceDirect: HTTP 403", markdown)
+        self.assertIn("[ResearchGate]", markdown)
+        self.assertNotIn("[[auto/article_summaries", markdown.split("### 未完成或未获取摘要/全文的文献", 1)[1])
+
+    def test_build_report_lists_skipped_summary_rows(self) -> None:
+        skipped_row = {
+            "fingerprint": "skipped",
+            "source_id": "sw",
+            "source_name": "Space Weather",
+            "journal_title": "Space Weather",
+            "title": "Ionosphere Response to the October 2024 G4 Geomagnetic Storm",
+            "abstract": "This paper studies the ionospheric response to a geomagnetic storm.",
+            "published_date": "2026-04-22",
+            "doi": "10.1029/2026sw000001",
+            "url": "https://doi.org/10.1029/2026sw000001",
+            "authors": "B Author",
+            "topics": "space_weather",
+            "topic_labels": "空间天气",
+            "relevance_score": 6.0,
+            "tier": "core",
+            "mode": "topic_filter",
+            "raw_container_title": "Space Weather",
+            "fetched_at": "2026-04-22T00:00:00",
+            "notes": "",
+        }
+        skipped = SkippedArticleSummary(
+            row=skipped_row,
+            reason="Ollama 本地模型单次请求超过 900 秒，本次单篇总结已跳过。",
+            provider="ollama_api",
+            request_name="article_timeout",
+            error="ollama_api analysis timed out after 900s.",
+        )
+
+        markdown, stats = build_report(
+            date(2026, 4, 27),
+            [_sample_summary()],
+            skipped_summary_rows=[skipped],
+            require_analysis=False,
+        )
+
+        self.assertEqual(stats["paper_count"], 2)
+        self.assertEqual(stats["skipped_summary_count"], 1)
+        self.assertIn("### 未完成或未获取摘要/全文的文献", markdown)
+        self.assertIn("#### 未完成单篇总结的文献", markdown)
+        self.assertIn("LLM 输出失败", markdown)
+        self.assertIn("10.1029/2026sw000001", markdown.lower())
+        self.assertIn("Ollama 本地模型单次请求超过 900 秒", markdown)
 
     def test_build_report_requires_llm_by_default(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "不再支持规则法"):
@@ -804,7 +896,7 @@ class ReportingTest(unittest.TestCase):
                 "- 今日新增文章数：1",
                 "",
                 "## 其他",
-                "### 未获取摘要/全文的文献",
+                "### 未完成或未获取摘要/全文的文献",
                 "- 无。",
                 "",
                 "### 附注",

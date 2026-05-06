@@ -147,6 +147,9 @@ def _normalize_one_sentence_overview(value: str) -> str:
         text = re.sub(r"^这篇文章[^。！？\n]{0,80}?而是", "这篇文章的目标是", text, count=1)
     text = text.replace("这篇文章的目标是更尖锐的一步：", "这篇文章的目标是")
     text = text.replace("这篇文章的目标是更进一步：", "这篇文章的目标是")
+    text = re.sub(r"^这篇文章的目标是本文\s*", "这篇文章的目标是", text)
+    if text.startswith("本文"):
+        text = f"这篇文章的目标是{text[2:].lstrip('：:，, ')}"
     if text and not re.match(r"^(这篇文章|作者)", text):
         text = f"这篇文章的目标是{text}"
     return text.strip()
@@ -174,6 +177,7 @@ def _normalize_goal_text(value: str, *, tags: list[str]) -> str:
             "作者要解决的问题是：",
             normalized_first_line,
         )
+        normalized_first_line = re.sub(r"^作者要解决的问题是：\s*[:：]\s*", "作者要解决的问题是：", normalized_first_line)
         text = normalized_first_line if not separator else f"{normalized_first_line}\n{remainder.strip()}"
     if not _supports_downstream_application(tags):
         text = _drop_downstream_sentences(text)
@@ -214,11 +218,27 @@ def _normalize_key_results_text(value: str) -> str:
 
 def _format_key_result_items(value: str) -> str:
     text = _normalize_structured_deep_read_text(value)
-    items = _extract_numbered_items(text)
+    items = [item for item in _extract_numbered_items(text) if not _is_placeholder_key_result_item(item)]
     if not items:
         fallback = " ".join(line.strip() for line in text.splitlines() if line.strip()).strip()
-        items = [fallback or "未提取到明确条目。"]
+        if fallback and not _is_placeholder_key_result_item(fallback):
+            items = [fallback]
+    if not items:
+        return ""
     return _render_numbered_items(items)
+
+
+def _is_placeholder_key_result_item(text: str) -> bool:
+    stripped = re.sub(rf"^\s*{NUMBERED_MARKER_RE}\s*", "", str(text or "").strip())
+    normalized = re.sub(r"\s+", "", stripped)
+    return normalized in {
+        "未提取到明确条目。",
+        "未提取到明确条目",
+        "无明确条目。",
+        "无明确条目",
+        "没有明确条目。",
+        "没有明确条目",
+    }
 
 
 def _normalize_contribution_text(value: str) -> str:
@@ -230,6 +250,17 @@ def _normalize_contribution_text(value: str) -> str:
         after = text.split("而是", 1)[1].strip().lstrip("：:，, ")
         text = f"这篇文章的新意与贡献在于{after}"
     return text.strip()
+
+
+def _normalize_relation_text(value: str) -> str:
+    text = _normalize_structured_deep_read_text(value)
+    compact = re.sub(r"[。.\s]+$", "", re.sub(r"\s+", "", text))
+    if compact in {"直接相关", "间接相关", "弱相关", "不相关"}:
+        return (
+            f"{compact}。模型只给出了关系等级，未充分展开它相对已有工作的承接或差异；"
+            "需要结合引言、相关工作和方法对比进一步复核。"
+        )
+    return text
 
 
 def _normalize_structured_deep_read_text(value: str) -> str:
@@ -270,6 +301,8 @@ def _normalize_relation_to_my_work_text(value: str, *, tags: list[str]) -> str:
     text = _normalize_structured_deep_read_text(value)
     if _supports_downstream_application(tags):
         return text
+    if re.sub(r"\s+", "", text) in {"直接相关", "间接相关", "弱相关", "不相关"}:
+        text = ""
     numbered_items = _extract_numbered_items(text)
     kept_items = [item for item in numbered_items if not _contains_downstream_keywords(item)]
     kept_paragraphs = [
@@ -439,7 +472,7 @@ def _autofix_deep_read_markdown(markdown: str, *, tags: list[str]) -> str:
     fixed = _rewrite_section_body(fixed, "### 新意与贡献", _normalize_contribution_text)
     fixed = _rewrite_section_body(fixed, "### 局限性", _normalize_structured_deep_read_text)
     fixed = _rewrite_section_body(fixed, "### 可复现性", _normalize_structured_deep_read_text)
-    fixed = _rewrite_section_body(fixed, "### 与已有工作的关系", _normalize_structured_deep_read_text)
+    fixed = _rewrite_section_body(fixed, "### 与已有工作的关系", _normalize_relation_text)
     fixed = _rewrite_section_body(fixed, "### 最终结论", _normalize_structured_deep_read_text)
     fixed = _rewrite_bullet_value(
         fixed,
@@ -472,6 +505,8 @@ def _audit_deep_read_markdown(markdown: str, *, tags: list[str]) -> list[str]:
         issues.append("“关键结果”四级标题后的编号未换行")
     if key_results and re.search(rf"[。！？；：](?={NUMBERED_MARKER_RE})", key_results):
         issues.append("“关键结果”中的编号列表未换行")
+    if key_results and re.search(r"未提取到明确条目|无明确条目|没有明确条目", key_results):
+        issues.append("“关键结果”仍包含占位条目")
     contribution = _extract_section_body(markdown, "### 新意与贡献", next_heading="### 局限性")
     if ("不是" in contribution and "而是" in contribution) or ("不在于" in contribution and "而在于" in contribution):
         issues.append("“新意与贡献”仍包含否定转折式表述")
@@ -480,6 +515,9 @@ def _audit_deep_read_markdown(markdown: str, *, tags: list[str]) -> list[str]:
         issues.append("“补充信息”中的小标题后正文未换行")
     if supplement and re.search(rf"[。；：](?={NUMBERED_MARKER_RE})", supplement):
         issues.append("“补充信息”中的编号列表未换行")
+    relation = _extract_section_body(markdown, "### 与已有工作的关系", next_heading="## 总结")
+    if relation and re.fullmatch(r"(?:直接相关|间接相关|弱相关|不相关)[。.]?", relation.strip()):
+        issues.append("“与已有工作的关系”只有关系等级，缺少解释")
     return issues
 
 

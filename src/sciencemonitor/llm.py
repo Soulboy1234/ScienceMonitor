@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -11,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from sqlite3 import Row
+from typing import Callable
 
 from .analysis_providers import SUPPORTED_ANALYSIS_PROVIDERS
 from .chatgpt_web_manual import (
@@ -26,7 +28,10 @@ from .config import (
     load_master_plan_preferences,
 )
 from .llm_api_support import (
+    StructuredOutputParseError,
     check_ollama_available,
+    _extract_json_object_candidate,
+    _ollama_json_repair_candidates,
     resolve_api_key,
     resolve_api_key_source,
     resolve_base_url,
@@ -38,11 +43,17 @@ from .llm_contracts import (
     _prepare_article_source_text_for_prompt,
     build_article_prompt,
     build_article_schema,
+    build_deep_read_evidence_prompt,
+    build_deep_read_evidence_schema,
     build_deep_read_prompt,
     build_deep_read_schema,
     build_manual_article_prompt,
     build_manual_deep_read_prompt,
     build_manual_report_prompt,
+    build_ollama_deep_read_evidence_prompt_v2,
+    build_ollama_deep_read_evidence_schema_v2,
+    build_ollama_deep_read_final_prompt_v2,
+    build_ollama_deep_read_revision_prompt_v2,
     build_report_prompt,
     build_report_schema,
 )
@@ -94,7 +105,14 @@ DEFAULT_ANALYSIS_CONFIG = {
     "ollama_api": {
         "model": "gemma4:26b",
         "base_url": "http://127.0.0.1:11434/api/chat",
-        "timeout_seconds": 300,
+        "timeout_seconds": 900,
+        "keep_alive": 0,
+        "num_ctx": 32768,
+        "num_predict": 4096,
+        "deep_read_num_predict": 8192,
+        "deep_read_quality_mode": True,
+        "deep_read_stage_keep_alive": "1m",
+        "deep_read_final_max_chars": 12000,
     },
     "chatgpt_web_manual": {},
 }
@@ -145,6 +163,72 @@ class AnalysisQuotaExceeded(RuntimeError):
         return base
 
 
+class AnalysisProviderTimeout(RuntimeError):
+    def __init__(
+        self,
+        provider: str,
+        *,
+        timeout_seconds: int,
+        request_name: str = "",
+        phase: str = "analysis",
+    ) -> None:
+        self.provider = provider
+        self.timeout_seconds = int(timeout_seconds)
+        self.request_name = request_name.strip()
+        self.phase = phase
+        message = f"{provider} {phase} timed out after {self.timeout_seconds}s."
+        if self.request_name:
+            message += f" Request: {self.request_name}."
+        super().__init__(message)
+
+    def ui_message(self) -> str:
+        if self.provider == "ollama_api":
+            if self.request_name.startswith("deep_read"):
+                return (
+                    f"Ollama 本地模型单次请求超过 {self.timeout_seconds} 秒，本次深度解读已暂停。"
+                    " 已完成的中间结果会保留。"
+                )
+            return (
+                f"Ollama 本地模型单次请求超过 {self.timeout_seconds} 秒，本次周报已暂停。"
+                " 已完成的单篇总结会保留。"
+            )
+        return f"{self.provider} 单次请求超过 {self.timeout_seconds} 秒，本次任务已暂停。"
+
+
+class AnalysisProviderInvalidOutput(RuntimeError):
+    def __init__(
+        self,
+        provider: str,
+        *,
+        request_name: str = "",
+        detail: str = "",
+        raw_preview: str = "",
+        detail_path: Path | None = None,
+        phase: str = "analysis",
+    ) -> None:
+        self.provider = provider
+        self.request_name = request_name.strip()
+        self.detail = detail.strip()
+        self.raw_preview = raw_preview.strip()
+        self.detail_path = detail_path
+        self.phase = phase
+        message = f"{provider} {phase} returned invalid structured output."
+        if self.request_name:
+            message += f" Request: {self.request_name}."
+        if self.detail:
+            message += f" Detail: {self.detail}"
+        if self.detail_path is not None:
+            message += f" Details: {self.detail_path}"
+        super().__init__(message)
+
+    def ui_message(self) -> str:
+        if self.provider == "ollama_api":
+            if self.request_name.startswith("deep_read"):
+                return "Ollama 本地模型返回的深度解读结构化 JSON 不完整或格式错误。"
+            return "Ollama 本地模型返回的结构化 JSON 不完整或格式错误，该篇单篇总结已记录为未完成。"
+        return f"{self.provider} 返回的结构化 JSON 不完整或格式错误。"
+
+
 def _extract_codex_retry_after(stderr_text: str) -> str:
     match = re.search(r"try again at ([^.]+)\.", stderr_text, flags=re.IGNORECASE)
     if not match:
@@ -183,6 +267,13 @@ def _summarize_codex_failure(returncode: int, stderr_text: str, stderr_path: Pat
     if "usage limit" in lowered or "purchase more credits" in lowered or "upgrade to pro" in lowered:
         _raise_codex_usage_limit(stderr_text, stderr_path, phase="analysis")
     return f"codex_local analysis failed with exit code {returncode}. Details: {stderr_path}"
+
+
+def _emit_analysis_progress(callback: Callable[[dict], None] | None, **payload: object) -> None:
+    if callback is None:
+        return
+    callback(dict(payload))
+
 
 @dataclass(frozen=True)
 class ArticleAnalysis:
@@ -224,8 +315,11 @@ class ReportAnalysis:
         return None
 
     def journal_summary(self, journal: str) -> str | None:
+        from .reporting_support import normalize_report_journal_name
+
+        normalized = normalize_report_journal_name(journal)
         for item in self.journal_insights:
-            if item.journal == journal:
+            if item.journal == journal or normalize_report_journal_name(item.journal) == normalized:
                 return item.summary
         return None
 
@@ -289,13 +383,19 @@ class AnalysisEngine:
 
         prompt = self._build_manual_article_prompt(row) if self.provider == "chatgpt_web_manual" else self._build_article_prompt(row)
         schema = self._article_schema()
-        payload = self._run_structured(
-            prompt,
-            schema,
-            f"article_{cache_key}",
-            reasoning_effort=self._analysis_reasoning_effort("article_summaries"),
-            manual_context=self._manual_context_for_article(row),
-        )
+        request_name = f"article_{cache_key}"
+        try:
+            payload = self._run_structured(
+                prompt,
+                schema,
+                request_name,
+                reasoning_effort=self._analysis_reasoning_effort("article_summaries"),
+                manual_context=self._manual_context_for_article(row),
+            )
+        except AnalysisProviderInvalidOutput as exc:
+            if self.provider != "ollama_api":
+                raise
+            payload = self._recover_ollama_article_payload(row, prompt, schema, request_name, exc)
         result = ArticleAnalysis(
             chinese_title=str(payload["chinese_title"]).strip(),
             tags=self._normalize_tags([str(item).strip() for item in payload["tags"] if str(item).strip()]),
@@ -377,18 +477,20 @@ class AnalysisEngine:
         full_text: str,
         related_summary: dict[str, str] | None = None,
         manual_context: dict | None = None,
+        progress_callback: Callable[[dict], None] | None = None,
     ) -> DeepReadAnalysis | None:
         if not self.deep_read_enabled():
             return None
         self._ensure_supported_provider()
 
+        raw_full_text = str(full_text or "").strip()
         normalized_full_text = clean_abstract_text(full_text)
         if self.provider != "chatgpt_web_manual" and not normalized_full_text:
             return None
 
         cache_basis = "|".join(
             [
-                "deep_read_template_v5",
+                "deep_read_template_v6",
                 str(metadata.get("doi", "")),
                 str(metadata.get("title", "")),
                 str(metadata.get("journal", "")),
@@ -399,13 +501,24 @@ class AnalysisEngine:
         cache_key = hashlib.sha1(cache_basis.encode("utf-8")).hexdigest()
         cached = self._read_json_cache("deep_reads", cache_key)
         if cached:
+            if self.provider == "ollama_api" and self._ollama_deep_read_quality_mode_enabled():
+                cached = self._normalize_ollama_deep_read_payload(cached)
             return self._deep_read_from_payload(cached)
 
-        prompt = (
-            self._build_manual_deep_read_prompt(metadata, related_summary)
-            if self.provider == "chatgpt_web_manual"
-            else self._build_deep_read_prompt(metadata, normalized_full_text, related_summary)
-        )
+        if self.provider == "chatgpt_web_manual":
+            prompt = self._build_manual_deep_read_prompt(metadata, related_summary)
+        elif self.provider == "ollama_api" and self._ollama_deep_read_quality_mode_enabled():
+            payload = self._run_ollama_deep_read_quality_v2(
+                metadata,
+                self._ollama_deep_read_source_text(raw_full_text, normalized_full_text),
+                related_summary,
+                cache_key=cache_key,
+                progress_callback=progress_callback,
+            )
+            self._write_json_cache("deep_reads", cache_key, payload)
+            return self._deep_read_from_payload(payload)
+        else:
+            prompt = self._build_deep_read_prompt(metadata, normalized_full_text, related_summary)
         schema = self._deep_read_schema()
         payload = self._run_structured(
             prompt,
@@ -470,6 +583,534 @@ class AnalysisEngine:
             needs_manual_review=str(payload.get("needs_manual_review", "")).strip(),
             knowledge_position=str(payload.get("knowledge_position", "")).strip(),
         )
+
+    def _run_ollama_deep_read_quality_v2(
+        self,
+        metadata: dict[str, str],
+        full_text: str,
+        related_summary: dict[str, str] | None,
+        *,
+        cache_key: str,
+        progress_callback: Callable[[dict], None] | None = None,
+    ) -> dict:
+        evidence_payload = self._ollama_deep_read_evidence_payload_v2(
+            metadata,
+            full_text,
+            related_summary,
+            cache_key=cache_key,
+            progress_callback=progress_callback,
+        )
+        evidence_context = self._format_ollama_deep_read_evidence_context_v2(evidence_payload)
+        final_context = self._ollama_deep_read_final_context_v2(full_text)
+        _emit_analysis_progress(progress_callback, stage="ollama_final", message="正在基于证据提纲生成最终深度解读。")
+        prompt = self._build_ollama_deep_read_final_prompt_v2(
+            metadata,
+            final_context,
+            related_summary,
+            evidence_context=evidence_context,
+        )
+        payload = self._run_ollama_structured(
+            prompt,
+            self._deep_read_schema(),
+            f"deep_read_{cache_key}",
+        )
+        payload = self._normalize_ollama_deep_read_payload(payload)
+        issues = self._ollama_deep_read_quality_issues(payload, evidence_payload)
+        if issues:
+            _emit_analysis_progress(progress_callback, stage="ollama_revision", message="正在修订深度解读初稿。")
+            revision_prompt = self._build_ollama_deep_read_revision_prompt_v2(
+                metadata,
+                payload,
+                issues,
+                evidence_context,
+            )
+            revised = self._run_ollama_structured(
+                revision_prompt,
+                self._deep_read_schema(),
+                f"deep_read_revision_{cache_key[:20]}",
+            )
+            payload = self._normalize_ollama_deep_read_payload(revised)
+        return self._downgrade_ollama_relation_overreach(payload)
+
+    def _ollama_deep_read_source_text(self, raw_full_text: str, normalized_full_text: str) -> str:
+        raw = str(raw_full_text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+        if raw and ("\n" in raw or len(raw) > len(normalized_full_text or "") * 1.15):
+            return raw
+        return str(normalized_full_text or "").strip()
+
+    def _ollama_deep_read_evidence_payload_v2(
+        self,
+        metadata: dict[str, str],
+        full_text: str,
+        related_summary: dict[str, str] | None,
+        *,
+        cache_key: str,
+        progress_callback: Callable[[dict], None] | None = None,
+    ) -> dict:
+        evidence_key = hashlib.sha1(f"deep_read_evidence_v2|{cache_key}".encode("utf-8")).hexdigest()
+        cached = self._read_json_cache("deep_read_evidence", evidence_key)
+        if cached is not None:
+            return cached
+        _emit_analysis_progress(progress_callback, stage="ollama_evidence", message="正在用全文整理证据边界。")
+        prompt = self._build_ollama_deep_read_evidence_prompt_v2(metadata, full_text, related_summary)
+        payload = self._run_ollama_structured(
+            prompt,
+            self._ollama_deep_read_evidence_schema_v2(),
+            f"deep_read_evidence_v2_{cache_key[:20]}",
+        )
+        self._write_json_cache("deep_read_evidence", evidence_key, payload)
+        return payload
+
+    def _format_ollama_deep_read_evidence_context_v2(self, payload: dict) -> str:
+        labels = [
+            ("research_problem", "研究问题"),
+            ("introduction_gap", "引言空白"),
+            ("method_chain", "方法与证据链"),
+            ("hard_findings", "硬结论证据"),
+            ("secondary_findings", "次级结论证据"),
+            ("reasonable_inferences", "合理推论证据"),
+            ("open_questions", "待验证问题"),
+            ("contribution_points", "新意与贡献证据"),
+            ("limitations", "局限与证据边界"),
+            ("reproducibility_notes", "可复现性线索"),
+            ("relation_to_my_work_evidence", "与用户工作的关系证据"),
+            ("manual_review_points", "人工复核点"),
+        ]
+        lines: list[str] = []
+        for key, label in labels:
+            value = self._format_evidence_value(payload.get(key, ""), numbered=True)
+            if value:
+                lines.append(f"{label}：\n{value}")
+        return "\n\n".join(lines)
+
+    def _ollama_deep_read_final_context_v2(self, full_text: str) -> str:
+        settings = self.config.get("ollama_api", {})
+        max_chars = int(settings.get("deep_read_final_max_chars", 12000) or 12000)
+        text = str(full_text or "").strip()
+        if not text:
+            return ""
+        if max_chars <= 0:
+            return text
+
+        section_specs = [
+            ("摘要/引言", ("abstract", "plain language summary", "key points", "introduction"), 0.32),
+            ("方法/数据", ("method", "methods", "data", "observation", "observations", "model", "instrument"), 0.24),
+            ("结果/讨论", ("result", "results", "analysis", "discussion"), 0.28),
+            ("结论/总结", ("conclusion", "conclusions", "summary"), 0.16),
+        ]
+        blocks: list[str] = []
+        for label, keywords, fraction in section_specs:
+            body = self._extract_ollama_section_excerpt(text, keywords, max_chars=max(900, int(max_chars * fraction)))
+            if body:
+                blocks.append(f"{label}：\n{body}")
+        joined = "\n\n".join(blocks).strip()
+        if len(joined) >= min(max_chars, 2200) or len(text) <= max_chars:
+            return joined or text[:max_chars].strip()
+        return self._ollama_head_mid_tail_context(text, max_chars=max_chars)
+
+    def _extract_ollama_section_excerpt(self, text: str, keywords: tuple[str, ...], *, max_chars: int) -> str:
+        heading_re = re.compile(
+            r"(?im)^(?P<heading>(?:\d+(?:\.\d+)*\.?\s*)?[A-Z][A-Za-z0-9,()\-–/&: ]{2,100})\s*$"
+        )
+        matches = list(heading_re.finditer(text))
+        excerpts: list[str] = []
+        remaining = max_chars
+        for index, match in enumerate(matches):
+            heading = match.group("heading").strip().lower()
+            if not any(keyword in heading for keyword in keywords):
+                continue
+            start = match.end()
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+            body = text[start:end].strip()
+            if body:
+                excerpt = self._trim_ollama_context(body, max_chars=remaining)
+                if excerpt:
+                    excerpts.append(excerpt)
+                    remaining -= len(excerpt)
+                if remaining <= 200:
+                    break
+        return "\n\n".join(excerpts).strip()
+
+    def _ollama_head_mid_tail_context(self, text: str, *, max_chars: int) -> str:
+        if len(text) <= max_chars:
+            return text
+        head_chars = max(1000, int(max_chars * 0.45))
+        mid_chars = max(800, int(max_chars * 0.25))
+        tail_chars = max(800, max_chars - head_chars - mid_chars)
+        mid_start = max(0, int((len(text) - mid_chars) / 2))
+        head = self._trim_ollama_context(text[:head_chars], max_chars=head_chars)
+        middle = self._trim_ollama_context(text[mid_start:mid_start + mid_chars], max_chars=mid_chars)
+        tail = self._trim_ollama_context(text[-tail_chars:], max_chars=tail_chars)
+        return "\n\n".join(
+            [
+                "开头材料：\n" + head,
+                "中段材料：\n" + middle,
+                "结尾材料：\n" + tail,
+            ]
+        )
+
+    def _trim_ollama_context(self, text: str, *, max_chars: int) -> str:
+        clean = str(text or "").strip()
+        if len(clean) <= max_chars:
+            return clean
+        return clean[:max_chars].rsplit(" ", 1)[0].strip()
+
+    def _normalize_ollama_deep_read_payload(self, payload: dict) -> dict:
+        normalized = dict(payload or {})
+        if "chinese_title" not in normalized and "chinese_und_title" in normalized:
+            normalized["chinese_title"] = normalized.get("chinese_und_title")
+        required = self._deep_read_schema()["schema"]["required"]
+        for key in required:
+            if key == "tags":
+                normalized[key] = self._normalize_ollama_tags(normalized.get(key, []))
+                continue
+            text_value = self._stringify_ollama_deep_read_value(normalized.get(key, ""), field=key)
+            normalized[key] = self._repair_ollama_deep_read_terms(text_value)
+        normalized["why"] = re.sub(r"^[:：\s]+", "", str(normalized.get("why", "") or "").strip())
+        normalized["why"] = re.sub(r"^作者要解决的问题是[:：]\s*[:：]\s*", "作者要解决的问题是：", normalized["why"])
+        return normalized
+
+    def _normalize_ollama_tags(self, value: object) -> list[str]:
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        text = str(value or "").strip()
+        if not text:
+            return []
+        return [item.strip(" #") for item in re.split(r"[,，;；\s]+", text) if item.strip(" #")]
+
+    def _stringify_ollama_deep_read_value(self, value: object, *, field: str = "") -> str:
+        parsed = self._parse_ollama_structured_text(value)
+        if parsed is not None and parsed is not value:
+            return self._stringify_ollama_deep_read_value(parsed, field=field)
+        if isinstance(value, list):
+            return self._format_ollama_deep_read_list(value, field=field)
+        if isinstance(value, dict):
+            return self._format_ollama_deep_read_dict(value, field=field)
+        return str(value or "").strip()
+
+    def _parse_ollama_structured_text(self, value: object) -> object | None:
+        if isinstance(value, (list, dict)):
+            return None
+        text = str(value or "").strip()
+        if not ((text.startswith("[") and text.endswith("]")) or (text.startswith("{") and text.endswith("}"))):
+            return None
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            try:
+                return ast.literal_eval(text)
+            except (SyntaxError, ValueError):
+                return None
+
+    def _format_ollama_deep_read_dict(self, value: dict, *, field: str) -> str:
+        key_result_labels = ("硬结论", "次级结论", "合理推论", "需进一步研究讨论的结论")
+        if field == "key_results":
+            blocks: list[str] = []
+            for label in key_result_labels:
+                if label not in value:
+                    continue
+                body = self._format_ollama_deep_read_list(value.get(label), field=field)
+                if body:
+                    blocks.append(f"{label}：\n{body}")
+            if blocks:
+                return "\n".join(blocks)
+
+        blocks = []
+        for raw_key, raw_value in value.items():
+            label = str(raw_key).strip()
+            if not label:
+                continue
+            body = self._stringify_ollama_deep_read_value(raw_value, field=field).strip()
+            if not body:
+                continue
+            blocks.append(f"{label}：\n{body}")
+        return "\n".join(blocks)
+
+    def _format_ollama_deep_read_list(self, value: object, *, field: str) -> str:
+        if not isinstance(value, list):
+            text = str(value or "").strip()
+            return text
+        items: list[str] = []
+        for item in value:
+            if isinstance(item, dict):
+                item_text = self._format_ollama_deep_read_dict(item, field=field)
+            elif isinstance(item, list):
+                item_text = self._format_ollama_deep_read_list(item, field=field)
+            else:
+                item_text = str(item or "").strip()
+            item_text = re.sub(r"^\s*\d+[.．、)）]\s*", "", item_text.strip())
+            if item_text:
+                items.append(item_text)
+        return "\n".join(f"{index}. {item}" for index, item in enumerate(items, start=1))
+
+    def _repair_ollama_deep_read_terms(self, value: str) -> str:
+        text = str(value or "").strip()
+        replacements = [
+            (r"太阳[-－—]月球（S-M）", "太阳风-磁层（S-M）"),
+            (r"太阳[-－—]月球/S-M", "太阳风-磁层/S-M"),
+            (r"太阳[-－—]月球/电离层", "太阳风-磁层/电离层"),
+            (r"太阳[-－—]月球发电机", "太阳风-磁层发电机"),
+            (r"太阳[-－—]月球动力机", "太阳风-磁层动力机"),
+            (r"太阳[-－—]月球", "太阳风-磁层"),
+            (r"(?<!耳)焦热", "焦耳热"),
+        ]
+        for pattern, replacement in replacements:
+            text = re.sub(pattern, replacement, text)
+        text = text.replace("这篇文章的目标是本文通过", "这篇文章通过")
+        text = re.sub(r"^本文通过", "这篇文章通过", text)
+        return text
+
+    def _ollama_deep_read_quality_issues(self, payload: dict, evidence_payload: dict) -> list[str]:
+        issues: list[str] = []
+        core_length = sum(
+            len(str(payload.get(key, "") or ""))
+            for key in (
+                "one_sentence_overview",
+                "why",
+                "how",
+                "key_results",
+                "contribution",
+                "limitations",
+                "reproducibility",
+                "relation",
+                "final_conclusion",
+                "relation_to_my_work",
+                "follow_up_questions",
+                "needs_manual_review",
+            )
+        )
+        if core_length < 2600:
+            issues.append("深度解读正文偏短，整体判断密度不足。")
+        key_result_counts = self._ollama_key_result_counts(str(payload.get("key_results", "") or ""))
+        sparse_labels = [label for label, count in key_result_counts.items() if count < 2]
+        if sparse_labels:
+            issues.append(f"关键结果分层不足，以下类别少于 2 条：{'、'.join(sparse_labels)}。")
+        if self._ollama_relation_overstates_directness(payload):
+            issues.append("“和我已有工作的关系”写成直接相关，但标签和证据没有直接支撑。")
+        if self._ollama_payload_contains_list_repr(payload):
+            issues.append("存在 Python/JSON 列表字符串，需要改成逐条编号文本。")
+        if len(str(payload.get("needs_manual_review", "") or "")) < 35:
+            issues.append("需要人工复核的点过短，应明确列出图表、公式、抽取缺损或争议性解释。")
+        evidence_text = json.dumps(evidence_payload, ensure_ascii=False)
+        if "缺损" in evidence_text and "缺损" not in str(payload.get("needs_manual_review", "")):
+            issues.append("证据预分析提到全文抽取缺损，最终报告需要在人工复核点中保留。")
+        return issues
+
+    def _ollama_key_result_counts(self, value: str) -> dict[str, int]:
+        labels = ("硬结论", "次级结论", "合理推论", "需进一步研究讨论的结论")
+        text = str(value or "")
+        counts: dict[str, int] = {}
+        for index, label in enumerate(labels):
+            next_labels = labels[index + 1 :]
+            if next_labels:
+                next_pattern = "|".join(re.escape(item) for item in next_labels)
+                pattern = rf"{re.escape(label)}[:：]?\s*(.*?)(?={next_pattern}[:：]?|\Z)"
+            else:
+                pattern = rf"{re.escape(label)}[:：]?\s*(.*)\Z"
+            match = re.search(pattern, text, flags=re.S)
+            body = match.group(1).strip() if match else ""
+            numbered = re.findall(r"(?m)^\s*(?:\d+[.．、)）]|[-*])\s+", body)
+            if numbered:
+                counts[label] = len(numbered)
+            else:
+                sentences = [item for item in re.split(r"[。！？；]\s*", body) if item.strip()]
+                counts[label] = len(sentences)
+        return counts
+
+    def _ollama_relation_overstates_directness(self, payload: dict) -> bool:
+        relation = str(payload.get("relation_to_my_work", "") or "")
+        if not re.search(r"直接相关|高度相关|密切相关", relation):
+            return False
+        tags = [str(item) for item in payload.get("tags", []) if str(item).strip()]
+        direct_tag = any(
+            tag in {"热层/密度", "热层/风场", "卫星影响", "业务化预报"}
+            or tag.startswith("应用/")
+            or "卫星阻力" in tag
+            or "空间环境风险" in tag
+            for tag in tags
+        )
+        return not direct_tag
+
+    def _downgrade_ollama_relation_overreach(self, payload: dict) -> dict:
+        if not self._ollama_relation_overstates_directness(payload):
+            return payload
+        adjusted = dict(payload)
+        adjusted["relation_to_my_work"] = (
+            "间接相关。该文可作为空间天气扰动和磁层-电离层耦合的机制背景，"
+            "但论文没有直接研究热层密度、热层风、卫星阻力或业务化预报，"
+            "因此不宜直接外推到当前应用主线。"
+        )
+        return adjusted
+
+    def _ollama_payload_contains_list_repr(self, payload: dict) -> bool:
+        for value in payload.values():
+            if not isinstance(value, str):
+                continue
+            text = value.strip()
+            if text.startswith("[") and text.endswith("]"):
+                return True
+            if "['" in text or '["' in text:
+                return True
+        return False
+
+    def _recover_ollama_article_payload(
+        self,
+        row: Row,
+        prompt: str,
+        schema: dict,
+        request_name: str,
+        exc: AnalysisProviderInvalidOutput,
+    ) -> dict:
+        repaired = self._repair_ollama_article_payload_from_error(row, schema, exc)
+        if repaired is not None:
+            return repaired
+
+        retry_prompt = "\n".join(
+            [
+                self._build_article_prompt(self._short_article_retry_row(row)),
+                "",
+                "上一次输出不是合法的完整 JSON。本次必须只输出一个 JSON 对象，不能输出思考过程、Markdown、代码块或解释文字。",
+                "required 字段即使证据不足也要保留；信息不足处用空字符串或空数组，不要省略字段。",
+            ]
+        )
+        try:
+            payload = self._run_ollama_structured(retry_prompt, schema, f"{request_name}_json_retry")
+        except AnalysisProviderInvalidOutput:
+            raise exc
+        return self._coerce_article_payload(row, payload)
+
+    def _repair_ollama_article_payload_from_error(
+        self,
+        row: Row,
+        schema: dict,
+        exc: AnalysisProviderInvalidOutput,
+    ) -> dict | None:
+        raw = self._invalid_output_text(exc)
+        if not raw:
+            return None
+        candidates: list[str] = []
+        extracted = _extract_json_object_candidate(raw)
+        candidates.append(extracted)
+        candidates.extend(_ollama_json_repair_candidates(extracted))
+        for candidate in candidates:
+            clean = str(candidate or "").strip()
+            if not clean:
+                continue
+            payload: object
+            try:
+                payload = json.loads(clean)
+            except json.JSONDecodeError:
+                try:
+                    payload = ast.literal_eval(clean)
+                except Exception:
+                    continue
+            if not isinstance(payload, dict):
+                continue
+            if not self._looks_like_article_payload(payload, schema):
+                continue
+            coerced = self._coerce_article_payload(row, payload)
+            if self._article_payload_has_required_keys(coerced, schema):
+                return coerced
+        return None
+
+    def _invalid_output_text(self, exc: AnalysisProviderInvalidOutput) -> str:
+        if exc.detail_path is not None and exc.detail_path.exists():
+            text = exc.detail_path.read_text(encoding="utf-8", errors="replace")
+            marker = "raw output:"
+            if marker in text:
+                return text.split(marker, 1)[1].strip()
+            return text.strip()
+        return exc.raw_preview.strip()
+
+    def _article_payload_has_required_keys(self, payload: dict, schema: dict) -> bool:
+        required = list(((schema or {}).get("schema") or {}).get("required", []) or [])
+        return all(str(item) in payload for item in required)
+
+    def _looks_like_article_payload(self, payload: dict, schema: dict) -> bool:
+        required = {str(item) for item in (((schema or {}).get("schema") or {}).get("required", []) or [])}
+        if required.intersection(payload):
+            return True
+        article_aliases = {"中文题目", "标题", "摘要", "标签", "一句话总结", "one_sentence_summary"}
+        if article_aliases.intersection(str(key) for key in payload):
+            return True
+        provider_wrapper_keys = {"model", "created_at", "message", "done", "done_reason", "total_duration"}
+        if provider_wrapper_keys.intersection(payload):
+            return False
+        return False
+
+    def _coerce_article_payload(self, row: Row, payload: dict) -> dict:
+        coerced = dict(payload)
+        row_title = str(row["title"] if "title" in row.keys() else "")
+        coerced["chinese_title"] = self._coerce_article_string_field(
+            coerced.get("chinese_title"),
+            fallback=clean_title_text(row_title),
+        )
+        coerced["tags"] = self._coerce_article_tags(coerced.get("tags"))
+        for key in ("body", "supplement", "recommendation", "one_sentence"):
+            coerced[key] = self._coerce_article_string_field(coerced.get(key))
+        return {
+            "chinese_title": coerced["chinese_title"],
+            "tags": coerced["tags"],
+            "body": coerced["body"],
+            "supplement": coerced["supplement"],
+            "recommendation": coerced["recommendation"],
+            "one_sentence": coerced["one_sentence"],
+        }
+
+    def _coerce_article_string_field(self, value: object, *, fallback: str = "") -> str:
+        if value is None:
+            return fallback
+        if isinstance(value, str):
+            return clean_abstract_text(value) or fallback
+        if isinstance(value, list):
+            return clean_abstract_text("；".join(str(item).strip() for item in value if str(item).strip())) or fallback
+        if isinstance(value, dict):
+            return clean_abstract_text(json.dumps(value, ensure_ascii=False)) or fallback
+        return clean_abstract_text(str(value)) or fallback
+
+    def _coerce_article_tags(self, value: object) -> list[str]:
+        raw_items: list[object]
+        if isinstance(value, list):
+            raw_items = value
+        elif isinstance(value, str):
+            text = value.strip()
+            parsed: object | None = None
+            if text.startswith("[") and text.endswith("]"):
+                try:
+                    parsed = json.loads(text)
+                except json.JSONDecodeError:
+                    try:
+                        parsed = ast.literal_eval(text)
+                    except Exception:
+                        parsed = None
+            if isinstance(parsed, list):
+                raw_items = parsed
+            else:
+                raw_items = re.split(r"[,，;；、\s]+", text)
+        elif value is None:
+            raw_items = []
+        else:
+            raw_items = [value]
+        tags: list[str] = []
+        for item in raw_items:
+            clean = re.sub(r"\s+", "", str(item or "").strip().strip("#"))
+            if clean and clean not in tags:
+                tags.append(clean)
+        return tags[:8]
+
+    def _short_article_retry_row(self, row: Row) -> dict:
+        short_row = dict(row)
+        source_kind = str(short_row.get("summary_source_kind", "") or "").strip().lower()
+        preserve_blocks = source_kind in {"html_full_text", "local_pdf_full_text"}
+        source_text = _prepare_article_source_text_for_prompt(
+            str(short_row.get("abstract", "") or ""),
+            preserve_blocks=preserve_blocks,
+        )
+        max_chars = 2600 if preserve_blocks else 1600
+        if len(source_text) > max_chars:
+            source_text = source_text[:max_chars].rsplit(" ", 1)[0].strip() + (" ..." if not preserve_blocks else "\n...")
+        short_row["abstract"] = source_text
+        return short_row
 
     def _run_structured(
         self,
@@ -591,8 +1232,27 @@ class AnalysisEngine:
         return result.payload
 
     def _run_ollama_structured(self, prompt: str, schema: dict, name: str) -> dict:
-        settings = self.config.get("ollama_api", {})
-        result = run_ollama_structured(settings, prompt, schema)
+        settings = self._ollama_settings_for_request(name)
+        timeout_seconds = int(settings.get("timeout_seconds", 900) or 900)
+        try:
+            result = run_ollama_structured(settings, prompt, schema, request_name=name)
+        except TimeoutError as exc:
+            raise AnalysisProviderTimeout(
+                "ollama_api",
+                timeout_seconds=timeout_seconds,
+                request_name=name,
+                phase="analysis",
+            ) from exc
+        except StructuredOutputParseError as exc:
+            detail_path = self._write_invalid_provider_output(name, exc)
+            raise AnalysisProviderInvalidOutput(
+                "ollama_api",
+                request_name=name,
+                detail=exc.detail,
+                raw_preview=exc.output_preview,
+                detail_path=detail_path,
+                phase="analysis",
+            ) from exc
         record_api_usage(
             self.root,
             provider="ollama_api",
@@ -601,6 +1261,115 @@ class AnalysisEngine:
             request_name=name,
         )
         return result.payload
+
+    def _ollama_settings_for_request(self, name: str) -> dict:
+        settings = dict(self.config.get("ollama_api", {}) or {})
+        settings["think"] = False
+        if str(name or "").startswith("deep_read"):
+            deep_predict = self._positive_int(settings.get("deep_read_num_predict"))
+            if deep_predict > 0:
+                settings["num_predict"] = deep_predict
+            if self._ollama_keep_alive_is_zero(settings):
+                settings["keep_alive"] = str(settings.get("deep_read_stage_keep_alive", "1m") or "1m")
+        return settings
+
+    def _ollama_keep_alive_is_zero(self, settings: dict) -> bool:
+        value = settings.get("keep_alive")
+        if value == 0:
+            return True
+        if isinstance(value, str) and value.strip() == "0":
+            return True
+        return False
+
+    def _positive_int(self, value: object) -> int:
+        try:
+            number = int(value or 0)
+        except (TypeError, ValueError):
+            return 0
+        return number if number > 0 else 0
+
+    def _ollama_deep_read_quality_mode_enabled(self) -> bool:
+        settings = self.config.get("ollama_api", {})
+        return bool(settings.get("deep_read_quality_mode", True))
+
+    def _ollama_deep_read_final_text(self, full_text: str) -> str:
+        settings = self.config.get("ollama_api", {})
+        max_chars = int(settings.get("deep_read_final_max_chars", 12000) or 12000)
+        text = str(full_text or "").strip()
+        if max_chars <= 0 or len(text) <= max_chars:
+            return text
+        head_chars = max(1000, int(max_chars * 0.65))
+        tail_chars = max(800, max_chars - head_chars)
+        head = text[:head_chars].rsplit(" ", 1)[0].strip()
+        tail = text[-tail_chars:].split(" ", 1)[-1].strip()
+        return "\n\n".join(
+            [
+                head,
+                "[Ollama 深度解读说明：完整全文已在第一阶段证据预分析中读取；这里保留开头和结尾作为最终报告核对材料，避免本地模型最终阶段空响应或截断。]",
+                tail,
+            ]
+        )
+
+    def _ollama_deep_read_evidence_context(
+        self,
+        metadata: dict[str, str],
+        full_text: str,
+        related_summary: dict[str, str] | None,
+        *,
+        cache_key: str,
+    ) -> str:
+        evidence_key = hashlib.sha1(f"deep_read_evidence_v1|{cache_key}".encode("utf-8")).hexdigest()
+        cached = self._read_json_cache("deep_read_evidence", evidence_key)
+        if cached is None:
+            prompt = self._build_deep_read_evidence_prompt(metadata, full_text, related_summary)
+            cached = self._run_ollama_structured(
+                prompt,
+                self._deep_read_evidence_schema(),
+                f"deep_read_evidence_{cache_key[:20]}",
+            )
+            self._write_json_cache("deep_read_evidence", evidence_key, cached)
+        return self._format_deep_read_evidence_context(cached)
+
+    def _format_deep_read_evidence_context(self, payload: dict) -> str:
+        labels = [
+            ("research_problem", "研究问题"),
+            ("introduction_gap", "引言空白"),
+            ("method_chain", "方法与证据链"),
+            ("result_chain", "结果链条"),
+            ("evidence_limits", "证据边界"),
+            ("relation_context", "与已有工作的关系"),
+        ]
+        lines: list[str] = []
+        for key, label in labels:
+            value = self._format_evidence_value(payload.get(key, ""))
+            if value:
+                lines.append(f"- {label}：{value}")
+        return "\n".join(lines)
+
+    def _format_evidence_value(self, value: object, *, numbered: bool = False) -> str:
+        if isinstance(value, list):
+            parts = [str(item).strip() for item in value if str(item).strip()]
+            if numbered:
+                return "\n".join(f"{index}. {part}" for index, part in enumerate(parts, start=1))
+            return "；".join(parts)
+        return str(value or "").strip()
+
+    def _write_invalid_provider_output(self, name: str, exc: StructuredOutputParseError) -> Path:
+        safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name or "analysis")).strip("_") or "analysis"
+        path = self.tmp_root / f"{safe_name}_invalid_output.txt"
+        path.write_text(
+            "\n".join(
+                [
+                    f"provider: {exc.provider}",
+                    f"detail: {exc.detail}",
+                    "",
+                    "raw output:",
+                    exc.output_text,
+                ]
+            ),
+            encoding="utf-8",
+        )
+        return path
 
     def _run_chatgpt_web_manual_structured(
         self,
@@ -710,8 +1479,56 @@ class AnalysisEngine:
         metadata: dict[str, str],
         full_text: str,
         related_summary: dict[str, str] | None = None,
+        evidence_context: str = "",
     ) -> str:
-        return build_deep_read_prompt(metadata, full_text, related_summary, self.user_preferences)
+        return build_deep_read_prompt(metadata, full_text, related_summary, self.user_preferences, evidence_context=evidence_context)
+
+    def _build_deep_read_evidence_prompt(
+        self,
+        metadata: dict[str, str],
+        full_text: str,
+        related_summary: dict[str, str] | None = None,
+    ) -> str:
+        return build_deep_read_evidence_prompt(metadata, full_text, related_summary, self.user_preferences)
+
+    def _build_ollama_deep_read_evidence_prompt_v2(
+        self,
+        metadata: dict[str, str],
+        full_text: str,
+        related_summary: dict[str, str] | None = None,
+    ) -> str:
+        return build_ollama_deep_read_evidence_prompt_v2(metadata, full_text, related_summary, self.user_preferences)
+
+    def _build_ollama_deep_read_final_prompt_v2(
+        self,
+        metadata: dict[str, str],
+        final_context: str,
+        related_summary: dict[str, str] | None = None,
+        *,
+        evidence_context: str,
+    ) -> str:
+        return build_ollama_deep_read_final_prompt_v2(
+            metadata,
+            final_context,
+            related_summary,
+            self.user_preferences,
+            evidence_context=evidence_context,
+        )
+
+    def _build_ollama_deep_read_revision_prompt_v2(
+        self,
+        metadata: dict[str, str],
+        current_payload: dict,
+        issues: list[str],
+        evidence_context: str,
+    ) -> str:
+        return build_ollama_deep_read_revision_prompt_v2(
+            metadata,
+            current_payload,
+            issues,
+            evidence_context,
+            self.user_preferences,
+        )
 
     def _build_manual_deep_read_prompt(
         self,
@@ -722,6 +1539,12 @@ class AnalysisEngine:
 
     def _deep_read_schema(self) -> dict:
         return build_deep_read_schema()
+
+    def _deep_read_evidence_schema(self) -> dict:
+        return build_deep_read_evidence_schema()
+
+    def _ollama_deep_read_evidence_schema_v2(self) -> dict:
+        return build_ollama_deep_read_evidence_schema_v2()
 
     def _article_schema(self) -> dict:
         return build_article_schema()
@@ -768,6 +1591,19 @@ class AnalysisEngine:
         elif self.provider == "ollama_api":
             ollama_settings = self.config.get("ollama_api", {})
             model = str(ollama_settings.get("model", "gemma4:26b") or "gemma4:26b").strip() or "gemma4:26b"
+            num_ctx = str(ollama_settings.get("num_ctx", "") or "").strip()
+            num_predict = str(ollama_settings.get("num_predict", "") or "").strip()
+            if section == "deep_reads":
+                deep_num_predict = str(ollama_settings.get("deep_read_num_predict", "") or "").strip()
+                final_chars = str(ollama_settings.get("deep_read_final_max_chars", "") or "").strip()
+                quality = "quality_v2" if ollama_settings.get("deep_read_quality_mode", True) else "standard"
+                model = (
+                    f"{model}|ctx={num_ctx or 'default'}|predict={num_predict or 'default'}"
+                    f"|deep_predict={deep_num_predict or 'default'}|final_chars={final_chars or 'default'}|deep_read={quality}"
+                )
+            else:
+                quality = "quality" if ollama_settings.get("deep_read_quality_mode", True) else "standard"
+                model = f"{model}|ctx={num_ctx or 'default'}|predict={num_predict or 'default'}|deep_read={quality}"
         elif self.provider == "chatgpt_web_manual":
             model = "chatgpt_web_manual"
         else:

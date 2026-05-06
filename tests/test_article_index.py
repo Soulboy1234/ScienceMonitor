@@ -148,6 +148,30 @@ class ArticleIndexTest(unittest.TestCase):
             self.assertNotIn("Liu 2017 - SW - 热层综述 - 重要", moon_page)
             self.assertIn("[[manual/Moon 2026 - JGR.SP - 月球电离层观测|Moon 2026 - JGR.SP - 月球电离层观测]]", moon_page)
 
+    def test_sync_out_library_does_not_add_planet_tags_to_auto_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            (root / "out" / "auto" / "article_summaries").mkdir(parents=True)
+            (root / "out" / "article_index" / "sub_index").mkdir(parents=True)
+
+            note = root / "out" / "auto" / "article_summaries" / "Duling 2026 - JGR.SP - Ganymede aurora.md"
+            note.write_text(
+                "\n".join(
+                    [
+                        "----",
+                        "- [DOI](https://doi.org/10.1029/2025JA034982) #对象/极区/极光 #仪器/JunoUVS",
+                        "- 本研究利用 Juno UVS 观测 Ganymede aurora。",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            sync_out_library(root)
+
+            text = note.read_text(encoding="utf-8")
+            self.assertNotIn("#对象/其他行星/木星", text)
+
     def test_sync_out_library_repairs_legacy_summary_links_after_title_rename(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = pathlib.Path(tmpdir)

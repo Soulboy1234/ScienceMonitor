@@ -5,8 +5,14 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
-from .article_summary_markdown import build_tag_line, extract_numbered_line, extract_summary_body, extract_summary_tags
-from .config import article_summaries_root, deep_reads_root, formal_tags_markdown_path, project_root
+from .article_summary_markdown import (
+    HASH_TAG_RE,
+    build_tag_line,
+    decode_obsidian_tag,
+    extract_numbered_line,
+    extract_summary_body,
+)
+from .config import article_summaries_root, deep_reads_root, formal_tags_markdown_path, project_root, reports_root
 from .tag_governance import (
     OutputTagRewriteEntry,
     OutputTagRewriteResult,
@@ -86,7 +92,17 @@ METHOD_ROOT_HINTS = (
     "理论",
     "算法",
 )
-TAG_REVIEW_CONTEXTS = {"article_summary", "article_summary_review", "deep_read", "deep_read_inferred", "output_rewrite"}
+TAG_REVIEW_CONTEXTS = {
+    "article_summary",
+    "article_summary_review",
+    "deep_read",
+    "deep_read_inferred",
+    "deep_read_output_review",
+    "deep_read_output_rewrite",
+    "report_output_review",
+    "report_output_rewrite",
+    "output_rewrite",
+}
 PENDING_LIMIT_BY_CONTEXT = {
     "article_summary": 2,
     "article_summary_review": 2,
@@ -94,6 +110,10 @@ PENDING_LIMIT_BY_CONTEXT = {
     "output_review": 2,
     "deep_read": 3,
     "deep_read_inferred": 3,
+    "deep_read_output_review": 3,
+    "deep_read_output_rewrite": 3,
+    "report_output_review": 2,
+    "report_output_rewrite": 2,
 }
 PENDING_FAMILY_PRIORITY = {
     "applications_impacts": 60,
@@ -202,6 +222,39 @@ SATELLITE_IMPACT_NEGATION_PATTERNS = (
     r"不是直接研究.{0,40}(?:卫星|轨道|阻力|应用影响|业务化预报)",
     r"(?:卫星|轨道|阻力|卫星环境|应用影响|业务化预报).{0,40}(?:未展开|无直接联系|未直接讨论|不能(?:进一步)?外推|不宜外推|未量化)",
 )
+SATELLITE_ORBIT_DECAY_PATTERNS = (
+    r"\bre[-\s]?entry\b",
+    r"\bsatellite re[-\s]?entry\b",
+    r"\borbit(?:al)? decay\b",
+    r"\btrajectory prediction\b",
+    r"\breentry prediction\b",
+    r"卫星再入",
+    r"再入预测",
+    r"轨迹预测",
+    r"轨道衰减",
+    r"再入时间",
+    r"着陆位置",
+)
+OPERATIONAL_FORECAST_PATTERNS = (
+    r"\boperational\b",
+    r"\boperations\b",
+    r"\bnowcast(?:ing)?\b",
+    r"\bforecast(?:ing)?\b",
+    r"\bspace weather service\b",
+    r"业务化",
+    r"业务运行",
+    r"业务预报",
+    r"现报",
+    r"预报系统",
+    r"运行系统",
+)
+OPERATIONAL_FORECAST_NEGATION_PATTERNS = (
+    r"没有说明.{0,40}(?:业务化|业务预报|operational|forecast)",
+    r"未(?:说明|展开|直接涉及).{0,40}(?:业务化|业务预报|operational|forecast)",
+    r"不(?:涉及|属于|是).{0,40}(?:业务化|业务预报|operational|forecast)",
+    r"not.{0,30}(?:operational|forecast(?:ing)? service)",
+    r"no.{0,30}(?:operational|forecast(?:ing)? service)",
+)
 THERMOSPHERE_CONTEXT_PATTERNS = (
     r"\bthermosphere\b",
     r"\bthermospheric\b",
@@ -210,8 +263,11 @@ THERMOSPHERE_CONTEXT_PATTERNS = (
 )
 THERMOSPHERE_DENSITY_POSITIVE_PATTERNS = (
     r"\bthermospheric density\b",
+    r"\bthermospheric densities\b",
     r"\bthermospheric mass density\b",
+    r"\bthermospheric mass densities\b",
     r"\bneutral density\b",
+    r"\bneutral densities\b",
     r"\bmass density\b",
     r"\bdensity response\b",
     r"\bdensity variation(?:s)?\b",
@@ -261,6 +317,16 @@ THERMOSPHERE_WIND_NEGATION_PATTERNS = (
     r"不应外推.{0,40}(?:热层风|中性风|风场)",
     r"does not (?:involve|study|analyze|discuss).{0,20}(?:thermospheric|neutral) wind",
 )
+ETA_PATTERNS = (
+    r"\bequatorial thermosphere anomaly\b",
+    r"赤道热层异常",
+)
+ADA_PATTERNS = (
+    r"(?<![A-Za-z0-9])ada(?![A-Za-z0-9])",
+    r"\bascending[-\s]+descending accelerometry\b",
+    r"上升[-－—]?下降.{0,8}加速度分析",
+    r"升降轨.{0,8}加速度分析",
+)
 IONOSPHERE_CONTEXT_PATTERNS = (
     r"\bionosphere\b",
     r"\bionospheric\b",
@@ -302,10 +368,61 @@ GEOMAGNETIC_STORM_PATTERNS = (
     r"\bmagnetic storm(?:s)?\b",
     r"\bstorm-?time\b",
     r"磁暴",
+    r"地磁暴",
+)
+EARTHQUAKE_PATTERNS = (
+    r"\bearthquake(?:s)?\b",
+    r"\bseismicity\b",
+    r"地震",
+    r"强震",
 )
 SUBSTORM_PATTERNS = (
     r"\bsubstorm(?:s)?\b",
     r"亚暴",
+)
+SNMC_PATTERNS = (
+    r"(?<![A-Za-z0-9])snmc(?![A-Za-z0-9])",
+    r"shift\s*neighborhood\s*matching\s*correlation",
+    r"移位邻域匹配相关",
+)
+STATISTICAL_STUDY_PATTERNS = (
+    r"\brandom\s+sampling\b",
+    r"\bbinomial\b",
+    r"\bchi[-\s]?square\b",
+    r"随机采样",
+    r"二项分布",
+    r"卡方",
+    r"统计验证",
+    r"统计检验",
+)
+TIME_LAG_CORRELATION_PATTERNS = (
+    r"time[-\s]?lag(?:ged)?\s*correlation",
+    r"\blag(?:ged)?\s+(?:day|window|correlation)",
+    r"时滞相关",
+    r"延迟.{0,8}(?:相关|窗口|天)",
+    r"27[–-]28\s*(?:day|天)",
+)
+PROBABILITY_GAIN_PATTERNS = (
+    r"\bprobability\s+gain\b",
+    r"概率增益",
+)
+ELECTROKINETIC_PATTERNS = (
+    r"\belectrokinetic\b",
+    r"\belectroosmotic\b",
+    r"电渗流",
+)
+INVERSE_PIEZOELECTRIC_PATTERNS = (
+    r"\binverse\s+piezoelectric\s+effect\b",
+    r"\binverse\s+of?piezoelectric\s+effect(?:s)?\b",
+    r"逆压电效应",
+)
+DST_INDEX_PATTERNS = (
+    r"(?<![A-Za-z0-9])dst(?![A-Za-z0-9])",
+    r"(?<![A-Za-z0-9])d\s*(?:st|指数|[-_]?index\s*(?:st)?)(?![A-Za-z0-9])",
+)
+KP_INDEX_PATTERNS = (
+    r"(?<![A-Za-z0-9])kp(?![A-Za-z0-9])",
+    r"(?<![A-Za-z0-9])k\s*(?:p|指数|[-_]?index\s*(?:p)?)(?![A-Za-z0-9])",
 )
 SOLAR_WIND_PATTERNS = (
     r"\bsolar wind\b",
@@ -338,11 +455,38 @@ EUV_PATTERNS = (
     r"极紫外",
     r"EUV",
 )
-ICON_PATTERNS = (
-    r"icon",
-    r"\bionospheric connection explorer\b",
-    r"mighti",
+FPI_PATTERNS = (
+    r"(?<![A-Za-z0-9])fpi(?![A-Za-z0-9])",
+    r"fabry[-\s]?perot",
+    r"Fabry[-\s]?Perot",
 )
+ICON_PATTERNS = (
+    r"(?<![A-Za-z0-9])icon(?![A-Za-z0-9])",
+    r"\bionospheric connection explorer\b",
+    r"(?<![A-Za-z0-9])mighti(?![A-Za-z0-9])",
+)
+ICON_DATA_EVIDENCE_PATTERNS = (
+    r"(?:uses?|using|used|based on|from|with|利用|使用|基于|采用).{0,80}(?:\bicon\b|\bionospheric connection explorer\b|\bmighti\b).{0,80}(?:data|observations?|measurements?|winds?|temperature|数据|观测|测量|风场|温度)",
+    r"(?:\bicon\b|\bionospheric connection explorer\b|\bmighti\b).{0,80}(?:data|observations?|measurements?|winds?|temperature|数据|观测|测量|风场|温度)",
+)
+MISSION_DATA_EVIDENCE_PATTERNS = {
+    "仪器/CHAMP": (
+        r"(?:uses?|using|used|based on|from|derived from|with|利用|使用|基于|采用)[^.。;；]{0,80}(?<!like\s)\bchamp\b[^.。;；]{0,80}(?:data|observations?|measurements?|accelerometer[- ]?derived|accelerometer data|density|数据|观测|测量|加速度计|密度)",
+        r"(?<!like\s)\bchamp\b[^.。;；]{0,80}(?:data|observations?|measurements?|accelerometer[- ]?derived|accelerometer data|density|数据|观测|测量|加速度计|密度)",
+    ),
+    "仪器/GRACE": (
+        r"(?:\bgrace\b|gravity recovery and climate experiment)[^.。;；]{0,40}(?:data|observations?|measurements?|accelerometer[- ]?derived|accelerometer data|数据|观测|测量|加速度计数据)",
+        r"(?:data|observations?|measurements?|数据|观测|测量)[^.。;；]{0,40}(?:\bgrace\b|gravity recovery and climate experiment)",
+    ),
+    "仪器/GRACE-FO": (
+        r"(?:\bgrace[- ]?fo\b|grace follow[- ]?on)[^.。;；]{0,40}(?:data|observations?|measurements?|accelerometer[- ]?derived|accelerometer data|数据|观测|测量|加速度计数据)",
+        r"(?:data|observations?|measurements?|数据|观测|测量)[^.。;；]{0,40}(?:\bgrace[- ]?fo\b|grace follow[- ]?on)",
+    ),
+    "仪器/Swarm": (
+        r"(?:uses?|using|used|based on|from|derived from|with|利用|使用|基于|采用)[^.。;；]{0,80}(?:\bswarm(?:[- ]?[abc])?\b)[^.。;；]{0,80}(?:data|observations?|measurements?|density|数据|观测|测量|密度)",
+        r"(?:\bswarm(?:[- ]?[abc])?\b)[^.。;；]{0,80}(?:data|observations?|measurements?|density|数据|观测|测量|密度)",
+    ),
+}
 PLANET_PATTERNS_BY_NAME = {
     "火星": (r"\bmars\b", r"\bmartian\b", r"火星"),
     "金星": (r"\bvenus\b", r"\bvenusian\b", r"金星"),
@@ -367,6 +511,7 @@ SUN_TO_EARTH_EXPLICIT_PATTERNS = (
     r"\bsolar wind magnetosphere ionosphere\b",
     r"日地耦合",
     r"太阳-地球耦合",
+    r"太阳[-－—]地球.{0,8}(?:相互作用|耦合|联系)",
     r"太阳到地球",
     r"从太阳到地球",
     r"多圈层耦合",
@@ -481,6 +626,16 @@ BROAD_TAG_DROP_PATTERNS = (
     r"^(?:方法/|对象/)?数据分析$",
 )
 
+DEEP_READ_VIRTUAL_OBJECT_PREFIXES = (
+    "对象/物理机制",
+    "对象/能量转换",
+    "对象/过程",
+    "对象/机制",
+)
+DEEP_READ_VIRTUAL_OBJECT_TAGS = {
+    "对象/动力学过程",
+}
+
 
 @dataclass(frozen=True)
 class TagReviewAuditIssue:
@@ -526,6 +681,17 @@ class TagReviewAgent:
         context: str = "",
         record_candidates: bool = False,
     ) -> list[str]:
+        raw_tags = list(tags)
+        if _is_deep_read_tag_context(context):
+            raw_tags.extend(
+                tag
+                for tag in _infer_deep_read_evidence_tags(
+                    title_text=title_text,
+                    body_text=body_text,
+                    extra_text=extra_text,
+                )
+                if tag not in raw_tags
+            )
         inferred_context = tuple(
             self.taxonomy.infer_tags_from_text(
                 title_text=title_text,
@@ -536,8 +702,8 @@ class TagReviewAgent:
         )
         context_prefixes = self._infer_context_prefixes(title_text=title_text, body_text=body_text, extra_text=extra_text)
         reviewed: list[str] = []
-        for raw in tags:
-            reviewed.extend(self._review_single_tag(str(raw or "").strip(), inferred_context, context_prefixes))
+        for raw in raw_tags:
+            reviewed.extend(self._review_single_tag(str(raw or "").strip(), inferred_context, context_prefixes, context=context))
         normalized = self.taxonomy.normalize_tags(reviewed, max_tags=max_tags, root=None, context=context, record_candidates=False)
         governed_formal: list[str] = []
         pending_candidates: list[str] = []
@@ -645,19 +811,34 @@ class TagReviewAgent:
                 selected.append(tag)
         return selected
 
-    def _review_single_tag(self, raw_tag: str, inferred_context: tuple[str, ...], context_prefixes: tuple[str, ...]) -> list[str]:
+    def _review_single_tag(
+        self,
+        raw_tag: str,
+        inferred_context: tuple[str, ...],
+        context_prefixes: tuple[str, ...],
+        *,
+        context: str = "",
+    ) -> list[str]:
         phrase_alias = self._resolve_phrase_alias(raw_tag, context_prefixes)
         if phrase_alias is not None:
             return phrase_alias
         clean = clean_tag_text(raw_tag)
         if not clean:
             return []
+        if _is_deep_read_tag_context(context):
+            deep_read_resolution = _resolve_deep_read_abstract_tag(clean)
+            if deep_read_resolution is not None:
+                return deep_read_resolution
         if any(re.search(pattern, clean, flags=re.IGNORECASE) for pattern in BROAD_TAG_DROP_PATTERNS):
             return []
         resolved = self._resolve_to_formal(clean, inferred_context, context_prefixes)
         if resolved:
             return resolved
         styled = self._style_unknown_tag(clean)
+        if _is_deep_read_tag_context(context):
+            deep_read_resolution = _resolve_deep_read_abstract_tag(styled)
+            if deep_read_resolution is not None:
+                return deep_read_resolution
         if any(re.search(pattern, styled, flags=re.IGNORECASE) for pattern in BROAD_TAG_DROP_PATTERNS):
             return []
         resolved = self._resolve_to_formal(styled, inferred_context, context_prefixes)
@@ -752,6 +933,49 @@ class TagReviewAgent:
         folded = re.sub(r"[\s_/-]+", " ", original).strip().lower()
         if not folded:
             return None
+        compact = re.sub(r"[\s_/-]+", "", original).strip().lower()
+        if re.fullmatch(r"(?:对象|事件)?(?:地磁暴|磁暴|geomagneticstorm|magneticstorm)", compact):
+            return ["事件/磁暴"]
+        if re.fullmatch(r"(?:对象)?(?:赤道热层异常|eta|equatorialthermosphereanomaly)", compact):
+            return ["对象/热层/ETA"]
+        if re.fullmatch(r"(?:方法)?(?:ada|上升下降加速度分析(?:ada)?|升降轨加速度分析(?:ada)?|ascendingdescendingaccelerometry)", compact):
+            return ["方法/ADA"]
+        if re.fullmatch(r"(?:仪器)?(?:champstar加速度计|star加速度计|champaccelerometer|champstaraccelerometer)", compact):
+            return ["仪器/CHAMP"]
+        if re.fullmatch(r"(?:对象|指数)?d(?:st|指数|indexst?|st)", compact):
+            return ["指数/Dst"]
+        if re.fullmatch(r"(?:对象|指数)?(?:kp(?:指数|index)?|k(?:指数|indexp?|pindex))", compact):
+            return ["指数/Kp"]
+        if re.fullmatch(r"(?:对象|指数)?(?:f10[.．]?7|f107|f107指数|f10[.．]?7指数)", compact):
+            return ["指数/F107"]
+        if re.fullmatch(r"(?:对象|指数)?(?:euv|euv辐射|euv通量|extremeultraviolet)", compact):
+            return ["指数/EUV"]
+        if re.fullmatch(r"(?:对象|仪器|数据)?(?:co2|二氧化碳|carbondioxide)", compact):
+            return ["对象/热层/成分"]
+        if re.fullmatch(r"(?:仪器|模型)?(?:sdwaccm|waccm|wholeatmospherecommunityclimatemodel)", compact):
+            return ["模型/WACCM"]
+        if re.fullmatch(r"(?:模型)?(?:nrlmsise00|nrlmsise0|nrlmsise|msise00)", compact):
+            return ["模型/NRLMSISE-00"]
+        if re.fullmatch(r"(?:仪器)?(?:swarmc|swarma|swarmb|swarm)", compact):
+            return ["仪器/Swarm"]
+        if re.fullmatch(r"(?:对象|仪器|数据)?(?:image网络|imagemagnetometernetwork|imagenetwork)", compact):
+            return ["仪器/磁强计"]
+        if re.fullmatch(r"(?:对象|仪器)?(?:全天空相机|allskycamera|allskyimager|asc)", compact):
+            return ["仪器/全天空相机"]
+        if re.fullmatch(r"(?:事件|对象|应用)?(?:卫星会合|conjunction|satelliteconjunction|cola|collisionavoidance)", compact):
+            return ["事件/卫星会合"]
+        if re.fullmatch(r"(?:对象)?(?:极区)?(?:极光)?(?:流光|auroralstreamer|auroralstreamers|streamer|streamers)", compact):
+            return ["对象/极区/极光"]
+        if re.fullmatch(r"(?:对象)?极区极光流光", compact):
+            return ["对象/极区/极光"]
+        if re.fullmatch(r"(?:对象|事件)?(?:极地亚暴|polarsubstorm|polarsubstorms)", compact):
+            return ["事件/亚暴"]
+        if re.fullmatch(r"(?:对象)?(?:极慢太阳风|慢太阳风|slowsolarwind|veryslowsolarwind)", compact):
+            return ["对象/太阳风"]
+        if re.fullmatch(r"(?:对象)?(?:西向电喷流|西向极光电喷流|westwardelectrojet|westwardauroralelectrojet)", compact):
+            return ["对象/极区/PEJ"]
+        if re.fullmatch(r"(?:对象|应用)?(?:低地球轨道|近地轨道|lowearthorbit|leo)", compact):
+            return ["应用/卫星轨道"]
         if folded in {"earth", "地球"}:
             return []
         mapping = (
@@ -759,6 +983,8 @@ class TagReviewAgent:
             ((r"磁层状态|magnetosphere state",), ["对象/磁层"]),
             ((r"热层风|thermospheric wind|neutral wind",), ["对象/热层/风场"]),
             ((r"中性密度|neutral density|mass density",), ["对象/热层/密度"]),
+            ((r"赤道热层异常|equatorial thermosphere anomaly",), ["对象/热层/ETA"]),
+            ((r"上升.{0,4}下降.{0,8}加速度|ascending descending accelerometry|ascending-descending accelerometry",), ["方法/ADA"]),
             ((r"热层温度|thermospheric temperature",), ["对象/热层/温度"]),
             ((r"o n2|o/n2|composition",), ["对象/热层/成分"]),
             ((r"polar convection boundary|极区对流边界",), ["对象/极区/对流边界"]),
@@ -844,6 +1070,102 @@ class TagReviewAgent:
         return depth
 
 
+def _is_deep_read_tag_context(context: str) -> bool:
+    return str(context or "").startswith("deep_read")
+
+
+def _resolve_deep_read_abstract_tag(tag: str) -> list[str] | None:
+    clean = clean_tag_text(tag)
+    if not clean:
+        return []
+    if clean in DEEP_READ_VIRTUAL_OBJECT_TAGS:
+        return []
+    leaf = clean.split("/")[-1]
+    folded_leaf = re.sub(r"[\s_/-]+", "", leaf).lower()
+    folded_clean = re.sub(r"[\s_/-]+", "", clean).lower()
+    if re.search(r"joule|焦耳加热|焦耳热", folded_leaf):
+        return ["对象/极区/焦耳加热"]
+    if re.search(r"fieldalignedcurrent|fac|场向电流", folded_leaf):
+        return ["对象/磁层/电流体系"]
+    if re.search(r"inductivecircuitmodel|电感?电路模型|电路模型", folded_leaf):
+        return ["模型/电路模型"]
+    if clean.startswith(DEEP_READ_VIRTUAL_OBJECT_PREFIXES):
+        return []
+    if re.fullmatch(r"(?:电学)?放电(?:现象|机制)?", folded_leaf):
+        return []
+    if re.fullmatch(r"(?:物理)?机制(?:解释|重构)?|能量(?:转换|释放)?|动力学过程", folded_leaf):
+        return []
+    if folded_clean in {"对象电学放电现象", "对象能量转换", "对象物理机制", "对象动力学过程"}:
+        return []
+    return None
+
+
+def _infer_deep_read_evidence_tags(
+    *,
+    title_text: str = "",
+    body_text: str = "",
+    extra_text: str = "",
+) -> list[str]:
+    title_haystack = _support_haystack(title_text=title_text, body_text="", extra_text="")
+    haystack = _support_haystack(title_text=title_text, body_text=body_text, extra_text=extra_text)
+    if not haystack:
+        return []
+
+    inferred: list[str] = []
+
+    def add(tag: str) -> None:
+        if tag not in inferred:
+            inferred.append(tag)
+
+    if should_keep_sun_to_earth_coupling_tag(title_text=title_text, body_text=body_text, extra_text=extra_text):
+        add("对象/日地耦合")
+    if _has_any(haystack, GEOMAGNETIC_STORM_PATTERNS):
+        add("事件/磁暴")
+    if _has_any(title_haystack, EARTHQUAKE_PATTERNS) or _has_any(haystack, EARTHQUAKE_PATTERNS):
+        add("事件/地震")
+    if _has_any(haystack, DST_INDEX_PATTERNS):
+        add("指数/Dst")
+    if _has_any(haystack, KP_INDEX_PATTERNS):
+        add("指数/Kp")
+    title_density_signal = _has_any(title_haystack, THERMOSPHERE_DENSITY_POSITIVE_PATTERNS) or (
+        _has_any(title_haystack, (r"\bdensit(?:y|ies)\b", r"密度"))
+        and (_has_any(title_haystack, THERMOSPHERE_CONTEXT_PATTERNS) or _has_any(title_haystack, ETA_PATTERNS))
+    )
+    title_wind_signal = _has_any(title_haystack, THERMOSPHERE_WIND_POSITIVE_PATTERNS) or (
+        _has_any(title_haystack, (r"\bwind(?:s)?\b", r"风"))
+        and (_has_any(title_haystack, THERMOSPHERE_CONTEXT_PATTERNS) or _has_any(title_haystack, ETA_PATTERNS))
+    )
+    if title_density_signal and should_keep_thermosphere_density_tag(
+        title_text=title_text,
+        body_text=body_text,
+        extra_text=extra_text,
+    ):
+        add("对象/热层/密度")
+    if title_wind_signal and should_keep_thermosphere_wind_tag(
+        title_text=title_text,
+        body_text=body_text,
+        extra_text=extra_text,
+    ):
+        add("对象/热层/风场")
+    if _has_any(haystack, ETA_PATTERNS):
+        add("对象/热层/ETA")
+    if _has_any(haystack, ADA_PATTERNS):
+        add("方法/ADA")
+    if _has_any(haystack, SNMC_PATTERNS):
+        add("方法/SNMC")
+    if _has_any(haystack, STATISTICAL_STUDY_PATTERNS):
+        add("方法/统计研究")
+    if _has_any(haystack, TIME_LAG_CORRELATION_PATTERNS):
+        add("特征/时滞相关")
+    if _has_any(haystack, PROBABILITY_GAIN_PATTERNS):
+        add("特征/概率增益")
+    if _has_any(haystack, ELECTROKINETIC_PATTERNS):
+        add("特征/电渗流")
+    if _has_any(haystack, INVERSE_PIEZOELECTRIC_PATTERNS):
+        add("特征/逆压电效应")
+    return inferred
+
+
 @lru_cache(maxsize=16)
 def _load_tag_review_agent_cached(root_text: str, focus_mtime_ns: int, formal_mtime_ns: int) -> TagReviewAgent:
     del focus_mtime_ns, formal_mtime_ns
@@ -903,6 +1225,21 @@ def should_keep_thermosphere_density_tag(
     )
 
 
+def should_keep_thermosphere_wind_tag(
+    *,
+    title_text: str = "",
+    body_text: str = "",
+    extra_text: str = "",
+) -> bool:
+    positive_haystack = _support_haystack(title_text=title_text, body_text=body_text, extra_text="")
+    full_haystack = _support_haystack(title_text=title_text, body_text=body_text, extra_text=extra_text)
+    if not positive_haystack:
+        return False
+    if _has_any(full_haystack, THERMOSPHERE_WIND_NEGATION_PATTERNS):
+        return False
+    return _has_any(positive_haystack, THERMOSPHERE_WIND_POSITIVE_PATTERNS)
+
+
 def should_keep_sun_to_earth_coupling_tag(
     *,
     title_text: str = "",
@@ -915,10 +1252,10 @@ def should_keep_sun_to_earth_coupling_tag(
         return False
     if _has_any(full_haystack, SUN_TO_EARTH_NEGATION_PATTERNS):
         return False
-    if _has_any(full_haystack, NON_EARTH_PLANET_PATTERNS):
-        return False
     if _has_any(haystack, SUN_TO_EARTH_EXPLICIT_PATTERNS):
         return True
+    if _has_any(full_haystack, NON_EARTH_PLANET_PATTERNS):
+        return False
     if not _has_any(haystack, SUN_TO_EARTH_SOLAR_DRIVER_PATTERNS):
         return False
     if not _has_any(haystack, SUN_TO_EARTH_COUPLING_PATTERNS):
@@ -1017,6 +1354,17 @@ def should_keep_euv_tag(
     return _has_any(positive_haystack, EUV_PATTERNS)
 
 
+def should_keep_fpi_tag(
+    *,
+    title_text: str = "",
+    body_text: str = "",
+) -> bool:
+    positive_haystack = _support_haystack(title_text=title_text, body_text=body_text, extra_text="")
+    if not positive_haystack:
+        return True
+    return _has_any(positive_haystack, FPI_PATTERNS)
+
+
 def should_keep_icon_tag(
     *,
     title_text: str = "",
@@ -1026,6 +1374,22 @@ def should_keep_icon_tag(
     if not positive_haystack:
         return True
     return _has_any(positive_haystack, ICON_PATTERNS)
+
+
+def should_keep_mission_data_tag(
+    tag: str,
+    *,
+    title_text: str = "",
+    body_text: str = "",
+    extra_text: str = "",
+) -> bool:
+    patterns = MISSION_DATA_EVIDENCE_PATTERNS.get(clean_tag_text(tag))
+    if not patterns:
+        return True
+    positive_haystack = _support_haystack(title_text=title_text, body_text=body_text, extra_text=extra_text)
+    if not positive_haystack:
+        return True
+    return _has_any(positive_haystack, patterns)
 
 
 def should_keep_other_planet_tag(
@@ -1061,6 +1425,14 @@ def should_keep_formal_tag(
         return False
     if clean == "应用/卫星影响":
         return should_keep_satellite_impact_tag(title_text=title_text, body_text=body_text, extra_text=extra_text)
+    if clean == "应用/卫星轨道衰减":
+        haystack = _support_haystack(title_text=title_text, body_text=body_text, extra_text=extra_text)
+        return not haystack or _has_any(haystack, SATELLITE_ORBIT_DECAY_PATTERNS)
+    if clean == "应用/业务化预报":
+        haystack = _support_haystack(title_text=title_text, body_text=body_text, extra_text=extra_text)
+        if _has_any(haystack, OPERATIONAL_FORECAST_NEGATION_PATTERNS):
+            return False
+        return not haystack or _has_any(haystack, OPERATIONAL_FORECAST_PATTERNS)
     if clean == "对象/日地耦合" or clean.startswith("对象/日地耦合/"):
         return should_keep_sun_to_earth_coupling_tag(title_text=title_text, body_text=body_text, extra_text=extra_text)
     if clean == "对象/太阳风":
@@ -1102,6 +1474,9 @@ def should_keep_formal_tag(
     if clean == "指数/EUV":
         return should_keep_euv_tag(title_text=title_text, body_text=body_text)
 
+    if clean == "仪器/FPI":
+        return should_keep_fpi_tag(title_text=title_text, body_text=body_text)
+
     if clean == "仪器/ICON":
         return should_keep_icon_tag(title_text=title_text, body_text=body_text)
 
@@ -1114,10 +1489,27 @@ def prune_unsupported_formal_tags(
     title_text: str = "",
     body_text: str = "",
     extra_text: str = "",
+    context: str = "",
 ) -> list[str]:
+    haystack = _support_haystack(title_text=title_text, body_text=body_text, extra_text=extra_text)
+    primary_body_text = _primary_deep_read_body_text(body_text) if _is_deep_read_tag_context(context) else body_text
     kept: list[str] = []
     for tag in tags:
         clean = clean_tag_text(tag)
+        if _is_deep_read_tag_context(context) and clean == "仪器/CHAMP" and not _has_any(haystack, (r"\bCHAMP\b", r"卫星/CHAMP")):
+            continue
+        if _is_deep_read_tag_context(context) and clean == "对象/热层/密度":
+            if not should_keep_thermosphere_density_tag(title_text=title_text, body_text=primary_body_text, extra_text=""):
+                continue
+        if _is_deep_read_tag_context(context) and clean.startswith("对象/热层/风场"):
+            if not should_keep_thermosphere_wind_tag(title_text=title_text, body_text=primary_body_text, extra_text=""):
+                continue
+        if _is_deep_read_tag_context(context) and clean == "仪器/ICON":
+            if not _has_any(_support_haystack(title_text=title_text, body_text=body_text, extra_text=extra_text), ICON_DATA_EVIDENCE_PATTERNS):
+                continue
+        if _is_deep_read_tag_context(context) and clean in MISSION_DATA_EVIDENCE_PATTERNS:
+            if not should_keep_mission_data_tag(clean, title_text=title_text, body_text=body_text, extra_text=extra_text):
+                continue
         if clean == "对象/太阳风/高速流":
             if should_keep_formal_tag(clean, title_text=title_text, body_text=body_text, extra_text=extra_text):
                 kept.append(clean)
@@ -1131,6 +1523,11 @@ def prune_unsupported_formal_tags(
         if tag not in deduped:
             deduped.append(tag)
     return deduped
+
+
+def _primary_deep_read_body_text(body_text: str) -> str:
+    text = str(body_text or "")
+    return re.split(r"(?m)^### 与已有工作的关系|^## 总结|^- 和我已有工作的关系：", text, maxsplit=1)[0]
 
 
 def _strip_tag_lines(text: str) -> str:
@@ -1147,10 +1544,31 @@ def _strip_tag_lines(text: str) -> str:
     return "\n".join(lines)
 
 
+def _extract_output_line_tags(line: str) -> list[str]:
+    if "#" not in line:
+        return []
+    stripped = str(line or "").lstrip()
+    if not stripped.startswith("- "):
+        return []
+    return [decode_obsidian_tag(item) for item in HASH_TAG_RE.findall(line)]
+
+
+def _extract_output_tags(text: str) -> list[str]:
+    seen: list[str] = []
+    for line in str(text or "").splitlines():
+        for tag in _extract_output_line_tags(line):
+            if tag and tag not in seen:
+                seen.append(tag)
+    return seen
+
+
 def _output_review_evidence(project: Path, path: Path, text: str) -> tuple[str, str]:
     try:
         path.relative_to(article_summaries_root(project))
-        body = extract_summary_body(text) or _strip_tag_lines(text)
+        body = extract_summary_body(text)
+        if body.lstrip().startswith(("标签：", "标签:")):
+            body = ""
+        body = body or _strip_tag_lines(text)
         supplement = extract_numbered_line(text, "- 「补充信息」")
         return body, supplement
     except Exception:
@@ -1184,16 +1602,50 @@ def review_generated_tags(
         title_text=title_text,
         body_text=body_text,
         extra_text=extra_text,
+        context=context,
     )
 
 
 def reconcile_auto_output_tags_with_review(root: Path | None = None) -> OutputTagRewriteResult:
     project = root or project_root()
+    return _reconcile_output_tags_with_review(
+        project,
+        (
+            (article_summaries_root(project), "output_review"),
+            (deep_reads_root(project), "deep_read_output_review"),
+        ),
+    )
+
+
+def reconcile_all_auto_output_tags_with_review(root: Path | None = None) -> OutputTagRewriteResult:
+    project = root or project_root()
+    return _reconcile_output_tags_with_review(
+        project,
+        (
+            (article_summaries_root(project), "output_review"),
+            (deep_reads_root(project), "deep_read_output_review"),
+            (reports_root(project), "report_output_review"),
+        ),
+    )
+
+
+def reconcile_deep_read_output_tags_with_review(root: Path | None = None) -> OutputTagRewriteResult:
+    project = root or project_root()
+    return _reconcile_output_tags_with_review(
+        project,
+        ((deep_reads_root(project), "deep_read_output_rewrite"),),
+    )
+
+
+def _reconcile_output_tags_with_review(
+    project: Path,
+    bases: tuple[tuple[Path, str], ...],
+) -> OutputTagRewriteResult:
     formal = formal_tag_labels(project)
     modified_entries: list[OutputTagRewriteEntry] = []
     remaining_nonformal_counts: dict[str, int] = {}
     scanned_files = 0
-    for base in (article_summaries_root(project), deep_reads_root(project)):
+    for base, review_context in bases:
         if not base.exists():
             continue
         for path in sorted(base.rglob("*.md")):
@@ -1206,9 +1658,7 @@ def reconcile_auto_output_tags_with_review(root: Path | None = None) -> OutputTa
             changed = False
             changes: list[tuple[str, tuple[str, ...]]] = []
             for index, line in enumerate(lines):
-                if not line.startswith("- ") or "#" not in line:
-                    continue
-                current_tags = extract_summary_tags(line)
+                current_tags = _extract_output_line_tags(line)
                 if not current_tags:
                     continue
                 reviewed_tags = review_generated_tags(
@@ -1218,7 +1668,7 @@ def reconcile_auto_output_tags_with_review(root: Path | None = None) -> OutputTa
                     body_text=body_text,
                     extra_text=extra_text,
                     max_tags=max(len(current_tags), 14),
-                    context="output_rewrite",
+                    context=review_context,
                     record_candidates=False,
                 )
                 if tuple(reviewed_tags) == tuple(current_tags):
@@ -1230,7 +1680,7 @@ def reconcile_auto_output_tags_with_review(root: Path | None = None) -> OutputTa
             updated_text = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
             if changed:
                 path.write_text(updated_text, encoding="utf-8")
-            final_tags = extract_summary_tags(updated_text)
+            final_tags = _extract_output_tags(updated_text)
             remaining_nonformal = tuple(tag for tag in final_tags if tag not in formal)
             if changed:
                 modified_entries.append(
@@ -1252,9 +1702,31 @@ def reconcile_auto_output_tags_with_review(root: Path | None = None) -> OutputTa
 
 def run_tag_output_review(root: Path | None = None) -> TagReviewAuditReport:
     project = root or project_root()
+    return _run_tag_output_review_for_bases(
+        project,
+        (
+            (article_summaries_root(project), "output_review"),
+            (deep_reads_root(project), "deep_read_output_review"),
+            (reports_root(project), "report_output_review"),
+        ),
+    )
+
+
+def run_deep_read_tag_output_review(root: Path | None = None) -> TagReviewAuditReport:
+    project = root or project_root()
+    return _run_tag_output_review_for_bases(
+        project,
+        ((deep_reads_root(project), "deep_read_output_review"),),
+    )
+
+
+def _run_tag_output_review_for_bases(
+    project: Path,
+    bases: tuple[tuple[Path, str], ...],
+) -> TagReviewAuditReport:
     issues: list[TagReviewAuditIssue] = []
     scanned_files = 0
-    for base in (article_summaries_root(project), deep_reads_root(project)):
+    for base, review_context in bases:
         if not base.exists():
             continue
         for path in sorted(base.rglob("*.md")):
@@ -1263,27 +1735,28 @@ def run_tag_output_review(root: Path | None = None) -> TagReviewAuditReport:
             scanned_files += 1
             text = path.read_text(encoding="utf-8")
             body_text, extra_text = _output_review_evidence(project, path, text)
-            current_tags = extract_summary_tags(text)
-            if not current_tags:
-                continue
-            reviewed_tags = review_generated_tags(
-                current_tags,
-                root=project,
-                title_text=path.stem,
-                body_text=body_text,
-                extra_text=extra_text,
-                max_tags=max(len(current_tags), 14),
-                context="output_review",
-                record_candidates=False,
-            )
-            if tuple(reviewed_tags) != tuple(current_tags):
-                issues.append(
-                    TagReviewAuditIssue(
-                        path=path,
-                        current_tags=tuple(current_tags),
-                        reviewed_tags=tuple(reviewed_tags),
-                    )
+            for line in text.splitlines():
+                current_tags = _extract_output_line_tags(line)
+                if not current_tags:
+                    continue
+                reviewed_tags = review_generated_tags(
+                    current_tags,
+                    root=project,
+                    title_text=path.stem,
+                    body_text=body_text,
+                    extra_text=extra_text,
+                    max_tags=max(len(current_tags), 14),
+                    context=review_context,
+                    record_candidates=False,
                 )
+                if tuple(reviewed_tags) != tuple(current_tags) and set(reviewed_tags) != set(current_tags):
+                    issues.append(
+                        TagReviewAuditIssue(
+                            path=path,
+                            current_tags=tuple(current_tags),
+                            reviewed_tags=tuple(reviewed_tags),
+                        )
+                    )
     return TagReviewAuditReport(passed=not issues, scanned_files=scanned_files, issues=issues)
 
 

@@ -18,7 +18,7 @@ REQUIRED_REPORT_HEADINGS = [
     "## 主题推荐",
     "## 各期刊主题汇总",
     "## 其他",
-    "### 未获取摘要/全文的文献",
+    "### 未完成或未获取摘要/全文的文献",
     "### 附注",
 ]
 REPORT_TEMPLATE_REQUIRED_MARKERS = [

@@ -18,12 +18,22 @@ if str(SRC) not in sys.path:
 from sciencemonitor.deep_read_markdown import (
     _audit_deep_read_markdown,
     _normalize_key_results_text,
+    _normalize_one_sentence_overview,
+    _normalize_relation_text,
     _normalize_relation_to_my_work_text,
     _normalize_structured_deep_read_text,
     _run_deep_read_review_loop,
     _validate_deep_read_markdown,
 )
-from sciencemonitor.deep_reads import _normalize_deep_read_analysis, _render_deep_read_markdown, _resolve_metadata, run_deep_read
+from sciencemonitor.deep_reads import (
+    DeepReadResult,
+    _normalize_deep_read_analysis,
+    _render_deep_read_markdown,
+    _resolve_metadata,
+    list_deep_read_pdf_files,
+    run_deep_read,
+    run_deep_read_folder,
+)
 from sciencemonitor.llm import DeepReadAnalysis
 from sciencemonitor.llm_contracts import _extract_introduction_excerpt
 from sciencemonitor.storage import Storage
@@ -76,6 +86,61 @@ def _write_minimal_project(root: pathlib.Path) -> None:
 
 
 class DeepReadTest(unittest.TestCase):
+    def test_lists_deep_read_pdf_files_stably(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            (root / "b.PDF").write_bytes(b"%PDF")
+            (root / "a.pdf").write_bytes(b"%PDF")
+            (root / "ignored.txt").write_text("not pdf", encoding="utf-8")
+            nested = root / "nested"
+            nested.mkdir()
+            (nested / "c.pdf").write_bytes(b"%PDF")
+
+            self.assertEqual(
+                [path.name for path in list_deep_read_pdf_files(root)],
+                ["a.pdf", "b.PDF"],
+            )
+            self.assertEqual(
+                [path.name for path in list_deep_read_pdf_files(root, recursive=True)],
+                ["a.pdf", "b.PDF", "c.pdf"],
+            )
+
+    def test_run_deep_read_folder_continues_after_item_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            folder = root / "pdfs"
+            folder.mkdir()
+            (folder / "a.pdf").write_bytes(b"%PDF")
+            (folder / "b.pdf").write_bytes(b"%PDF")
+            calls: list[str] = []
+            progress_events: list[dict] = []
+
+            def fake_run_deep_read(**kwargs):
+                pdf_name = pathlib.Path(kwargs["pdf_path"]).name
+                calls.append(pdf_name)
+                if pdf_name == "a.pdf":
+                    return DeepReadResult(True, "ok", output_path=root / "out" / "a.md", source_kind="provided_pdf")
+                return DeepReadResult(False, "bad pdf", source_kind="provided_pdf")
+
+            with mock.patch("sciencemonitor.deep_reads.run_deep_read", side_effect=fake_run_deep_read):
+                result = run_deep_read_folder(
+                    root=root,
+                    storage=object(),
+                    folder_path=folder,
+                    progress_callback=progress_events.append,
+                )
+
+            self.assertEqual(calls, ["a.pdf", "b.pdf"])
+            self.assertEqual(result.total, 2)
+            self.assertEqual(result.success_count, 1)
+            self.assertEqual(result.failure_count, 1)
+            self.assertEqual([path.name for path in result.successful_outputs], ["a.md"])
+            self.assertEqual(result.failed_items[0].pdf_path.name, "b.pdf")
+            failed_done = [event for event in progress_events if event.get("stage") == "batch_item_done"][-1]
+            self.assertIn("b.pdf 失败：bad pdf", failed_done.get("message", ""))
+            self.assertEqual(failed_done.get("last_failed_pdf"), "b.pdf")
+            self.assertEqual(failed_done.get("last_failure_message"), "bad pdf")
+
     def test_structured_text_breaks_out_numbered_items_even_after_colons(self) -> None:
         text = _normalize_structured_deep_read_text(
             "硬结论：1. 第一条。2. 第二条。次级结论：1. 第三条。2. 第四条。合理推论：1. 第五条。需进一步研究讨论的结论：1. 第六条。"
@@ -107,6 +172,13 @@ class DeepReadTest(unittest.TestCase):
         self.assertIn("#### 合理推论\n1. 第四条。", text)
         self.assertIn("#### 需进一步研究讨论的结论\n1. 第五条。", text)
         self.assertNotRegex(text, r"#### 硬结论\s*1[）)]")
+
+    def test_key_results_removes_no_clear_item_placeholder(self) -> None:
+        text = _normalize_key_results_text("硬结论：1. 第一条。需进一步研究讨论的结论：1. 未提取到明确条目。")
+
+        self.assertIn("#### 硬结论\n1. 第一条。", text)
+        self.assertIn("#### 需进一步研究讨论的结论", text)
+        self.assertNotIn("未提取到明确条目", text)
 
     def test_structured_text_renames_legacy_discussion_label(self) -> None:
         text = _normalize_structured_deep_read_text("合理解释：1. 第一条。仍需保留的部分：1. 第二条。")
@@ -148,6 +220,22 @@ class DeepReadTest(unittest.TestCase):
         self.assertIn("不宜直接外推到业务化或定量应用。", text)
         self.assertNotIn("两个重要方向", text)
 
+    def test_bare_relation_label_expands_to_explanatory_text(self) -> None:
+        text = _normalize_relation_text("间接相关。")
+
+        self.assertIn("间接相关。", text)
+        self.assertIn("未充分展开", text)
+        self.assertNotEqual(text, "间接相关。")
+
+    def test_one_sentence_overview_strips_redundant_benwen_prefix(self) -> None:
+        text = _normalize_one_sentence_overview("本文针对赤道热层异常中的密度与风扰动来源不明的问题。")
+
+        self.assertEqual(text, "这篇文章的目标是针对赤道热层异常中的密度与风扰动来源不明的问题。")
+        self.assertNotIn("目标是本文", text)
+
+        prefixed = _normalize_one_sentence_overview("这篇文章的目标是本文针对赤道热层异常中的密度与风扰动来源不明的问题。")
+        self.assertEqual(prefixed, "这篇文章的目标是针对赤道热层异常中的密度与风扰动来源不明的问题。")
+
     def test_goal_text_preserves_line_breaks_when_filtering_sentences(self) -> None:
         from sciencemonitor.deep_reads import _normalize_goal_text
 
@@ -179,6 +267,17 @@ class DeepReadTest(unittest.TestCase):
             tags=["热层/密度"],
         )
         self.assertEqual(text, "作者要解决的问题是：热层密度变化如何影响卫星阻力环境。")
+
+    def test_goal_text_removes_double_colon_after_prefix(self) -> None:
+        from sciencemonitor.deep_reads import _normalize_goal_text
+
+        text = _normalize_goal_text(
+            "：1. 传统加速度分析难以分离密度与风扰动。",
+            tags=["对象/热层/ETA"],
+        )
+
+        self.assertTrue(text.startswith("作者要解决的问题是：\n1. 传统加速度分析"))
+        self.assertNotIn("问题是：：", text)
 
     def test_review_loop_fixes_why_section_and_key_results_format(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -373,9 +472,60 @@ class DeepReadTest(unittest.TestCase):
                 source_url=str(pdf_path),
                 knowledge_position_text="当前为评测输出，未写入 output_root，未生成 article_index 索引链接。",
             )
-        self.assertIn("[PDF](../deep_reads_pdf/example.pdf)", markdown)
+        self.assertIn("[PDF](<../deep_reads_pdf/example.pdf>)", markdown)
         self.assertIn("[单篇总结](../article_summaries/summary.md)", markdown)
         self.assertNotIn("[[log/real_case_eval/", markdown)
+
+    def test_render_deep_read_markdown_uses_relative_pdf_target_for_production_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            _write_minimal_project(root)
+            note_path = root / "out" / "auto" / "deep_reads" / "deep_read.md"
+            note_path.parent.mkdir(parents=True, exist_ok=True)
+            pdf_path = root / "out" / "auto" / "deep_reads_pdf" / "Akasofu (2015) 极光亚暴.pdf"
+            pdf_path.parent.mkdir(parents=True, exist_ok=True)
+            pdf_path.write_bytes(b"%PDF-1.4")
+            analysis = DeepReadAnalysis(
+                chinese_title="测试",
+                tags=["事件/亚暴"],
+                paper_type="研究论文",
+                one_sentence_overview="这篇文章的目标是测试链接。",
+                why="作者要解决的问题是：测试。",
+                how="测试。",
+                key_results="#### 硬结论\n1. 测试。",
+                contribution="测试。",
+                limitations="测试。",
+                reproducibility="测试。",
+                relation="测试。",
+                final_conclusion="测试。",
+                relation_to_my_work="测试。",
+                follow_up_questions="测试。",
+                needs_manual_review="测试。",
+                knowledge_position="测试。",
+            )
+            markdown = _render_deep_read_markdown(
+                project=root,
+                template_text=(root / "config" / "templates" / "deep_reading_report_template.md").read_text(encoding="utf-8"),
+                metadata={
+                    "doi": "10.1000/example",
+                    "title": "Example Paper",
+                    "journal": "JGR: Space Physics",
+                    "authors": "A Author",
+                    "raw_authors": "A Author",
+                    "published_date": "2026-03-31",
+                    "url": "https://example.org/paper",
+                },
+                analysis=analysis,
+                related_summary=None,
+                note_path=note_path,
+                pdf_path=pdf_path,
+                source_kind="provided_pdf",
+                source_url=str(pdf_path),
+                knowledge_position_text="测试。",
+            )
+
+        self.assertIn("[PDF](<../deep_reads_pdf/Akasofu (2015) 极光亚暴.pdf>)", markdown)
+        self.assertNotIn("[[auto/deep_reads_pdf/Akasofu (2015) 极光亚暴|PDF]]", markdown)
 
     def test_render_deep_read_markdown_uses_obsidian_safe_tags(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -572,6 +722,95 @@ class DeepReadTest(unittest.TestCase):
         self.assertIn("对象/热层/密度", normalized.tags)
         self.assertNotIn("信息来源/仅摘要", normalized.tags)
 
+    def test_deep_read_tag_normalization_drops_virtual_object_tags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            _write_minimal_project(root)
+            analysis = DeepReadAnalysis(
+                chinese_title="测试",
+                tags=["对象/物理机制/电学放电现象", "对象/能量转换/电感电路模型", "对象/过程/场向电流", "事件/亚暴"],
+                paper_type="研究论文",
+                one_sentence_overview="这篇文章的目标是测试。",
+                why="作者要解决的问题是：测试。",
+                how="测试。",
+                key_results="测试。",
+                contribution="测试。",
+                limitations="测试。",
+                reproducibility="测试。",
+                relation="测试。",
+                final_conclusion="测试。",
+                relation_to_my_work="测试。",
+                follow_up_questions="测试。",
+                needs_manual_review="测试。",
+                knowledge_position="测试。",
+            )
+            normalized = _normalize_deep_read_analysis(
+                root,
+                analysis,
+                metadata_title="Auroral substorms as an electrical discharge phenomenon",
+                full_text="Auroral substorms involve current lines, field-aligned currents, and solar wind-magnetosphere coupling.",
+            )
+
+        self.assertNotIn("对象/物理机制/电学放电现象", normalized.tags)
+        self.assertNotIn("对象/能量转换/电感电路模型", normalized.tags)
+        self.assertNotIn("对象/过程/场向电流", normalized.tags)
+        self.assertIn("事件/亚暴", normalized.tags)
+        self.assertIn("对象/磁层/电流体系", normalized.tags)
+
+    def test_deep_read_tag_normalization_cleans_index_aliases_and_unsupported_instruments(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            _write_minimal_project(root)
+            related_summary = root / "out" / "article_summaries" / "chen.md"
+            related_summary.parent.mkdir(parents=True, exist_ok=True)
+            related_summary.write_text("- #仪器/FPI #仪器/ICON #对象/D指数\n", encoding="utf-8")
+            analysis = DeepReadAnalysis(
+                chinese_title="测试",
+                tags=["D指数", "K指数", "仪器/FPI", "仪器/ICON"],
+                paper_type="研究论文",
+                one_sentence_overview="这篇文章的目标是测试。",
+                why="作者要解决的问题是：测试。",
+                how="测试。",
+                key_results="测试。",
+                contribution="测试。",
+                limitations="测试。",
+                reproducibility="测试。",
+                relation="测试。",
+                final_conclusion="测试。",
+                relation_to_my_work="测试。",
+                follow_up_questions="测试。",
+                needs_manual_review="测试。",
+                knowledge_position="测试。",
+            )
+            normalized = _normalize_deep_read_analysis(
+                root,
+                analysis,
+                metadata_title="On solar-terrestrial interactions and global strong earthquakes",
+                full_text=(
+                    "The paper uses D index st and K index p criteria for geomagnetic storms, including Kp ≥ 7. "
+                    "It applies the SNMC algorithm, or shift neighborhood matching correlation, to compare "
+                    "geomagnetic storm events with global strong earthquake catalogs. Random sampling, binomial "
+                    "and chi-square tests support a 27-28 day time-lagged correlation and probability gain. "
+                    "The text mentions inverse ofpiezoelectric effects and cites IconSpace in references, "
+                    "but the data are geomagnetic indices and earthquake catalogs."
+                ),
+                related_summary=related_summary,
+            )
+
+        self.assertIn("对象/日地耦合", normalized.tags)
+        self.assertIn("事件/地震", normalized.tags)
+        self.assertIn("指数/Dst", normalized.tags)
+        self.assertIn("指数/Kp", normalized.tags)
+        self.assertIn("方法/SNMC", normalized.tags)
+        self.assertIn("方法/统计研究", normalized.tags)
+        self.assertIn("特征/时滞相关", normalized.tags)
+        self.assertIn("特征/概率增益", normalized.tags)
+        self.assertIn("特征/逆压电效应", normalized.tags)
+        self.assertNotIn("对象/D指数", normalized.tags)
+        self.assertNotIn("对象/K指数", normalized.tags)
+        self.assertNotIn("仪器/FPI", normalized.tags)
+        self.assertNotIn("仪器/ICON", normalized.tags)
+
     def test_extract_introduction_excerpt_prefers_introduction_section(self) -> None:
         excerpt = _extract_introduction_excerpt(
             "Abstract\nshort abstract\n1. Introduction\nThis study addresses a gap in midlatitude thermospheric wind research.\nIt explains why the case matters.\n2. Methods\nMethod details.",
@@ -612,6 +851,68 @@ class DeepReadTest(unittest.TestCase):
 
         self.assertEqual(metadata["title"], "Example Paper")
         self.assertEqual(metadata["journal"], "JGR: Space Physics")
+
+    def test_resolve_metadata_prefers_pdf_doi_over_weak_uploaded_title(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            _write_minimal_project(root)
+            pdf_path = root / "JGR.SP - Aryan (2023) A Statistical Analysis of the Auroral Streamer Current System.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4\n")
+            storage = Storage(root / "data" / "science_monitor.db")
+            try:
+                with mock.patch(
+                    "sciencemonitor.deep_reads._read_pdf_metadata",
+                    return_value={
+                        "doi": "10.1029/2023JA031686",
+                        "title": "A Statistical Analysis of the Auroral Streamer Current System",
+                    },
+                ), mock.patch(
+                    "sciencemonitor.deep_reads._search_crossref_by_doi",
+                    return_value={
+                        "doi": "10.1029/2023JA031686",
+                        "title": "A Statistical Analysis of the Auroral Streamer Current System",
+                        "journal": "JGR: Space Physics",
+                        "url": "https://doi.org/10.1029/2023JA031686",
+                        "authors": "A Author",
+                        "published_date": "2023-01-01",
+                        "raw_authors": "A Author",
+                        "pdf_urls": [],
+                    },
+                ) as doi_lookup, mock.patch("sciencemonitor.deep_reads._search_crossref_by_title") as title_lookup:
+                    metadata = _resolve_metadata(
+                        storage=storage,
+                        doi="",
+                        title="JGR",
+                        journal="",
+                        url="",
+                        explicit_pdf=pdf_path,
+                    )
+            finally:
+                storage.close()
+
+        doi_lookup.assert_called_once_with("10.1029/2023ja031686")
+        title_lookup.assert_not_called()
+        self.assertEqual(metadata["title"], "A Statistical Analysis of the Auroral Streamer Current System")
+
+    def test_resolve_metadata_does_not_lookup_crossref_for_weak_title(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            _write_minimal_project(root)
+            storage = Storage(root / "data" / "science_monitor.db")
+            try:
+                with mock.patch("sciencemonitor.deep_reads._search_crossref_by_title") as title_lookup:
+                    metadata = _resolve_metadata(
+                        storage=storage,
+                        doi="",
+                        title="JGR",
+                        journal="",
+                        url="",
+                    )
+            finally:
+                storage.close()
+
+        title_lookup.assert_not_called()
+        self.assertEqual(metadata["title"], "JGR")
 
     def test_fails_when_no_pdf_and_full_text_search_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -823,7 +1124,7 @@ class DeepReadTest(unittest.TestCase):
             try:
                 with mock.patch(
                     "sciencemonitor.deep_reads._extract_pdf_text",
-                    return_value="Introduction Results thermosphere density satellite drag",
+                    return_value="Introduction Results thermosphere density satellite drag with FPI observations",
                 ), mock.patch(
                     "sciencemonitor.deep_reads.AnalysisEngine.analyze_deep_read",
                     return_value=fake_analysis,

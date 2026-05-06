@@ -58,6 +58,29 @@ def record_api_usage(
         handle.write("\n")
 
 
+def api_usage_record_snapshot(root: Path, *, provider: str = "", request_prefix: str = "") -> dict[str, int]:
+    records: dict[str, int] = {}
+    path = _api_usage_events_path(root)
+    if not path.exists():
+        return records
+    for index, line in enumerate(path.read_text(encoding="utf-8", errors="ignore").splitlines()):
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if provider and str(payload.get("provider", "") or "") != provider:
+            continue
+        request_name = str(payload.get("request_name", "") or "")
+        if request_prefix and not request_name.startswith(request_prefix):
+            continue
+        timestamp = str(payload.get("timestamp", "") or "")
+        key = f"{timestamp}|{request_name}|{index}"
+        records[key] = _int_value(payload.get("total_tokens"))
+    return records
+
+
 def load_token_usage_snapshot(
     root: Path,
     *,

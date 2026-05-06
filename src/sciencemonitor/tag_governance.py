@@ -65,6 +65,17 @@ EXISTING_OUTPUT_TAG_ALIAS_MAP = {
     "方法/统计分析": ["方法/统计研究"],
     "极区对流/边界": ["对象/极区/对流边界"],
     "卫星/阻力": ["应用/卫星影响"],
+    "对象/空间天气/地磁暴": ["事件/磁暴"],
+    "对象/物理机制/Joule加热": ["对象/极区/焦耳加热"],
+    "对象/行星空间环境": ["对象/行星际环境"],
+    "对象/行星空间环境/IMF构型": ["指数/IMF"],
+    "对象/行星际环境/IMF构型": ["指数/IMF"],
+    "对象/行星空间环境/日冕物质抛射CME": ["事件/磁暴/CME"],
+    "对象/行星际环境/日冕物质抛射CME": ["事件/磁暴/CME"],
+    "仪器/磁力计": ["仪器/磁强计"],
+    "应用/空间天气预报": ["应用/预测"],
+    "应用/空间天气/预报": ["应用/预测"],
+    "应用/卫星再入/轨迹预测": ["应用/卫星轨道衰减"],
     "模型/深度学习": ["方法/建模/机器学习"],
     "模型/残差网络": ["方法/建模/机器学习"],
     "赤道/质量密度异常": ["对象/热层/EMA"],
@@ -262,6 +273,10 @@ PENDING_DROP_PREFIXES = (
     "对象/介质/",
     "对象/驱动/",
     "对象/通信/",
+    "对象/物理机制/",
+    "对象/现象/",
+    "对象/空间天气/",
+    "对象/评估/",
 )
 PENDING_DROP_EXACT_TAGS = {
     "对象/地方时",
@@ -273,8 +288,11 @@ PENDING_DROP_EXACT_TAGS = {
     "对象/雷达",
     "仪器/Honolulu",
     "对象/辐射/X射线",
+    "对象/空间天气",
+    "对象/卫星",
     "方法/数据分析",
     "对象/数据分析",
+    "模型/物理模型",
     "数据分析",
 }
 PENDING_DROP_KEYWORDS = ("同行评审", "编务", "原行星盘", "系外行星", "脉冲星", "调查问卷", "早期职业科研人员")
@@ -298,6 +316,11 @@ PENDING_DIRECT_REWRITE_MAP = {
     "对象/日球层/太阳风参数": "对象/太阳风",
     "对象/太阳风/磁偏折": "对象/太阳风",
     "对象/太阳风/阿尔芬面": "对象/太阳/日球层",
+    "对象/行星空间环境": "对象/行星际环境",
+    "对象/行星空间环境/IMF构型": "指数/IMF",
+    "对象/行星际环境/IMF构型": "指数/IMF",
+    "对象/行星空间环境/日冕物质抛射CME": "事件/磁暴/CME",
+    "对象/行星际环境/日冕物质抛射CME": "事件/磁暴/CME",
     "对象/行星际环境驱动/低动压": "对象/太阳风/动压",
     "对象/行星际环境驱动/低阿尔芬马赫数太阳风": "对象/太阳风",
     "对象/日地耦合/太阳风-地磁耦合": "对象/磁层/太阳风耦合",
@@ -314,13 +337,24 @@ PENDING_DIRECT_REWRITE_MAP = {
     "对象/磁层/外辐射带": "对象/高能粒子/电子",
     "对象/感应电流/GIC指数": "应用/基础设施",
     "对象/事件统计/强度分级": "方法/统计研究",
+    "对象/空间天气/地磁暴": "事件/磁暴",
+    "对象/物理机制/Joule加热": "对象/极区/焦耳加热",
+    "对象/能量转换/Joule加热": "对象/极区/焦耳加热",
+    "对象/太阳驱动/EUV通量": "指数/EUV",
+    "对象/太阳驱动/EUV辐射": "指数/EUV",
+    "对象/太阳活动/F10.7指数": "指数/F107",
     "方法/问卷调查": "方法/统计研究",
     "仪器/MIGHTI": "仪器/ICON",
     "仪器/TIMED-SABER": "仪器/SABER",
     "仪器/RadioSolarNetwork": "仪器/射电",
     "仪器/全天空相机": "仪器/极光图像",
+    "仪器/磁力计": "仪器/磁强计",
     "应用/预报/短时预报": "应用/预测",
     "应用/预报/短期预测": "应用/预测",
+    "应用/空间天气预报": "应用/预测",
+    "应用/空间天气/预报": "应用/预测",
+    "应用/预报": "应用/预测",
+    "应用/卫星再入/轨迹预测": "应用/卫星轨道衰减",
 }
 
 
@@ -384,8 +418,8 @@ def _rewrite_pending_candidate_tag(tag: str, *, context_prefixes: tuple[str, ...
         return "事件/太阳耀斑"
     if clean.startswith(("对象/太阳与日球层/ICME", "对象/ICME", "事件/ICME")):
         return "事件/ICME"
-    if clean.startswith(("对象/日冕物质抛射", "事件/CME")):
-        return "事件/CME"
+    if clean.startswith(("对象/日冕物质抛射", "事件/CME", "事件/磁暴/CME")):
+        return "事件/磁暴/CME"
     if clean.endswith("/TLE") or clean == "TLE":
         return "数据/TLE"
 
@@ -468,7 +502,7 @@ def _infer_pending_family_id(tag: str, category_id: str) -> str:
         return "it_coupling_extensions"
     if clean.startswith(("对象/高能粒子", "对象/高能粒子与辐射带", "对象/粒子/", "对象/电子/", "对象/离子/", "对象/波粒相互作用", "对象/波动/", "对象/激波", "对象/等离子体", "对象/速度分布", "对象/相对论电子", "对象/辐射带", "对象/散射/", "对象/扩散/")):
         return "magnetosphere_particles"
-    if clean.startswith(("对象/太阳/", "对象/太阳日冕/", "对象/日冕", "对象/日球层", "对象/太阳与日球层", "对象/太阳爆发", "对象/太阳耀斑", "对象/行星际环境", "对象/行星际环境驱动", "事件/太阳耀斑", "事件/CME", "事件/ICME", "对象/宇宙线", "对象/射电爆发", "对象/太阳活动")):
+    if clean.startswith(("对象/太阳/", "对象/太阳日冕/", "对象/日冕", "对象/日球层", "对象/太阳与日球层", "对象/太阳爆发", "对象/太阳耀斑", "对象/行星际环境", "对象/行星际环境驱动", "事件/太阳耀斑", "事件/CME", "事件/磁暴/CME", "事件/ICME", "对象/宇宙线", "对象/射电爆发", "对象/太阳活动")):
         return "solar_corona_heliosphere"
     if category_id == "instrument_data":
         return "instruments_missions_observations"
@@ -1333,6 +1367,7 @@ def parse_formal_tags_markdown(markdown: str, focus_payload: dict) -> dict[str, 
     labels_by_category: dict[str, list[str]] = {item: [] for item in category_order}
     current_category: str | None = None
     stack: list[str] = []
+    base_depth: int | None = None
     for raw_line in markdown.splitlines():
         stripped = raw_line.strip()
         if not stripped:
@@ -1343,12 +1378,17 @@ def parse_formal_tags_markdown(markdown: str, focus_payload: dict) -> dict[str, 
             label = stripped[3:].strip()
             current_category = _resolve_formal_category_header(label, category_label_to_id)
             stack = []
+            base_depth = None
             continue
         match = MARKDOWN_BULLET_RE.match(raw_line)
         if not match or current_category is None:
             continue
         depth = _indent_depth(match.group("indent"))
-        while len(stack) > depth:
+        if base_depth is None:
+            base_depth = depth
+        relative_depth = max(depth - base_depth, 0)
+        parent_depth = relative_depth
+        while len(stack) > parent_depth:
             stack.pop()
         label_text = _clean_markdown_tag_label(match.group("label"))
         if label_text.endswith(AI_SUMMARY_SUFFIX):
@@ -1360,12 +1400,7 @@ def parse_formal_tags_markdown(markdown: str, focus_payload: dict) -> dict[str, 
         if full_label:
             if not is_group_only and full_label not in labels_by_category[current_category]:
                 labels_by_category[current_category].append(full_label)
-            if len(stack) == depth:
-                stack.append(full_label)
-            elif depth < len(stack):
-                stack = stack[:depth] + [full_label]
-            else:
-                stack.append(full_label)
+            stack.append(full_label)
     return labels_by_category
 
 
@@ -1373,6 +1408,7 @@ def parse_formal_ai_summary_labels(markdown: str, focus_payload: dict) -> set[st
     category_label_to_id = _category_header_alias_map(focus_payload)
     current_category: str | None = None
     stack: list[str] = []
+    base_depth: int | None = None
     ai_labels: set[str] = set()
     for raw_line in markdown.splitlines():
         stripped = raw_line.strip()
@@ -1382,12 +1418,17 @@ def parse_formal_ai_summary_labels(markdown: str, focus_payload: dict) -> set[st
             label = stripped[3:].strip()
             current_category = _resolve_formal_category_header(label, category_label_to_id)
             stack = []
+            base_depth = None
             continue
         match = MARKDOWN_BULLET_RE.match(raw_line)
         if not match or current_category is None:
             continue
         depth = _indent_depth(match.group("indent"))
-        while len(stack) > depth:
+        if base_depth is None:
+            base_depth = depth
+        relative_depth = max(depth - base_depth, 0)
+        parent_depth = relative_depth
+        while len(stack) > parent_depth:
             stack.pop()
         label_text = _clean_markdown_tag_label(match.group("label"))
         is_ai_summary = label_text.endswith(AI_SUMMARY_SUFFIX)
@@ -1400,12 +1441,7 @@ def parse_formal_ai_summary_labels(markdown: str, focus_payload: dict) -> set[st
         if full_label and is_ai_summary and not is_group_only:
             ai_labels.add(full_label)
         if full_label:
-            if len(stack) == depth:
-                stack.append(full_label)
-            elif depth < len(stack):
-                stack = stack[:depth] + [full_label]
-            else:
-                stack.append(full_label)
+            stack.append(full_label)
     return ai_labels
 
 

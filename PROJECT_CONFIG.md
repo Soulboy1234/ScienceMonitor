@@ -78,12 +78,12 @@
 - `update_hydrate`：抓取时是否默认补抓 DOI 落地页摘要
 - `deep_read.search_full_text_when_pdf_missing`：没给 PDF 时是否自动按 DOI/题目找全文
 - `deep_read.pdf_page_limit`：深度解读最多读取 PDF 的前多少页
-- `safety.allow_output_deletions`：是否允许程序删除 `output_root` 下的文件；默认 `false`，改成 `true` 视为你已审核这类删除动作
+- `safety.allow_output_deletions`：是否允许程序删除 `output_root` 下的文件；默认 `false`，修改为 `true` 视为用户已审核这类删除动作
 
 ## Sync: config/analysis.json
 ```json
 {
-  "provider": "codex_local",
+  "provider": "ollama_api",
   "article_summaries": {
     "reasoning_effort": "medium"
   },
@@ -118,7 +118,14 @@
   "ollama_api": {
     "model": "gemma4:26b",
     "base_url": "http://127.0.0.1:11434/api/chat",
-    "timeout_seconds": 300
+    "timeout_seconds": 500,
+    "keep_alive": 0,
+    "num_ctx": 32768,
+    "num_predict": 4096,
+    "deep_read_num_predict": 8192,
+    "deep_read_quality_mode": true,
+    "deep_read_stage_keep_alive": "1m",
+    "deep_read_final_max_chars": 12000
   },
   "chatgpt_web_manual": {}
 }
@@ -133,6 +140,11 @@
 - `openai_api.*`：OpenAI Responses API 相关配置
 - `openrouter_api.*`：OpenRouter chat completions 兼容接口配置
 - `ollama_api.*`：Ollama 本地 chat API 配置；默认请求 `http://127.0.0.1:11434/api/chat`
+- `ollama_api.num_ctx` / `ollama_api.num_predict`：Ollama 单次请求上下文和最大输出 token；主要影响全文深度解读的完整度与本机资源占用
+- `ollama_api.deep_read_num_predict`：仅覆盖 Ollama 深度解读请求的最大输出 token；不影响单篇总结、周报或 Codex
+- `ollama_api.deep_read_quality_mode`：仅影响 Ollama 深度解读；开启后先用全文做证据预分析，再生成最终报告。单篇摘要总结不会因此强行读取全文
+- `ollama_api.deep_read_stage_keep_alive`：Ollama 深度解读两阶段之间临时保留模型的时间，用于避免本地模型重新加载导致空响应
+- `ollama_api.deep_read_final_max_chars`：Ollama 深度解读最终报告阶段的全文核对材料长度；第一阶段仍读取完整全文
 - `chatgpt_web_manual`：人工中转模式。底层仍支持，但常规使用建议进入“人工中转”页面或命令工作流生成请求包并导入响应
 
 ## Sync: config/paths.json
@@ -197,7 +209,14 @@
 - `provider`：`ollama_api`
 - `ollama_api.model`：`gemma4:26b`
 - `ollama_api.base_url`：`http://127.0.0.1:11434/api/chat`
-- `ollama_api.timeout_seconds`：`300`
+- `ollama_api.timeout_seconds`：`900`
+- `ollama_api.keep_alive`：`0` 表示每次生成后立即卸载模型；留空表示使用 Ollama 默认策略
+- `ollama_api.num_ctx`：建议 `32768` 或更高，视本机内存和模型支持情况调整
+- `ollama_api.num_predict`：建议 `4096`，避免深度解读 JSON 输出被截断
+- `ollama_api.deep_read_num_predict`：建议 `8192`，只给 Ollama 深度解读使用，允许本地模型输出更完整的 JSON
+- `ollama_api.deep_read_quality_mode`：建议保持 `true`，只增强深度解读，不改变单篇摘要总结的证据边界
+- `ollama_api.deep_read_stage_keep_alive`：建议 `1m`，避免深度解读两阶段之间反复加载模型
+- `ollama_api.deep_read_final_max_chars`：建议 `12000`；完整全文已在第一阶段读取，最终阶段用压缩核对材料生成报告
 
 ## 建议的模型策略
 

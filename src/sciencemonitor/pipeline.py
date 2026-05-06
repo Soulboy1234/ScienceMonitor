@@ -8,7 +8,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
-from .article_fetch import resolve_summary_source_material
+from .article_fetch import build_manual_search_urls, resolve_summary_source_material
+from .article_summary_meta import resolve_local_pdf_path
 from .config import (
     article_summaries_root,
     data_root,
@@ -25,8 +26,8 @@ from .article_summary_markdown import sync_summary_report_links
 from .crossref import CrossrefClient
 from .http import HTTPClient
 from .llm import AnalysisEngine
-from .models import Paper, SourceConfig
-from .reporting import build_report, write_report
+from .models import Paper, SkippedArticleSummary, SourceConfig
+from .reporting import build_report, cleanup_unused_report_tag_wordclouds, write_report
 from .storage import Storage
 from .topics import TopicClassifier
 from .utils import build_fingerprint, clean_abstract_text
@@ -202,11 +203,13 @@ class ScienceMonitor:
         if not self.weekly_report_enabled():
             raise RuntimeError("Weekly report generation is disabled in config/runtime.json.")
         self._emit_progress(progress_callback, stage="summary_generation", report_date=report_date.isoformat(), window_days=window_days)
+        skipped_summary_results: list[SkippedArticleSummary] = []
         summary_results = self.generate_article_summary_results(
             report_date=report_date,
             window_days=window_days,
             progress_callback=progress_callback,
             reuse_existing_summaries=reuse_existing_summaries,
+            skipped_summary_results=skipped_summary_results,
         )
         self._emit_progress(
             progress_callback,
@@ -218,13 +221,20 @@ class ScienceMonitor:
         markdown, stats = build_report(
             report_date,
             summary_results,
-            missing_source_rows=self._missing_source_rows_for_report(report_date, window_days, summary_results),
+            missing_source_rows=self._missing_source_rows_for_report(
+                report_date,
+                window_days,
+                summary_results,
+                skipped_summary_results=skipped_summary_results,
+            ),
+            skipped_summary_rows=skipped_summary_results,
             window_days=window_days,
             analysis_engine=self.analysis_engine,
             root=self.root,
             require_analysis=True,
         )
         report_path = write_report(reports_root(self.root), report_date, markdown)
+        cleanup_unused_report_tag_wordclouds(self.root)
         sync_summary_report_links(summary_results, report_path, root=self.root)
         self.storage.save_report(
             report_date=report_date,
@@ -255,6 +265,7 @@ class ScienceMonitor:
         window_days: int = 7,
         progress_callback: Callable[[dict], None] | None = None,
         reuse_existing_summaries: bool = True,
+        skipped_summary_results: list[SkippedArticleSummary] | None = None,
     ):
         start_date = report_date - timedelta(days=max(window_days - 1, 0))
         rows = self.storage.get_recent_papers(start_date, report_date)
@@ -269,6 +280,7 @@ class ScienceMonitor:
             require_analysis=True,
             progress_callback=progress_callback,
             reuse_existing_summaries=reuse_existing_summaries,
+            skipped_summary_results=skipped_summary_results,
         )
 
     def _missing_source_rows_for_report(
@@ -276,20 +288,66 @@ class ScienceMonitor:
         report_date: date,
         window_days: int,
         summary_results: list,
+        skipped_summary_results: list[SkippedArticleSummary] | None = None,
     ) -> list:
         start_date = report_date - timedelta(days=max(window_days - 1, 0))
         rows = [row for row in self.storage.get_recent_papers(start_date, report_date) if not self._row_is_non_research(row)]
         summarized_dois = {str(item.row["doi"] or "").strip().lower() for item in summary_results if str(item.row["doi"] or "").strip()}
         summarized_titles = {str(item.row["title"] or "").strip().lower() for item in summary_results if str(item.row["title"] or "").strip()}
+        skipped_summary_results = skipped_summary_results or []
+        skipped_dois = {str(item.row.get("doi", "") or "").strip().lower() for item in skipped_summary_results if str(item.row.get("doi", "") or "").strip()}
+        skipped_titles = {str(item.row.get("title", "") or "").strip().lower() for item in skipped_summary_results if str(item.row.get("title", "") or "").strip()}
         missing = []
         for row in rows:
             doi = str(row["doi"] or "").strip().lower()
             title = str(row["title"] or "").strip().lower()
             if (doi and doi in summarized_dois) or (not doi and title and title in summarized_titles):
                 continue
+            if (doi and doi in skipped_dois) or (not doi and title and title in skipped_titles):
+                continue
             if not str(row["abstract"] or "").strip():
-                missing.append(row)
+                missing.append(self._missing_source_diagnostic_row(row))
         return missing
+
+    def _missing_source_diagnostic_row(self, row) -> dict:
+        enriched = dict(row)
+        try:
+            material = resolve_summary_source_material(
+                doi=str(row["doi"] or ""),
+                url=str(row["url"] or ""),
+                title=str(row["title"] or ""),
+                journal=str(row["source_name"] or row["journal_title"] or ""),
+                abstract=str(row["abstract"] or ""),
+                authors=[item for item in str(row["authors"] or "").splitlines() if item.strip()],
+                published_date=str(row["published_date"] or ""),
+                http=HTTPClient(timeout=20),
+                crossref=CrossrefClient(HTTPClient(timeout=20)),
+                local_pdf_path=resolve_local_pdf_path(row),
+                project_root=self.root,
+            )
+        except Exception as exc:
+            enriched["summary_source_error"] = str(exc)
+            enriched["summary_source_diagnostics"] = f"Source resolver: {type(exc).__name__}"
+            enriched["summary_manual_search_urls"] = "\n".join(
+                build_manual_search_urls(
+                    doi=str(row["doi"] or ""),
+                    title=str(row["title"] or ""),
+                    url=str(row["url"] or ""),
+                )
+            )
+            return enriched
+
+        diagnostics = list(material.diagnostics)
+        if material.summary_text:
+            diagnostics.append(
+                f"Source resolver: {material.source_kind} became available after summary generation; rerun the report to generate the article summary."
+            )
+        if diagnostics:
+            enriched["summary_source_diagnostics"] = "\n".join(diagnostics)
+        if material.manual_search_urls:
+            enriched["summary_manual_search_urls"] = "\n".join(material.manual_search_urls)
+        enriched["summary_source_kind"] = material.source_kind
+        return enriched
 
     def sync_output_library(self):
         return sync_out_library(self.root)

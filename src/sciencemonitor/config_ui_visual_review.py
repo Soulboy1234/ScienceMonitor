@@ -155,7 +155,7 @@ def run_config_ui_visual_review(
                 metrics,
                 prefix="deep_read",
                 missing_message="深度解读页缺少视觉检查所需的关键 DOM 元素。",
-                required_labels=("深度解读任务面板", "深度解读文章数量统计", "最新深度解读报告"),
+                required_labels=("深度解读任务面板", "PDF 文件夹批量深度解读", "深度解读文章数量统计", "最新深度解读报告"),
             )
         )
     if "manual-llm" in reviewed_views:
@@ -219,7 +219,7 @@ def _run_visual_browser_session(project: Path, sync_playwright, reviewed_views: 
             page,
             metric_prefix="deep_read",
             view_name="deep-read",
-            labels=("深度解读任务面板", "深度解读文章数量统计", "最新深度解读报告"),
+            labels=("深度解读任务面板", "PDF 文件夹批量深度解读", "深度解读文章数量统计", "最新深度解读报告"),
         ),
         "manual-llm": lambda page: _collect_simple_view_metrics(
             page,

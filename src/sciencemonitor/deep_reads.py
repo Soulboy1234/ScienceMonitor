@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from sqlite3 import Row
+from typing import Callable
 
 from .article_fetch import (
     build_candidate_article_urls,
@@ -80,6 +82,35 @@ class DeepReadResult:
 
 
 @dataclass(frozen=True)
+class DeepReadBatchItem:
+    pdf_path: Path
+    result: DeepReadResult
+
+
+@dataclass(frozen=True)
+class DeepReadBatchResult:
+    folder_path: Path
+    total: int
+    items: list[DeepReadBatchItem]
+
+    @property
+    def success_count(self) -> int:
+        return sum(1 for item in self.items if item.result.success)
+
+    @property
+    def failure_count(self) -> int:
+        return sum(1 for item in self.items if not item.result.success)
+
+    @property
+    def successful_outputs(self) -> list[Path]:
+        return [item.result.output_path for item in self.items if item.result.success and item.result.output_path is not None]
+
+    @property
+    def failed_items(self) -> list[DeepReadBatchItem]:
+        return [item for item in self.items if not item.result.success]
+
+
+@dataclass(frozen=True)
 class FullTextResolution:
     success: bool
     source_kind: str
@@ -102,8 +133,10 @@ def run_deep_read(
     sync_library: bool = True,
     related_summary_override: Path | None = None,
     runtime_override: dict | None = None,
+    progress_callback: Callable[[dict], None] | None = None,
 ) -> DeepReadResult:
     project = root or project_root()
+    _emit_deep_read_progress(progress_callback, stage="metadata", message="正在解析论文信息。")
     runtime = runtime_override or load_runtime_config(project)
     if not runtime.get("features", {}).get("weekly_report_enabled", True):
         # no-op; weekly report toggle should not block deep reads
@@ -115,12 +148,13 @@ def run_deep_read(
     if not analysis_engine.provider_status().get("provider_supported", False):
         return DeepReadResult(False, "当前 analysis provider 不再受支持。请切换到 codex_local、openai_api、openrouter_api、ollama_api 或人工中转。")
 
-    metadata = _resolve_metadata(storage, doi=doi, title=title, journal=journal, url=url)
+    explicit_pdf = Path(pdf_path).expanduser() if pdf_path else None
+    metadata = _resolve_metadata(storage, doi=doi, title=title, journal=journal, url=url, explicit_pdf=explicit_pdf)
     if not metadata.get("title"):
         return DeepReadResult(False, "深度解读需要至少提供 DOI 或题目，且最好能在数据库或 Crossref 中找到论文元数据。")
 
-    explicit_pdf = Path(pdf_path).expanduser() if pdf_path else None
     if analysis_engine.provider == "chatgpt_web_manual":
+        _emit_deep_read_progress(progress_callback, stage="analysis", message="正在生成人工中转深度解读请求。")
         resolution = FullTextResolution(
             success=True,
             source_kind="chatgpt_web_manual_search",
@@ -129,6 +163,7 @@ def run_deep_read(
             source_url=str(metadata.get("url", "") or url or ""),
         )
     else:
+        _emit_deep_read_progress(progress_callback, stage="full_text", message="正在读取 PDF 或定位网页全文。")
         resolution = _resolve_full_text(
             project,
             metadata=metadata,
@@ -155,11 +190,13 @@ def run_deep_read(
         "pdf_hint_path": str(explicit_pdf) if explicit_pdf else "",
     }
     try:
+        _emit_deep_read_progress(progress_callback, stage="analysis", message="正在调用当前 LLM 后端生成深度解读。")
         analysis = analysis_engine.analyze_deep_read(
             metadata,
             resolution.full_text,
             related_summary_payload,
             manual_context=manual_context,
+            progress_callback=progress_callback,
         )
     except ManualResponsePending as exc:
         return DeepReadResult(False, str(exc), source_kind=resolution.source_kind)
@@ -173,6 +210,7 @@ def run_deep_read(
         related_summary=related_summary,
     )
 
+    _emit_deep_read_progress(progress_callback, stage="render", message="正在准备输出文件和 PDF 链接。")
     output_dir = output_dir_override or deep_reads_root(project)
     output_dir.mkdir(parents=True, exist_ok=True)
     pdf_dir = pdf_dir_override or deep_reads_pdf_root(project)
@@ -201,6 +239,7 @@ def run_deep_read(
         source_url=resolution.source_url,
         knowledge_position_text=_build_knowledge_position_text(project, note_path, sync_library=False),
     )
+    _emit_deep_read_progress(progress_callback, stage="review", message="正在审核深度解读格式和标签。")
     markdown, review_issues = _run_deep_read_review_loop(markdown, tags=analysis.tags)
     validation_issues = review_issues + _validate_deep_read_markdown(
         markdown,
@@ -215,6 +254,7 @@ def run_deep_read(
     note_path.write_text(markdown, encoding="utf-8")
     refresh_pending_tag_files(project)
     if sync_library:
+        _emit_deep_read_progress(progress_callback, stage="sync", message="正在同步输出索引。")
         sync_out_library(project)
         resolved_knowledge_position = _build_knowledge_position_text(project, note_path, sync_library=True)
         updated_markdown = _render_deep_read_markdown(
@@ -251,20 +291,133 @@ def run_deep_read(
     )
 
 
+def run_deep_read_folder(
+    root: Path | None,
+    storage: Storage,
+    folder_path: str | Path,
+    *,
+    recursive: bool = False,
+    runtime_override: dict | None = None,
+    progress_callback: Callable[[dict], None] | None = None,
+) -> DeepReadBatchResult:
+    project = root or project_root()
+    folder = Path(folder_path).expanduser()
+    _emit_deep_read_progress(progress_callback, stage="batch_scanning", folder_path=str(folder))
+    if not folder.exists():
+        raise ValueError(f"PDF 文件夹不存在：{folder}")
+    if not folder.is_dir():
+        raise ValueError(f"给定路径不是文件夹：{folder}")
+
+    pdf_files = list_deep_read_pdf_files(folder, recursive=recursive)
+    _emit_deep_read_progress(progress_callback, stage="batch_scanning", total=len(pdf_files), completed=0)
+    items: list[DeepReadBatchItem] = []
+    success_count = 0
+    failure_count = 0
+    for index, pdf_file in enumerate(pdf_files, start=1):
+        _emit_deep_read_progress(
+            progress_callback,
+            stage="batch_item_start",
+            total=len(pdf_files),
+            completed=index - 1,
+            current_index=index,
+            current_pdf=pdf_file.name,
+        )
+        try:
+            result = run_deep_read(
+                root=project,
+                storage=storage,
+                title=pdf_file.stem,
+                pdf_path=str(pdf_file),
+                runtime_override=runtime_override,
+                progress_callback=(
+                    lambda payload, *, _index=index, _total=len(pdf_files), _pdf=pdf_file: _emit_deep_read_progress(
+                        progress_callback,
+                        **{
+                            **payload,
+                            "total": _total,
+                            "completed": _index - 1,
+                            "current_index": _index,
+                            "current_pdf": _pdf.name,
+                        },
+                    )
+                ),
+            )
+        except Exception as exc:
+            result = DeepReadResult(False, f"批量深度解读失败：{exc}")
+        if result.success:
+            success_count += 1
+        else:
+            failure_count += 1
+        items.append(DeepReadBatchItem(pdf_path=pdf_file, result=result))
+        _emit_deep_read_progress(
+            progress_callback,
+            stage="batch_item_done",
+            total=len(pdf_files),
+            completed=index,
+            current_index=index,
+            current_pdf=pdf_file.name,
+            success_count=success_count,
+            failure_count=failure_count,
+            output_path=str(result.output_path) if result.output_path else "",
+            source_kind=result.source_kind,
+            message=_format_deep_read_batch_item_done_message(pdf_file, result, success_count, failure_count),
+            last_failed_pdf=pdf_file.name if not result.success else "",
+            last_failure_message=result.message if not result.success else "",
+        )
+    return DeepReadBatchResult(folder_path=folder, total=len(pdf_files), items=items)
+
+
+def _format_deep_read_batch_item_done_message(
+    pdf_file: Path,
+    result: DeepReadResult,
+    success_count: int,
+    failure_count: int,
+) -> str:
+    if result.success:
+        return f"已完成 {pdf_file.name}；当前成功 {success_count} 篇，失败 {failure_count} 篇。"
+    return f"{pdf_file.name} 失败：{result.message} 当前成功 {success_count} 篇，失败 {failure_count} 篇。"
+
+
+def list_deep_read_pdf_files(folder_path: str | Path, *, recursive: bool = False) -> list[Path]:
+    folder = Path(folder_path).expanduser()
+    iterator = folder.rglob("*") if recursive else folder.iterdir()
+    pdf_files = [
+        path
+        for path in iterator
+        if path.is_file() and path.suffix.lower() == ".pdf"
+    ]
+    return sorted(pdf_files, key=lambda path: str(path).lower())
+
+
+def _emit_deep_read_progress(callback: Callable[[dict], None] | None, **payload: object) -> None:
+    if callback is None:
+        return
+    callback(dict(payload))
+
+
 def _resolve_metadata(
     storage: Storage,
     doi: str,
     title: str,
     journal: str,
     url: str,
+    explicit_pdf: Path | None = None,
 ) -> dict[str, object]:
     row: Row | None = None
     cleaned_doi = normalize_doi(doi)
     cleaned_title = clean_title_text(title)
-    if cleaned_doi:
-        row = storage.get_paper_by_doi(cleaned_doi)
-    if row is None and cleaned_title:
-        row = storage.search_paper_by_title(cleaned_title)
+    pdf_metadata = _read_pdf_metadata(explicit_pdf)
+    pdf_doi = normalize_doi(str(pdf_metadata.get("doi", "") or ""))
+    pdf_title = clean_title_text(str(pdf_metadata.get("title", "") or ""))
+    if cleaned_doi and pdf_doi and cleaned_doi != pdf_doi:
+        raise ValueError(f"PDF 内嵌 DOI（{pdf_doi}）与输入 DOI（{cleaned_doi}）不一致，请确认后重试。")
+
+    lookup_doi = cleaned_doi or pdf_doi
+    lookup_title = _best_metadata_title(cleaned_title, pdf_title)
+    if lookup_doi:
+        row = storage.get_paper_by_doi(lookup_doi)
+    if row is None and lookup_title and not _is_weak_metadata_title(lookup_title):
+        row = storage.search_paper_by_title(lookup_title)
     if row is not None:
         return {
             "doi": row["doi"],
@@ -276,24 +429,102 @@ def _resolve_metadata(
             "raw_authors": row["authors"],
         }
 
-    if cleaned_doi:
-        looked_up = _search_crossref_by_doi(cleaned_doi)
+    if lookup_doi:
+        looked_up = _search_crossref_by_doi(lookup_doi)
         if looked_up:
             return looked_up
 
-    if cleaned_title:
-        looked_up = _search_crossref_by_title(cleaned_title)
-        if looked_up:
+    if lookup_title and not _is_weak_metadata_title(lookup_title):
+        looked_up = _search_crossref_by_title(lookup_title)
+        if looked_up and _metadata_title_matches_query(lookup_title, str(looked_up.get("title", "") or "")):
             return looked_up
 
     return {
-        "doi": cleaned_doi,
-        "title": cleaned_title,
+        "doi": lookup_doi,
+        "title": lookup_title or cleaned_title or pdf_title,
         "journal": journal.strip(),
         "url": url.strip(),
         "authors": "",
         "published_date": "",
         "raw_authors": "",
+    }
+
+
+def _read_pdf_metadata(pdf_path: Path | None) -> dict[str, str]:
+    if pdf_path is None or not pdf_path.exists():
+        return {}
+    try:
+        from pypdf import PdfReader
+    except Exception:
+        return {}
+    try:
+        reader = PdfReader(str(pdf_path))
+        raw_metadata = reader.metadata or {}
+    except Exception:
+        return {}
+    values: dict[str, str] = {}
+    for key, value in dict(raw_metadata).items():
+        clean_key = str(key or "").lstrip("/").strip().lower()
+        clean_value = str(value or "").strip()
+        if clean_key and clean_value:
+            values[clean_key] = clean_value
+    doi = (
+        values.get("wps-articledoi")
+        or values.get("articledoi")
+        or values.get("doi")
+        or values.get("dc.identifier")
+        or ""
+    )
+    title = values.get("title", "")
+    return {
+        "doi": normalize_doi(doi),
+        "title": clean_title_text(title),
+    }
+
+
+def _best_metadata_title(user_title: str, pdf_title: str) -> str:
+    if pdf_title and (not user_title or _is_weak_metadata_title(user_title)):
+        return pdf_title
+    return user_title or pdf_title
+
+
+def _is_weak_metadata_title(title: str) -> bool:
+    clean = clean_title_text(title)
+    if not clean:
+        return True
+    compact = re.sub(r"[^A-Za-z0-9\u4e00-\u9fff]+", "", clean)
+    if len(compact) <= 4:
+        return True
+    normalized = re.sub(r"[\s._:-]+", "", clean).upper()
+    if normalized in {"JGR", "JGRSP", "GRL", "EPS", "EOS", "SW", "AGU"}:
+        return True
+    words = re.findall(r"[A-Za-z]+", clean)
+    if words and len(words) <= 2 and all(word.upper() == word for word in words):
+        return True
+    return False
+
+
+def _metadata_title_matches_query(query: str, candidate: str) -> bool:
+    clean_query = clean_title_text(query).lower()
+    clean_candidate = clean_title_text(candidate).lower()
+    if not clean_query or not clean_candidate:
+        return False
+    if clean_query in clean_candidate or clean_candidate in clean_query:
+        return True
+    query_tokens = _metadata_title_tokens(clean_query)
+    candidate_tokens = _metadata_title_tokens(clean_candidate)
+    if not query_tokens or not candidate_tokens:
+        return False
+    overlap = len(query_tokens & candidate_tokens)
+    return overlap / max(min(len(query_tokens), len(candidate_tokens)), 1) >= 0.55
+
+
+def _metadata_title_tokens(title: str) -> set[str]:
+    stopwords = {"a", "an", "the", "of", "and", "or", "in", "on", "for", "to", "with", "by", "sp", "jgr", "grl"}
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]{2,}", title.lower())
+        if token not in stopwords and not token.isdigit()
     }
 
 
@@ -557,7 +788,7 @@ def _render_deep_read_markdown(
     report_links = extract_related_report_links(related_summary.read_text(encoding="utf-8")) if related_summary and related_summary.exists() else []
     links = []
     if pdf_path:
-        links.append(_render_note_resource_link(project, note_path=note_path, target_path=pdf_path, label="PDF"))
+        links.append(_render_pdf_resource_link(note_path=note_path, pdf_path=pdf_path))
     else:
         doi_url = build_doi_url(metadata.get("doi", ""), source_url or metadata.get("url", ""))
         if doi_url:
@@ -603,6 +834,11 @@ def _render_deep_read_markdown(
     )
 
 
+def _render_pdf_resource_link(*, note_path: Path, pdf_path: Path) -> str:
+    relative = Path(os.path.relpath(pdf_path.resolve(), note_path.parent.resolve())).as_posix()
+    return f"[PDF](<{relative}>)"
+
+
 def _render_note_resource_link(project: Path, *, note_path: Path, target_path: Path, label: str) -> str:
     note_is_output = _is_note_under_output_root(project, note_path)
     target_is_output = _is_note_under_output_root(project, target_path)
@@ -631,7 +867,7 @@ def _normalize_deep_read_analysis(
         if tag not in merged_tags:
             merged_tags.append(tag)
     for tag in inferred_tags:
-        if tag.startswith("仪器/") and tag not in merged_tags:
+        if tag not in merged_tags:
             merged_tags.append(tag)
     merged_tags = _filter_deep_read_source_status_tags(merged_tags)
     related_summary_tag_evidence = "related_summary_tags: " + " ".join(summary_tags) if summary_tags else ""
@@ -642,7 +878,7 @@ def _normalize_deep_read_analysis(
         tags=review_generated_tags(
             merged_tags,
             root=project,
-            max_tags=10,
+            max_tags=14,
             context="deep_read",
             record_candidates=True,
             title_text=metadata_title,
@@ -690,26 +926,43 @@ def _filter_deep_read_source_status_tags(tags: list[str]) -> list[str]:
 
 
 def _infer_additional_deep_read_tags(project: Path, *, metadata_title: str, full_text: str) -> list[str]:
-    inferred_tags = normalize_tags(
-        infer_preferred_tags_from_text(
-            title_text=metadata_title,
-            body_text=full_text,
-            root=project,
-            max_tags=50,
-        ),
+    inferred_candidates = infer_preferred_tags_from_text(
+        title_text=metadata_title,
+        body_text=full_text,
+        root=project,
+        max_tags=50,
+    )
+    inferred_tags = review_generated_tags(
+        inferred_candidates,
         root=project,
         max_tags=50,
         context="deep_read_inferred",
+        title_text=metadata_title,
+        body_text=full_text,
+        record_candidates=False,
     )
     extra: list[str] = []
-    if "仪器/极光图像" in inferred_tags:
-        extra.append("仪器/极光图像")
+    for tag in inferred_tags:
+        if tag.startswith(("仪器/", "数据/", "模型/", "方法/")) and tag not in extra:
+            extra.append(tag)
+    evidence_text = f"{metadata_title}\n{full_text}"
+    signal_rules = (
+        (r"\bsubstorms?\b|亚暴", "事件/亚暴"),
+        (r"\baurora\w*\b|极光", "对象/极区/极光"),
+        (r"field[-\s]?aligned current|FACs?\b|场向电流|电流体系|current\s*lines?|currentlines?|电流线", "对象/磁层/电流体系"),
+        (r"solar wind.{0,3}magnetosphere|solarwind.{0,3}magnetosphere|S[-–—]M dynamo|太阳风[-－—]磁层|太阳风耦合", "对象/磁层/太阳风耦合"),
+        (r"magnetic reconnection|磁重联", "事件/磁重联"),
+    )
+    for pattern, tag in signal_rules:
+        if re.search(pattern, evidence_text, flags=re.IGNORECASE) and tag not in extra:
+            extra.append(tag)
     return extra
 
 
 def _filter_deep_read_tags(project: Path, metadata_title: str, full_text: str, tags: list[str]) -> list[str]:
     if not tags:
         return tags
+    candidate_tags = [tag for tag in tags if not _is_virtual_deep_read_object_tag(tag)]
     generic_research_tags = {"热层", "电离层", "磁层"}
     inferred = set(
         normalize_tags(
@@ -724,15 +977,29 @@ def _filter_deep_read_tags(project: Path, metadata_title: str, full_text: str, t
             context="deep_read_inferred",
         )
     )
-    specific_research_tags = [tag for tag in tags if "/" in tag]
+    specific_research_tags = [tag for tag in candidate_tags if "/" in tag]
     if not inferred or not specific_research_tags:
-        return tags
+        return candidate_tags
     filtered: list[str] = []
-    for tag in tags:
+    for tag in candidate_tags:
         if tag in generic_research_tags and tag not in inferred:
             continue
         filtered.append(tag)
-    return filtered or tags
+    return filtered
+
+
+def _is_virtual_deep_read_object_tag(tag: str) -> bool:
+    clean = str(tag or "").strip()
+    if clean == "对象/动力学过程":
+        return True
+    return clean.startswith(
+        (
+            "对象/物理机制",
+            "对象/能量转换",
+            "对象/过程",
+            "对象/机制",
+        )
+    )
 
 
 def _build_knowledge_position_text(project: Path, note_path: Path, *, sync_library: bool) -> str:

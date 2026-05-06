@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime
 from pathlib import Path
 
 from .article_index import sync_out_library
@@ -65,6 +66,8 @@ def collect_config_ui_state(project: Path) -> dict:
         "manual_files": count_manual_files(project),
     }
     runtime_state = read_config_ui_runtime_state(project)
+    report_job = _live_report_job(runtime_state.get("report_job", {}))
+    deep_read_job = _live_deep_read_job(runtime_state.get("deep_read_job", {}))
     return {
         "counts": counts,
         "latest_article_summary": latest_markdown_file(summary_root),
@@ -78,9 +81,44 @@ def collect_config_ui_state(project: Path) -> dict:
         "token_usage_chart": token_usage.get("chart", {}),
         "token_usage_providers": token_usage.get("providers", {}),
         "maintenance_status": load_latest_maintenance_status(project),
-        "report_job": runtime_state.get("report_job", {}),
-        "active_task": _active_task_from_payload(runtime_state),
+        "report_job": report_job,
+        "deep_read_job": deep_read_job,
+        "active_task": _active_task_from_payload({**runtime_state, "report_job": report_job, "deep_read_job": deep_read_job}),
     }
+
+
+def _live_report_job(report_job: object) -> dict:
+    if not isinstance(report_job, dict):
+        return {}
+    payload = dict(report_job)
+    if str(payload.get("status", "") or "") != "running":
+        return payload
+    started_at = str(payload.get("started_at", "") or "")
+    if not started_at:
+        return payload
+    try:
+        started = datetime.fromisoformat(started_at)
+    except ValueError:
+        return payload
+    payload["elapsed_seconds"] = round(max((datetime.now() - started).total_seconds(), 0.0), 1)
+    return payload
+
+
+def _live_deep_read_job(deep_read_job: object) -> dict:
+    if not isinstance(deep_read_job, dict):
+        return {}
+    payload = dict(deep_read_job)
+    if str(payload.get("status", "") or "") != "running":
+        return payload
+    started_at = str(payload.get("started_at", "") or "")
+    if not started_at:
+        return payload
+    try:
+        started = datetime.fromisoformat(started_at)
+    except ValueError:
+        return payload
+    payload["elapsed_seconds"] = round(max((datetime.now() - started).total_seconds(), 0.0), 1)
+    return payload
 
 
 def create_manual_request_from_ui(

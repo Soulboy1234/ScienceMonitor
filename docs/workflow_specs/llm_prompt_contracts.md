@@ -94,6 +94,10 @@
 - 要覆盖研究动机、方法、关键结果、贡献、局限、可复现性和与已有工作的关系
 - 大多数是空间物理论文，但也允许与空间物理主线相关的 AI 或其他支撑学科论文
 - 空间物理论文优先用层级标签；AI 或交叉学科论文使用该领域自然、稳定、便于检索的标签
+- tag 参照单篇总结口径：闭集优先、具体优先、父子压制、保守不脑补，标签是检索系统，不是论文观点摘抄
+- `对象/` 只放实体、区域、系统、观测量或明确物理对象；抽象机制概念不能写成 `对象/物理机制/*`、`对象/能量转换/*`、`对象/过程/*`
+- 地磁指数必须使用 canonical tag：`D指数` / `D index` / `Dst` 归一为 `#指数/Dst`，`K指数` / `K index` / `Kp` 归一为 `#指数/Kp`
+- 仪器 tag 必须有论文实际使用该仪器或数据的证据；参考文献、会议名、背景介绍或相关工作中的偶然缩写不能触发 `#仪器/...`
 - 一句话总述禁止“不是……而是……”式开头
 - 不允许输出旧版区块名
 
@@ -115,6 +119,15 @@
 - `follow_up_questions`
 - `needs_manual_review`
 - `knowledge_position`
+
+### Ollama 深度解读质量模式
+
+`ollama_api` 在 `deep_read_quality_mode=true` 时使用独立增强链路，不影响 `codex_local`：
+
+- 第一阶段使用 Ollama-only evidence v2 schema，拆分研究问题、引言空白、方法链、硬结论、次级结论、合理推论、待验证问题、贡献、局限、可复现性、与用户工作的关系和人工复核点。
+- 第二阶段使用 Ollama-only final prompt，优先读取 Introduction、Methods/Data、Results、Discussion/Conclusion 等分段核对材料。
+- 如果本地质量审计发现输出过短、关键结果分层不足、列表格式错误或“直接相关”缺少证据，会触发一次 Ollama-only 修订。
+- `codex_local` 仍使用上面的通用深度解读 prompt 和 schema，不调用 Ollama-only prompt/schema。
 
 ## 标签参考文件怎么理解
 

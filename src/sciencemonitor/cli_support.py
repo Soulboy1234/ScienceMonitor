@@ -12,7 +12,7 @@ from .chatgpt_web_manual import (
 )
 from .config import article_index_root, article_summaries_root, output_root, reports_root
 from .config_ui import serve_config_ui
-from .deep_reads import run_deep_read
+from .deep_reads import run_deep_read, run_deep_read_folder
 from .doctor import run_doctor
 from .entropy import render_entropy_check_summary, run_entropy_check
 from .golden_eval import render_golden_eval_summary, run_golden_eval
@@ -47,6 +47,7 @@ def dispatch_command(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
         "manual-llm-import": _handle_manual_llm_import,
         "index": _handle_index,
         "deep-read": _handle_deep_read,
+        "deep-read-folder": _handle_deep_read_folder,
         "tag-candidates": _handle_tag_candidates,
         "golden-eval": _handle_golden_eval,
         "harness-audit": _handle_harness_audit,
@@ -106,10 +107,15 @@ def _add_analysis_commands(subparsers: argparse._SubParsersAction, defaults: dic
     deep_read.add_argument("--journal", default="", help="Optional journal name.")
     deep_read.add_argument("--url", default="", help="Optional landing page URL.")
 
+    deep_read_folder = subparsers.add_parser("deep-read-folder", help="Generate deep reading notes for PDFs in a folder.")
+    deep_read_folder.add_argument("--folder", required=True, help="Folder containing PDF files.")
+    deep_read_folder.add_argument("--recursive", action="store_true", help="Also scan child folders for PDF files.")
+
     tag_candidates = subparsers.add_parser("tag-candidates", help="Refresh and review pending tags collected during runtime.")
     tag_candidates.add_argument("--min-count", type=int, default=2, help="Only show pending tags whose runtime count or real-output usage count reaches this value.")
     tag_candidates.add_argument("--limit", type=int, default=50, help="Maximum number of pending tags to print. Use 0 for all.")
     tag_candidates.add_argument("--no-write-report", action="store_true", help="Print the summary only and skip rewriting the pending-tag markdown file.")
+    tag_candidates.add_argument("--reconcile-output", action="store_true", help="Rewrite automatic output tags with current review rules, sync article index, then refresh pending tags.")
 
 
 def _add_eval_and_maintenance_commands(subparsers: argparse._SubParsersAction) -> None:
@@ -281,7 +287,40 @@ def _handle_deep_read(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
     return 2
 
 
+def _handle_deep_read_folder(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
+    result = run_deep_read_folder(
+        root=monitor.root,
+        storage=monitor.storage,
+        folder_path=args.folder,
+        recursive=bool(args.recursive),
+    )
+    print(f"Scanned {result.total} PDF files under {result.folder_path}.")
+    print(f"Generated {result.success_count}; failed {result.failure_count}.")
+    for item in result.items:
+        status = "ok" if item.result.success else "failed"
+        suffix = f" -> {item.result.output_path}" if item.result.output_path else f" -> {item.result.message}"
+        print(f"- {status}: {item.pdf_path.name}{suffix}")
+    if result.total == 0:
+        return 2
+    return 0 if result.failure_count == 0 else 2
+
+
 def _handle_tag_candidates(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
+    if bool(getattr(args, "reconcile_output", False)):
+        from .tag_review import reconcile_all_auto_output_tags_with_review
+
+        result = reconcile_all_auto_output_tags_with_review(monitor.root)
+        index_result = monitor.sync_output_library()
+        print(
+            "Reconciled automatic output tags: "
+            f"scanned={result.scanned_files} modified={len(result.modified_entries)} "
+            f"remaining_nonformal={len(result.remaining_nonformal_counts)}."
+        )
+        print(
+            "Synced article index: "
+            f"repaired_files={index_result.repaired_files} repaired_links={index_result.repaired_links} "
+            f"indexed_notes={index_result.indexed_notes} created_sub_indexes={index_result.created_sub_indexes}."
+        )
     candidates = filter_tag_candidates(monitor.root, min_count=args.min_count, limit=args.limit)
     if not args.no_write_report:
         report_path = write_tag_candidates_report(monitor.root, min_count=args.min_count, limit=args.limit)

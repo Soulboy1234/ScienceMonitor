@@ -66,7 +66,7 @@
     "model": "",
     "executable": "",
     "sandbox": "read-only",
-    "timeout_seconds": 300
+    "timeout_seconds": 900
   },
   "openai_api": {
     "api_key": "YOUR_API_KEY",
@@ -91,8 +91,16 @@
 - `ollama_api.model`，默认 `gemma4:26b`
 - `ollama_api.base_url`，默认 `http://127.0.0.1:11434/api/chat`
 - `ollama_api.timeout_seconds`
+- `ollama_api.keep_alive`，控制模型生成后在内存中保留多久。`0` 表示生成后立即卸载，留空表示使用 Ollama 默认策略
+- `ollama_api.num_ctx`，控制单次请求上下文窗口。深度解读需要全文级输入，值太小会让本地模型内部截断材料
+- `ollama_api.num_predict`，控制最大输出 token。深度解读结构较长，值太小容易生成半截 JSON
+- `ollama_api.deep_read_num_predict`，只覆盖 Ollama 深度解读请求的最大输出 token；不影响单篇总结、周报、Codex 或其他 API provider
+- `ollama_api.deep_read_quality_mode`，只增强 Ollama 深度解读：先做全文证据预分析，再生成最终深读报告。单篇总结仍按实际来源文本工作，如果只有摘要，不会强行看全文
+- `ollama_api.deep_read_stage_keep_alive`，控制 Ollama 深度解读两阶段之间临时保留模型的时间。默认 `1m`，用于避免模型刚卸载后第二阶段返回空内容
+- `ollama_api.deep_read_final_max_chars`，控制最终报告阶段送入的全文核对材料长度。完整全文已由第一阶段读取，最终阶段保留证据提纲和压缩核对材料
 
 Ollama 不需要 API key，但需要先启动本机 Ollama 服务，并确保目标模型已部署。
+项目不会直接使用 Ollama 的 `format: json_schema` 约束；部分本地模型在该模式下会截断 JSON。当前实现会用普通 chat 请求追加本地 JSON 字段契约，再由程序解析和校验。
 
 更推荐的部署方式：
 

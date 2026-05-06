@@ -331,6 +331,46 @@ class TagCandidatesTest(unittest.TestCase):
             self.assertIn("对象/热层", labels)
             self.assertIn("对象/热层/风场", labels)
 
+    def test_sync_formal_tags_keeps_tab_indented_siblings_at_same_depth(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            (root / "config").mkdir()
+            (root / "config" / "tag").mkdir(parents=True, exist_ok=True)
+            (root / "config" / "focus_tags.json").write_text(
+                (ROOT / "config" / "focus_tags.json").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (root / "config" / "tag" / "formal_tags.md").write_text(
+                "\n".join(
+                    [
+                        "# 正式标签",
+                        "",
+                        "## 指数 / 控制量",
+                        "\t- 指数",
+                        "\t\t- IMF",
+                        "\t\t\t- Bx",
+                        "\t\t\t- By",
+                        "\t\t\t- Bz",
+                        "\t\t- Dst",
+                        "\t\t- Kp",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            sync_formal_tags_to_focus_tags_json(root)
+
+            focus_payload = json.loads((root / "config" / "focus_tags.json").read_text(encoding="utf-8"))
+            labels = {item["label"] for item in focus_payload["tags"]}
+            self.assertIn("指数/IMF/Bx", labels)
+            self.assertIn("指数/IMF/By", labels)
+            self.assertIn("指数/IMF/Bz", labels)
+            self.assertIn("指数/Dst", labels)
+            self.assertIn("指数/Kp", labels)
+            self.assertNotIn("指数/IMF/Bx/By", labels)
+            self.assertNotIn("指数/IMF/Dst", labels)
+
     def test_sync_formal_tags_accepts_short_category_headers(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = pathlib.Path(tmpdir)

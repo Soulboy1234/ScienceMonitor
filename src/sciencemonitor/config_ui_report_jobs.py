@@ -6,7 +6,7 @@ from threading import Thread
 from typing import Any, Callable
 
 from .config_ui_runtime import read_config_ui_runtime_state, set_weekly_report_job_state
-from .llm import AnalysisQuotaExceeded
+from .llm import AnalysisProviderTimeout, AnalysisQuotaExceeded
 from .pipeline import ScienceMonitor
 
 
@@ -43,6 +43,7 @@ def start_report_action(project: Path, params: dict[str, Any]) -> dict[str, str]
             "summary_reasoning_effort": "",
             "summary_avg_tokens": None,
             "summary_token_samples": 0,
+            "summary_skipped": 0,
             "elapsed_seconds": 0.0,
             "estimated_total_seconds": None,
             "report_path": "",
@@ -78,16 +79,18 @@ def execute_report_action(
             update_result, report_path, stats = monitor.run_daily(
                 report_date=params["report_date"],
                 days_back=params["update_days_back"],
-                    max_per_source=params["max_per_source"],
-                    hydrate=params["hydrate"],
-                    source_ids=params["source_ids"] or None,
-                    progress_callback=progress_callback,
-                    reuse_existing_summaries=bool(params.get("reuse_existing_summaries", True)),
-                )
+                max_per_source=params["max_per_source"],
+                hydrate=params["hydrate"],
+                source_ids=params["source_ids"] or None,
+                progress_callback=progress_callback,
+                reuse_existing_summaries=bool(params.get("reuse_existing_summaries", True)),
+            )
             message = (
                 f"已完成更新并生成周报。候选 {update_result.fetched_count} 条，保留 {update_result.kept_count} 篇；"
                 f"周报覆盖 {stats.get('paper_count', 0)} 篇论文、{stats.get('journal_count', 0)} 本期刊。"
             )
+            if stats.get("skipped_summary_count", 0):
+                message += f" 另有 {stats.get('skipped_summary_count', 0)} 篇单篇总结未完成，已在周报中列出。"
             if update_result.error_count:
                 message += f" 另有 {update_result.error_count} 个来源报错，请再检查日志。"
         else:
@@ -107,6 +110,8 @@ def execute_report_action(
                 f"已基于当前数据库重建周报，窗口 {params['window_days']} 天；"
                 f"覆盖 {stats.get('paper_count', 0)} 篇论文、{stats.get('journal_count', 0)} 本期刊。"
             )
+            if stats.get("skipped_summary_count", 0):
+                message += f" 另有 {stats.get('skipped_summary_count', 0)} 篇单篇总结未完成，已在周报中列出。"
             if params["source_ids"]:
                 message += " 注意：未勾选“先更新再生成”时，限定期刊 source_ids 不生效。"
         return {
@@ -116,6 +121,7 @@ def execute_report_action(
             "path": str(report_path),
             "paper_count": str(stats.get("paper_count", 0)),
             "journal_count": str(stats.get("journal_count", 0)),
+            "skipped_summary_count": str(stats.get("skipped_summary_count", 0)),
         }
     finally:
         monitor.close()
@@ -128,30 +134,44 @@ def _run_report_job_worker(project: Path, params: dict[str, Any]) -> None:
         if isinstance(payload, dict):
             updates = {**payload, **updates}
         elapsed_seconds = max(time.monotonic() - started_monotonic, 0.0)
-        source_total = int(updates.get("source_total") or 0)
-        source_index = int(updates.get("source_index") or 0)
-        estimated_total = _estimate_total_seconds(elapsed_seconds, updates.get("stage", ""), source_index, source_total)
+        existing_job = read_config_ui_runtime_state(project).get("report_job", {})
+        if not isinstance(existing_job, dict):
+            existing_job = {}
+        state_values = {**existing_job, **updates}
+        stage = str(state_values.get("stage", "") or "")
+        source_total = int(state_values.get("source_total") or 0)
+        source_index = int(state_values.get("source_index") or 0)
+        estimated_total = _estimate_total_seconds(elapsed_seconds, stage, source_index, source_total)
+        message = str(state_values.get("message", "") or "")
+        if "message" not in updates and stage == "summary_generation":
+            message = "正在生成单篇总结；本地模型较慢时，单篇可能需要数分钟。"
+        current_source = str(state_values.get("current_source", "") or "")
+        if stage not in {"fetching"}:
+            current_source = ""
         set_weekly_report_job_state(
             project,
             {
                 **updates,
-                "step": _report_step_label(updates.get("stage", "")),
+                "step": _report_step_label(stage),
+                "message": message,
                 "elapsed_seconds": round(elapsed_seconds, 1),
                 "estimated_total_seconds": round(estimated_total, 1) if estimated_total is not None else None,
-                "current_source": str(updates.get("current_source", "") or ""),
-                "fetched_count": int(updates.get("fetched_count") or 0),
-                "kept_count": int(updates.get("kept_count") or 0),
+                "current_source": current_source,
+                "fetched_count": int(state_values.get("fetched_count") or 0),
+                "kept_count": int(state_values.get("kept_count") or 0),
                 "source_index": source_index,
                 "source_total": source_total,
-                "summary_total": int(updates.get("summary_total") or 0),
-                "summary_completed": int(updates.get("summary_completed") or 0),
-                "summary_current_index": int(updates.get("summary_current_index") or 0),
-                "summary_current_title": str(updates.get("summary_current_title", "") or ""),
-                "summary_provider": str(updates.get("summary_provider", "") or ""),
-                "summary_model": str(updates.get("summary_model", "") or ""),
-                "summary_reasoning_effort": str(updates.get("summary_reasoning_effort", "") or ""),
-                "summary_avg_tokens": int(updates.get("summary_avg_tokens") or 0) or None,
-                "summary_token_samples": int(updates.get("summary_token_samples") or 0),
+                "summary_total": int(state_values.get("summary_total") or 0),
+                "summary_completed": int(state_values.get("summary_completed") or 0),
+                "summary_current_index": int(state_values.get("summary_current_index") or 0),
+                "summary_current_title": str(state_values.get("summary_current_title", "") or ""),
+                "summary_current_journal": str(state_values.get("summary_current_journal", "") or ""),
+                "summary_provider": str(state_values.get("summary_provider", "") or ""),
+                "summary_model": str(state_values.get("summary_model", "") or ""),
+                "summary_reasoning_effort": str(state_values.get("summary_reasoning_effort", "") or ""),
+                "summary_avg_tokens": int(state_values.get("summary_avg_tokens") or 0) or None,
+                "summary_token_samples": int(state_values.get("summary_token_samples") or 0),
+                "summary_skipped": int(state_values.get("summary_skipped") or 0),
             },
         )
 
@@ -170,6 +190,26 @@ def _run_report_job_worker(project: Path, params: dict[str, Any]) -> None:
                 "error": str(exc),
                 "recoverable": True,
                 "retry_after": exc.retry_after,
+                "elapsed_seconds": elapsed_seconds,
+                "estimated_total_seconds": None,
+            },
+        )
+        return
+    except AnalysisProviderTimeout as exc:
+        elapsed_seconds = round(max(time.monotonic() - started_monotonic, 0.0), 1)
+        report_job = read_config_ui_runtime_state(project).get("report_job", {})
+        if not isinstance(report_job, dict):
+            report_job = {}
+        summary_completed = int(report_job.get("summary_completed", 0) or 0)
+        summary_total = int(report_job.get("summary_total", 0) or 0)
+        set_weekly_report_job_state(
+            project,
+            {
+                "status": "paused_timeout",
+                "step": "本地模型超时",
+                "message": _timeout_pause_message(exc, summary_completed=summary_completed, summary_total=summary_total),
+                "error": str(exc),
+                "recoverable": True,
                 "elapsed_seconds": elapsed_seconds,
                 "estimated_total_seconds": None,
             },
@@ -199,6 +239,7 @@ def _run_report_job_worker(project: Path, params: dict[str, Any]) -> None:
             "report_path": str(result.get("path", "") or ""),
             "paper_count": int(result.get("paper_count", "0") or 0),
             "journal_count": int(result.get("journal_count", "0") or 0),
+            "summary_skipped": int(result.get("skipped_summary_count", "0") or 0),
             "elapsed_seconds": elapsed_seconds,
             "estimated_total_seconds": elapsed_seconds,
             "error": "",
@@ -263,4 +304,14 @@ def _quota_pause_message(exc: AnalysisQuotaExceeded, *, summary_completed: int, 
     return (
         f"{exc.ui_message()}{progress_text}{retry_text}"
         " 再次点击“开始生成周报”即可继续；保持“跳过已生成总结”开启即可避免重做已完成部分。"
+    )
+
+
+def _timeout_pause_message(exc: AnalysisProviderTimeout, *, summary_completed: int, summary_total: int) -> str:
+    progress_text = ""
+    if summary_total > 0:
+        progress_text = f" 已完成单篇总结 {summary_completed}/{summary_total}，已完成内容会直接保留。"
+    return (
+        f"{exc.ui_message()}{progress_text}"
+        " 可以调大 Ollama 超时秒数后再次点击“开始生成周报”；保持“跳过已生成总结”开启即可避免重做已完成部分。"
     )

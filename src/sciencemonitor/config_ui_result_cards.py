@@ -52,8 +52,9 @@ def render_weekly_report_status_card(report_job: object) -> str:
         message = str(report_job.get("message", "") or "暂无状态信息。")
         step = str(report_job.get("step", "") or "处理中")
         metric_text = " · ".join(_weekly_report_metrics(report_job))
-        current_source_html = _optional_status_line("当前来源", str(report_job.get("current_source", "") or ""), mono=True)
-        current_summary_html = _optional_status_line("当前单篇", str(report_job.get("summary_current_title", "") or ""))
+        current_source = str(report_job.get("current_source", "") or "") if str(report_job.get("stage", "") or "") == "fetching" else ""
+        current_source_html = _optional_status_line("当前来源", current_source, mono=True)
+        current_summary_html = _optional_status_line("当前单篇", _current_summary_label(report_job))
         body = (
             f'<div class="{status_class}" data-weekly-report-status-body>'
             f"<strong>{html.escape(step)}</strong>"
@@ -76,14 +77,66 @@ def render_weekly_report_status_card(report_job: object) -> str:
       </section>"""
 
 
+def render_deep_read_status_card(deep_read_job: object) -> str:
+    if not isinstance(deep_read_job, dict) or not deep_read_job:
+        body = '<div class="status-check-item" data-deep-read-status-body><strong>未运行</strong><p>当前没有正在执行的深度解读任务。</p></div>'
+    else:
+        status_class = _deep_read_status_class(deep_read_job)
+        message = str(deep_read_job.get("message", "") or "暂无状态信息。")
+        step = str(deep_read_job.get("step", "") or "处理中")
+        metric_text = " · ".join(_deep_read_metrics(deep_read_job))
+        current_pdf_html = _optional_status_line("当前 PDF", str(deep_read_job.get("current_pdf", "") or ""))
+        body = (
+            f'<div class="{status_class}" data-deep-read-status-body>'
+            f"<strong>{html.escape(step)}</strong>"
+            f"<p>{html.escape(message)}</p>"
+            f"{f'<p>{html.escape(metric_text)}</p>' if metric_text else ''}"
+            f"{current_pdf_html}"
+            f"</div>"
+        )
+    return f"""
+      <section class="panel span-12" data-deep-read-status-root>
+        <div class="panel-header">
+          <div><h3>深度解读运行状态</h3></div>
+        </div>
+        <div class="panel-body">
+          <div class="status-check-list">
+            {body}
+          </div>
+        </div>
+      </section>"""
+
+
 def _weekly_report_status_class(report_job: dict) -> str:
     status = str(report_job.get("status", "") or "")
     return {
         "running": "status-check-item",
         "success": "status-check-item ok",
         "paused_quota": "status-check-item ok",
+        "paused_timeout": "status-check-item ok",
         "error": "status-check-item error",
     }.get(status, "status-check-item")
+
+
+def _deep_read_status_class(deep_read_job: dict) -> str:
+    status = str(deep_read_job.get("status", "") or "")
+    return {
+        "running": "status-check-item",
+        "success": "status-check-item ok",
+        "paused_quota": "status-check-item ok",
+        "paused_timeout": "status-check-item ok",
+        "error": "status-check-item error",
+    }.get(status, "status-check-item")
+
+
+def _current_summary_label(report_job: dict) -> str:
+    title = str(report_job.get("summary_current_title", "") or "")
+    journal = str(report_job.get("summary_current_journal", "") or "")
+    if journal and title.startswith(f"{journal} · "):
+        return title
+    if journal and title:
+        return f"{journal} · {title}"
+    return title
 
 
 def _weekly_report_metrics(report_job: dict) -> list[str]:
@@ -96,6 +149,7 @@ def _weekly_report_metrics(report_job: dict) -> list[str]:
     source_total = int(report_job.get("source_total", 0) or 0)
     summary_total = int(report_job.get("summary_total", 0) or 0)
     summary_completed = int(report_job.get("summary_completed", 0) or 0)
+    summary_skipped = int(report_job.get("summary_skipped", 0) or 0)
     summary_provider = str(report_job.get("summary_provider", "") or "")
     summary_model = str(report_job.get("summary_model", "") or "")
     summary_reasoning_effort = str(report_job.get("summary_reasoning_effort", "") or "")
@@ -106,6 +160,8 @@ def _weekly_report_metrics(report_job: dict) -> list[str]:
     metrics: list[str] = [f"运行时长：{elapsed}"]
     if status == "paused_quota":
         metrics.append("状态：等待额度恢复后继续")
+    if status == "paused_timeout":
+        metrics.append("状态：本地模型超时，可调整超时后继续")
     if estimated:
         metrics.append(f"预计总时长：{estimated}")
     if fetched:
@@ -120,16 +176,44 @@ def _weekly_report_metrics(report_job: dict) -> list[str]:
         metrics.append(f"来源进度：{source_index}/{source_total}")
     if summary_total:
         metrics.append(f"单篇总结：{summary_completed}/{summary_total}")
+    if summary_skipped:
+        metrics.append(f"未完成单篇：{summary_skipped}")
     if summary_model:
         metrics.append(f"模型：{summary_model}")
     elif summary_provider:
         metrics.append(f"后端：{summary_provider}")
     if summary_provider == "codex_local" and summary_reasoning_effort:
         metrics.append(f"推理强度：{summary_reasoning_effort}")
-    if summary_provider == "codex_local" and summary_avg_tokens:
+    if summary_avg_tokens:
         metrics.append(f"平均单篇 token：{summary_avg_tokens}")
-    elif summary_provider == "codex_local" and summary_total and summary_token_samples == 0:
+    elif summary_total and summary_provider in {"codex_local", "openai_api", "openrouter_api", "ollama_api"} and summary_token_samples == 0:
         metrics.append("平均单篇 token：本次未新调用")
+    return metrics
+
+
+def _deep_read_metrics(deep_read_job: dict) -> list[str]:
+    metrics: list[str] = []
+    elapsed = _format_duration_seconds(deep_read_job.get("elapsed_seconds"))
+    estimated = _format_duration_seconds(deep_read_job.get("estimated_total_seconds"))
+    if elapsed:
+        metrics.append(f"运行时长：{elapsed}")
+    if estimated:
+        metrics.append(f"预计总时长：{estimated}")
+    total = int(deep_read_job.get("total", 0) or 0)
+    completed = int(deep_read_job.get("completed", 0) or 0)
+    if total > 1:
+        metrics.append(f"批量进度：{completed}/{total}")
+    success_count = int(deep_read_job.get("success_count", 0) or 0)
+    failure_count = int(deep_read_job.get("failure_count", 0) or 0)
+    if total > 1 or success_count or failure_count:
+        metrics.append(f"成功：{success_count}")
+        metrics.append(f"失败：{failure_count}")
+    source_kind = str(deep_read_job.get("source_kind", "") or "")
+    if source_kind:
+        metrics.append(f"全文来源：{source_kind}")
+    output_path = str(deep_read_job.get("output_path", "") or "")
+    if output_path:
+        metrics.append(f"最新输出：{Path(output_path).name}")
     return metrics
 
 

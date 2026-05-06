@@ -94,7 +94,7 @@ class TagTaxonomy:
                 for pattern in item.get("inference_excludes", [])
                 if str(pattern).strip()
             )
-            for pattern in patterns + [re.escape(alias) for alias in aliases]:
+            for pattern in patterns + [_inference_alias_pattern(alias) for alias in aliases]:
                 self.inference_rules.append(InferenceRule(label=label, pattern=pattern, scope=scope, excludes=excludes))
 
         self.normalization_rules.sort(key=lambda item: len(item[0]), reverse=True)
@@ -153,6 +153,8 @@ class TagTaxonomy:
                 return None
         for pattern, label in self.normalization_rules:
             if re.search(pattern, cleaned, flags=re.IGNORECASE):
+                if label == "对象/极区/极光/流光":
+                    return "对象/极区/极光"
                 return label
         if not self.allow_open_vocabulary:
             return None
@@ -257,6 +259,18 @@ def clean_tag_text(tag: str) -> str:
     text = re.sub(r"\s+", "", text)
     text = TAG_TEXT_RE.sub("", text)
     return text.strip("./-_")
+
+
+def _inference_alias_pattern(alias: str) -> str:
+    clean = str(alias or "").strip()
+    if not clean:
+        return ""
+    escaped = re.escape(clean)
+    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9+_.&/-]*", clean):
+        return rf"(?<![A-Za-z0-9]){escaped}(?![A-Za-z0-9])"
+    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9\s+_.&/-]*[A-Za-z0-9]", clean):
+        return rf"(?<![A-Za-z0-9]){escaped}(?![A-Za-z0-9])"
+    return escaped
 
 
 def normalize_haystack_text(text: str) -> str:

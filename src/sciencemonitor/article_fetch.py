@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
+from html import unescape
 from pathlib import Path
+from urllib.error import HTTPError
+from urllib.parse import quote, quote_plus, urlparse
 
 from .article_source_text import (
     build_summary_packet_from_scientific_text,
@@ -14,7 +18,7 @@ from .article_source_text import (
 )
 from .config import data_root
 from .crossref import CrossrefClient
-from .html_extract import extract_full_text_from_html, extract_page_metadata, extract_pdf_urls
+from .html_extract import extract_full_text_from_html, extract_page_metadata, extract_pdf_urls, extract_redirect_urls
 from .http import HTTPClient
 from .utils import clean_abstract_text, clean_title_text
 
@@ -37,6 +41,8 @@ class ArticlePageSnapshot:
     full_text: str = ""
     is_full_text: bool = False
     pdf_urls: list[str] = field(default_factory=list)
+    redirect_urls: list[str] = field(default_factory=list)
+    diagnostics: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -54,6 +60,9 @@ class SummarySourceMaterial:
     pdf_urls: list[str] = field(default_factory=list)
     scientific_text: str = ""
     cache_path: str = ""
+    diagnostics: list[str] = field(default_factory=list)
+    manual_search_urls: list[str] = field(default_factory=list)
+    error: str = ""
 
 
 def build_candidate_article_urls(doi: str = "", url: str = "", extra_urls: list[str] | None = None) -> list[str]:
@@ -88,14 +97,28 @@ def build_doi_lookup_url(doi: str) -> str:
 
 def fetch_article_page_snapshot(http: HTTPClient, candidate_urls: list[str]) -> ArticlePageSnapshot:
     best = ArticlePageSnapshot()
-    for candidate in candidate_urls:
+    pending = list(candidate_urls)
+    seen: set[str] = set()
+    diagnostics: list[str] = []
+    for candidate in pending:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
         try:
             html = http.get_text(candidate)
-        except Exception:
+        except HTTPError as exc:
+            diagnostics.append(f"{_diagnostic_host(candidate)}: HTTP {exc.code}")
+            continue
+        except Exception as exc:
+            diagnostics.append(f"{_diagnostic_host(candidate)}: {type(exc).__name__}")
             continue
 
         page_title, abstract = extract_page_metadata(html)
         pdf_urls = extract_pdf_urls(html, candidate)
+        redirect_urls = extract_redirect_urls(html, candidate)
+        for redirect_url in redirect_urls:
+            if redirect_url not in seen and redirect_url not in pending:
+                pending.append(redirect_url)
         full_text, is_full_text = extract_full_text_from_html(html)
         current = ArticlePageSnapshot(
             source_url=candidate,
@@ -104,11 +127,24 @@ def fetch_article_page_snapshot(http: HTTPClient, candidate_urls: list[str]) -> 
             full_text=full_text if is_full_text else "",
             is_full_text=is_full_text,
             pdf_urls=pdf_urls,
+            redirect_urls=redirect_urls,
+            diagnostics=list(diagnostics),
         )
         if current.is_full_text:
             return current
         if _page_snapshot_score(current) > _page_snapshot_score(best):
             best = current
+    if diagnostics and not best.diagnostics:
+        best = ArticlePageSnapshot(
+            source_url=best.source_url,
+            page_title=best.page_title,
+            abstract=best.abstract,
+            full_text=best.full_text,
+            is_full_text=best.is_full_text,
+            pdf_urls=best.pdf_urls,
+            redirect_urls=best.redirect_urls,
+            diagnostics=diagnostics,
+        )
     return best
 
 
@@ -127,6 +163,7 @@ def resolve_summary_source_material(
     project_root: Path | None = None,
     local_pdf_page_limit: int = 6,
 ) -> SummarySourceMaterial:
+    diagnostics: list[str] = []
     crossref_meta = crossref.lookup_work_by_doi(doi) if doi.strip() else None
     if crossref_meta is None and title.strip():
         crossref_meta = crossref.lookup_work_by_title(title)
@@ -151,6 +188,25 @@ def resolve_summary_source_material(
     clean_stored_abstract = clean_abstract_text(abstract)
     crossref_abstract = clean_abstract_text(str((crossref_meta or {}).get("abstract", "") or ""))
     best_abstract = _prefer_longer(page_snapshot.abstract, clean_stored_abstract, crossref_abstract)
+    diagnostics.extend(page_snapshot.diagnostics)
+    if crossref_meta is None:
+        diagnostics.append("Crossref: not found")
+    elif crossref_abstract:
+        diagnostics.append("Crossref: abstract")
+    else:
+        diagnostics.append("Crossref: no abstract")
+    if page_snapshot.redirect_urls:
+        diagnostics.append("Publisher redirect: " + ", ".join(page_snapshot.redirect_urls[:2]))
+    external_material = None
+    if not best_abstract and doi.strip():
+        external_material = resolve_external_abstract_material(
+            doi=doi,
+            title=title,
+            http=http,
+        )
+        diagnostics.extend(external_material.diagnostics)
+        if external_material.abstract:
+            best_abstract = external_material.abstract
     scientific_text = ""
     cache_path = ""
     if local_pdf_full_text:
@@ -175,8 +231,12 @@ def resolve_summary_source_material(
         source_kind = "stored_abstract"
         summary_text = clean_stored_abstract
         abstract_only = True
+    elif external_material and external_material.abstract:
+        source_kind = external_material.source_kind
+        summary_text = external_material.abstract
+        abstract_only = True
     else:
-        source_kind = "missing"
+        source_kind = "publisher_redirect_only" if page_snapshot.redirect_urls else "missing"
         summary_text = ""
         abstract_only = False
 
@@ -190,6 +250,7 @@ def resolve_summary_source_material(
     )
     resolved_url = (
         page_snapshot.source_url
+        or (external_material.source_url if external_material else "")
         or str((crossref_meta or {}).get("url", "") or "")
         or url.strip()
         or build_doi_lookup_url(doi)
@@ -200,6 +261,16 @@ def resolve_summary_source_material(
     for item in page_snapshot.pdf_urls:
         if item not in resolved_pdf_urls:
             resolved_pdf_urls.append(item)
+    if external_material:
+        for item in external_material.pdf_urls:
+            if item not in resolved_pdf_urls:
+                resolved_pdf_urls.append(item)
+    manual_search_urls = build_manual_search_urls(
+        doi=str((crossref_meta or {}).get("doi", "") or doi).strip(),
+        title=resolved_title or title,
+        url=resolved_url,
+        extra_urls=page_snapshot.redirect_urls,
+    )
     if project_root is not None and scientific_text:
         cache_path = write_article_source_cache(
             project_root,
@@ -227,7 +298,227 @@ def resolve_summary_source_material(
         pdf_urls=resolved_pdf_urls,
         scientific_text=scientific_text,
         cache_path=cache_path,
+        diagnostics=_dedupe_text_items(diagnostics),
+        manual_search_urls=manual_search_urls,
     )
+
+
+@dataclass(frozen=True)
+class ExternalAbstractMaterial:
+    abstract: str = ""
+    source_kind: str = ""
+    source_url: str = ""
+    pdf_urls: list[str] = field(default_factory=list)
+    diagnostics: list[str] = field(default_factory=list)
+
+
+def resolve_external_abstract_material(*, doi: str, title: str, http: HTTPClient) -> ExternalAbstractMaterial:
+    diagnostics: list[str] = []
+    openalex = _lookup_openalex_abstract(doi, http=http)
+    diagnostics.extend(openalex.diagnostics)
+    if openalex.abstract:
+        return openalex
+
+    semantic = _lookup_semantic_scholar_abstract(doi, http=http)
+    diagnostics.extend(semantic.diagnostics)
+    if semantic.abstract:
+        return ExternalAbstractMaterial(
+            abstract=semantic.abstract,
+            source_kind=semantic.source_kind,
+            source_url=semantic.source_url,
+            pdf_urls=semantic.pdf_urls,
+            diagnostics=_dedupe_text_items(diagnostics),
+        )
+
+    arxiv_ids = _arxiv_ids_from_urls(openalex.pdf_urls + ([openalex.source_url] if openalex.source_url else []))
+    arxiv = _lookup_arxiv_abstract(arxiv_ids=arxiv_ids, title=title, http=http)
+    diagnostics.extend(arxiv.diagnostics)
+    if arxiv.abstract:
+        return ExternalAbstractMaterial(
+            abstract=arxiv.abstract,
+            source_kind=arxiv.source_kind,
+            source_url=arxiv.source_url,
+            pdf_urls=arxiv.pdf_urls,
+            diagnostics=_dedupe_text_items(diagnostics),
+        )
+    return ExternalAbstractMaterial(diagnostics=_dedupe_text_items(diagnostics))
+
+
+def _lookup_openalex_abstract(doi: str, *, http: HTTPClient) -> ExternalAbstractMaterial:
+    clean_doi = clean_abstract_text(doi).strip()
+    if not clean_doi:
+        return ExternalAbstractMaterial(diagnostics=["OpenAlex: no doi"])
+    url = f"https://api.openalex.org/works/https://doi.org/{clean_doi}"
+    try:
+        payload = json.loads(http.get_text(url, headers={"Accept": "application/json"}))
+    except HTTPError as exc:
+        return ExternalAbstractMaterial(diagnostics=[f"OpenAlex: HTTP {exc.code}"])
+    except Exception as exc:
+        return ExternalAbstractMaterial(diagnostics=[f"OpenAlex: {type(exc).__name__}"])
+    abstract = _openalex_abstract_from_inverted_index(payload.get("abstract_inverted_index"))
+    open_access = payload.get("open_access") if isinstance(payload.get("open_access"), dict) else {}
+    primary = payload.get("primary_location") if isinstance(payload.get("primary_location"), dict) else {}
+    oa_url = str(open_access.get("oa_url", "") or "").strip()
+    source_url = oa_url or str(primary.get("landing_page_url", "") or payload.get("doi", "") or "").strip()
+    pdf_urls = [item for item in [oa_url] if item]
+    if abstract:
+        return ExternalAbstractMaterial(
+            abstract=abstract,
+            source_kind="openalex_abstract",
+            source_url=source_url,
+            pdf_urls=pdf_urls,
+            diagnostics=["OpenAlex: abstract"],
+        )
+    return ExternalAbstractMaterial(
+        source_url=source_url,
+        pdf_urls=pdf_urls,
+        diagnostics=["OpenAlex: no abstract"],
+    )
+
+
+def _lookup_semantic_scholar_abstract(doi: str, *, http: HTTPClient) -> ExternalAbstractMaterial:
+    clean_doi = clean_abstract_text(doi).strip()
+    if not clean_doi:
+        return ExternalAbstractMaterial(diagnostics=["Semantic Scholar: no doi"])
+    url = (
+        "https://api.semanticscholar.org/graph/v1/paper/"
+        f"DOI:{quote(clean_doi, safe='')}?fields=title,abstract,url,openAccessPdf"
+    )
+    try:
+        payload = json.loads(http.get_text(url, headers={"Accept": "application/json"}))
+    except HTTPError as exc:
+        return ExternalAbstractMaterial(diagnostics=[f"Semantic Scholar: HTTP {exc.code}"])
+    except Exception as exc:
+        return ExternalAbstractMaterial(diagnostics=[f"Semantic Scholar: {type(exc).__name__}"])
+    abstract = clean_abstract_text(str(payload.get("abstract", "") or ""))
+    open_pdf = payload.get("openAccessPdf") if isinstance(payload.get("openAccessPdf"), dict) else {}
+    pdf_url = str(open_pdf.get("url", "") or "").strip()
+    source_url = str(payload.get("url", "") or pdf_url or "").strip()
+    if abstract:
+        return ExternalAbstractMaterial(
+            abstract=abstract,
+            source_kind="semantic_scholar_abstract",
+            source_url=source_url,
+            pdf_urls=[pdf_url] if pdf_url else [],
+            diagnostics=["Semantic Scholar: abstract"],
+        )
+    return ExternalAbstractMaterial(
+        source_url=source_url,
+        pdf_urls=[pdf_url] if pdf_url else [],
+        diagnostics=["Semantic Scholar: no abstract"],
+    )
+
+
+def _lookup_arxiv_abstract(*, arxiv_ids: list[str], title: str, http: HTTPClient) -> ExternalAbstractMaterial:
+    ids = _dedupe_text_items(arxiv_ids)
+    urls: list[str] = []
+    if ids:
+        urls.append("https://export.arxiv.org/api/query?id_list=" + ",".join(quote(item, safe="") for item in ids))
+    clean_title = clean_title_text(title)
+    if clean_title:
+        urls.append("https://export.arxiv.org/api/query?search_query=ti:" + quote_plus(f'"{clean_title}"') + "&start=0&max_results=3")
+    if not urls:
+        return ExternalAbstractMaterial(diagnostics=["arXiv: no query"])
+    diagnostics: list[str] = []
+    for url in urls:
+        try:
+            xml_text = http.get_text(url, headers={"Accept": "application/atom+xml"})
+        except HTTPError as exc:
+            diagnostics.append(f"arXiv: HTTP {exc.code}")
+            continue
+        except Exception as exc:
+            diagnostics.append(f"arXiv: {type(exc).__name__}")
+            continue
+        abstract, source_url, pdf_url = _parse_arxiv_atom_abstract(xml_text, expected_title=clean_title)
+        if abstract:
+            return ExternalAbstractMaterial(
+                abstract=abstract,
+                source_kind="arxiv_abstract",
+                source_url=source_url,
+                pdf_urls=[pdf_url] if pdf_url else [],
+                diagnostics=_dedupe_text_items(diagnostics + ["arXiv: abstract"]),
+            )
+        diagnostics.append("arXiv: not found")
+    return ExternalAbstractMaterial(diagnostics=_dedupe_text_items(diagnostics))
+
+
+def _openalex_abstract_from_inverted_index(value: object) -> str:
+    if not isinstance(value, dict) or not value:
+        return ""
+    positioned: list[tuple[int, str]] = []
+    for word, raw_positions in value.items():
+        if not isinstance(raw_positions, list):
+            continue
+        for raw_position in raw_positions:
+            try:
+                positioned.append((int(raw_position), str(word)))
+            except Exception:
+                continue
+    if not positioned:
+        return ""
+    return clean_abstract_text(" ".join(word for _, word in sorted(positioned)))
+
+
+def _arxiv_ids_from_urls(urls: list[str]) -> list[str]:
+    ids: list[str] = []
+    for raw_url in urls:
+        parsed = urlparse(str(raw_url or "").strip())
+        if "arxiv.org" not in parsed.netloc.lower():
+            continue
+        match = re.search(r"/(?:abs|pdf)/([^/?#]+)", parsed.path)
+        if not match:
+            continue
+        arxiv_id = match.group(1).removesuffix(".pdf").strip()
+        if arxiv_id:
+            ids.append(arxiv_id)
+    return _dedupe_text_items(ids)
+
+
+def _parse_arxiv_atom_abstract(xml_text: str, *, expected_title: str = "") -> tuple[str, str, str]:
+    entries = re.findall(r"(?is)<entry>(.*?)</entry>", str(xml_text or ""))
+    expected = re.sub(r"\s+", " ", expected_title or "").strip().lower()
+    for entry in entries:
+        title = clean_title_text(_strip_xml_tags(_first_xml_block(entry, "title")))
+        if expected and title and expected not in title.lower() and title.lower() not in expected:
+            continue
+        summary = clean_abstract_text(_strip_xml_tags(_first_xml_block(entry, "summary")))
+        if not summary:
+            continue
+        source_url = _strip_xml_tags(_first_xml_block(entry, "id"))
+        pdf_url = ""
+        pdf_match = re.search(r'(?is)<link[^>]+title=["\']pdf["\'][^>]+href=["\']([^"\']+)["\']', entry)
+        if pdf_match:
+            pdf_url = pdf_match.group(1).strip()
+        return summary, source_url, pdf_url
+    return "", "", ""
+
+
+def _first_xml_block(xml_text: str, tag: str) -> str:
+    match = re.search(rf"(?is)<{re.escape(tag)}[^>]*>(.*?)</{re.escape(tag)}>", xml_text)
+    return match.group(1) if match else ""
+
+
+def _strip_xml_tags(value: str) -> str:
+    return unescape(re.sub(r"(?is)<[^>]+>", " ", value or ""))
+
+
+def build_manual_search_urls(*, doi: str = "", title: str = "", url: str = "", extra_urls: list[str] | None = None) -> list[str]:
+    urls: list[str] = []
+    clean_doi = clean_abstract_text(doi).strip()
+    clean_title = clean_title_text(title)
+    if clean_doi:
+        urls.append(build_doi_lookup_url(clean_doi))
+    if url:
+        urls.append(url.strip())
+    for item in extra_urls or []:
+        if item:
+            urls.append(str(item).strip())
+    query = clean_title or clean_doi
+    if query:
+        urls.append("https://scholar.google.com/scholar?q=" + quote_plus(query))
+        urls.append("https://www.google.com/search?q=" + quote_plus(query + " abstract"))
+        urls.append("https://www.researchgate.net/search/publication?q=" + quote_plus(query))
+    return _dedupe_text_items(urls)
 
 
 def _extract_local_pdf_text(
@@ -293,6 +584,25 @@ def _prefer_title(*values: str) -> str:
         if clean and not _is_invalid_page_title(clean):
             return clean
     return ""
+
+
+def _dedupe_text_items(items: list[str]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        clean = clean_abstract_text(str(item or "")).strip()
+        if not clean or clean in seen:
+            continue
+        deduped.append(clean)
+        seen.add(clean)
+    return deduped
+
+
+def _diagnostic_host(url: str) -> str:
+    parsed = urlparse(str(url or "").strip())
+    if parsed.netloc:
+        return parsed.netloc
+    return clean_abstract_text(url)[:80] or "source"
 
 
 def _is_invalid_page_title(value: str) -> bool:

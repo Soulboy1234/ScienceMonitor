@@ -465,6 +465,8 @@ def repair_markdown_links(
 
 
 def normalize_other_planet_tag(note_path: Path) -> bool:
+    if "manual" not in note_path.parts:
+        return False
     text = note_path.read_text(encoding="utf-8", errors="ignore")
     planet = detect_other_planet(note_path.stem, text)
     desired_tag = f"#{PLANET_TAG_MAP[planet]}" if planet else None

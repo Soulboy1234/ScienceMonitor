@@ -11,11 +11,13 @@ from .article_summary_text import article_summary_quality_score, build_apa_citat
 from .chatgpt_web_manual import ManualResponsePending
 from .config import UserPreferenceProfile, can_delete_output_path, load_master_plan_preferences, project_root, reports_root, templates_root
 from .llm import AnalysisEngine, AnalysisQuotaExceeded, ReportAnalysis
-from .models import ArticleSummaryResult
+from .models import ArticleSummaryResult, SkippedArticleSummary
 from .reporting_support import (
     ReportThemeBucket,
     collect_report_theme_buckets,
+    display_report_journal_name,
     display_report_theme,
+    normalize_report_journal_name,
     theme_tags_for_summary,
     topic_recommendation_buckets,
 )
@@ -129,7 +131,15 @@ REPORT_WORDCLOUD_COLORS = (
     "#ED553B",
     "#8C1C13",
 )
-REPORT_WORDCLOUD_EXCLUDED_PREFIXES = ("信息来源/", "方法/")
+REPORT_WORDCLOUD_EXCLUDED_PREFIXES = (
+    "信息来源/",
+    "方法/",
+    "对象/物理机制",
+    "对象/现象",
+    "对象/空间天气",
+    "对象/评估",
+    "对象/卫星",
+)
 REPORT_WORDCLOUD_EMBED_RE = re.compile(r"!\[\[research_reports/assets/(?P<name>[^|\]]+ 标签词云\.png)(?:\|[^\]]+)?\]\]")
 REPORT_WORDCLOUD_WIDTH = 1400
 REPORT_WORDCLOUD_HEIGHT = 980
@@ -155,6 +165,7 @@ def build_report(
     report_date: date,
     summaries: list[ArticleSummaryResult],
     missing_source_rows: list | None = None,
+    skipped_summary_rows: list[SkippedArticleSummary] | None = None,
     window_days: int = 7,
     analysis_engine: AnalysisEngine | None = None,
     root: Path | None = None,
@@ -164,7 +175,8 @@ def build_report(
     template_text = load_report_template(templates_root(project) / "daily_report_template.md")
     preferences = analysis_engine.user_preferences if analysis_engine else load_master_plan_preferences()
     missing_source_rows = missing_source_rows or []
-    rows = [item.row for item in summaries] + list(missing_source_rows)
+    skipped_summary_rows = skipped_summary_rows or []
+    rows = [item.row for item in summaries] + list(missing_source_rows) + [item.row for item in skipped_summary_rows]
     report_analysis = resolve_report_analysis(report_date, summaries, analysis_engine)
     if require_analysis and summaries:
         if analysis_engine is None:
@@ -187,6 +199,7 @@ def build_report(
         "paper_count": len(rows),
         "summarized_count": len(summaries),
         "missing_source_count": len(missing_source_rows),
+        "skipped_summary_count": len(skipped_summary_rows),
         "journal_count": len(journal_counts),
         "theme_count": len(theme_buckets),
         "topic_recommendation_count": len(topic_buckets),
@@ -199,6 +212,7 @@ def build_report(
         journal_counts,
         summarized_count=len(summaries),
         missing_source_count=len(missing_source_rows),
+        skipped_summary_count=len(skipped_summary_rows),
     )
     overview_table_lines = build_overview_table_section(theme_buckets)
     objective_overview_lines = build_objective_overview_section(
@@ -234,7 +248,7 @@ def build_report(
         report_analysis=report_analysis,
         preferences=preferences,
     )
-    missing_source_lines = format_missing_source_section(missing_source_rows)
+    missing_source_lines = format_missing_source_section(missing_source_rows, skipped_summary_rows)
 
     markdown = render_report_template(
         template_text,
@@ -282,7 +296,6 @@ def build_tag_wordcloud_block(
         date_range_label=build_report_date_range_label(report_date, window_days),
         seed=report_date.toordinal(),
     )
-    cleanup_unused_report_tag_wordclouds(project)
     return f"![[research_reports/assets/{asset_name}|960]]"
 
 
@@ -349,11 +362,11 @@ def render_report_tag_wordcloud(
     image.save(asset_path)
 
 
-def cleanup_unused_report_tag_wordclouds(project: Path) -> None:
+def cleanup_unused_report_tag_wordclouds(project: Path, *, keep_names: set[str] | None = None) -> None:
     asset_root = reports_root(project) / "assets"
     if not asset_root.exists():
         return
-    referenced = referenced_report_tag_wordcloud_names(project)
+    referenced = referenced_report_tag_wordcloud_names(project) | set(keep_names or set())
     for candidate in asset_root.glob("* 标签词云.png"):
         if candidate.name in referenced:
             continue
@@ -492,7 +505,7 @@ def fallback_grid_wordcloud_layout(
 def build_journal_counts(rows: list) -> list[tuple[str, int]]:
     counts: Counter[str] = Counter()
     for row in rows:
-        journal = str(row_value(row, "source_name", "") or row_value(row, "journal_title", "") or "未知期刊")
+        journal = normalize_report_journal_name(row_value(row, "source_name", "") or row_value(row, "journal_title", "") or "未知期刊")
         counts[journal] += 1
     return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
 
@@ -504,11 +517,15 @@ def build_report_info_section(
     *,
     summarized_count: int,
     missing_source_count: int,
+    skipped_summary_count: int,
 ) -> list[str]:
     start_date = report_date - timedelta(days=max(window_days - 1, 0))
     lines = [
         f"- 调研时间：{start_date.isoformat()} 至 {report_date.isoformat()}。",
-        f"- 本周共纳入 {summarized_count} 篇已生成单篇总结的论文，另有 {missing_source_count} 篇未获取摘要或全文的条目。",
+        (
+            f"- 本周共纳入 {summarized_count} 篇已生成单篇总结的论文，"
+            f"另有 {skipped_summary_count} 篇单篇总结未完成、{missing_source_count} 篇未获取摘要或全文的条目。"
+        ),
         "",
         "| 期刊 | 新增文章数 |",
         "| --- | ---: |",
@@ -673,7 +690,7 @@ def format_highlight_block(index: int, summary: ArticleSummaryResult) -> list[st
     recommendation_reason = build_report_recommendation_reason(summary)
     return [
         f"{index}. 英文题目：{linked_paper_title(summary)}",
-        f"   - 所在期刊：{row['source_name']}",
+        f"   - 所在期刊：{normalize_report_journal_name(row['source_name'] or row['journal_title'])}",
         f"   - 中文题目：{summary.chinese_title}",
         f"   - 推荐理由：{recommendation_reason}",
         f"   - 标签： {tags}",
@@ -796,9 +813,12 @@ def build_journal_roundup_section(
     preferences: UserPreferenceProfile,
 ) -> list[str]:
     source_groups: dict[str, list[ArticleSummaryResult]] = defaultdict(list)
+    source_display_names: dict[str, str] = {}
     for summary in summaries:
-        source_name = str(summary.row["source_name"] or summary.row["journal_title"])
-        source_groups[source_name].append(summary)
+        raw_source_name = summary.row["source_name"] or summary.row["journal_title"]
+        source_key = normalize_report_journal_name(raw_source_name)
+        source_groups[source_key].append(summary)
+        source_display_names.setdefault(source_key, display_report_journal_name(raw_source_name))
     lines: list[str] = []
     if not source_groups:
         return ["### 暂无期刊", "- 本周暂无可汇总的期刊内容。"]
@@ -806,10 +826,11 @@ def build_journal_roundup_section(
     for journal in sorted_journals:
         lines.extend(
             format_journal_section(
-                journal,
+                source_display_names.get(journal, display_report_journal_name(journal)),
                 source_groups[journal],
                 report_analysis=report_analysis,
                 preferences=preferences,
+                journal_key=journal,
             )
         )
     return lines
@@ -821,6 +842,7 @@ def format_journal_section(
     *,
     report_analysis: ReportAnalysis | None = None,
     preferences: UserPreferenceProfile,
+    journal_key: str | None = None,
 ) -> list[str]:
     theme_counts: Counter[str] = Counter()
     theme_examples: dict[str, list[ArticleSummaryResult]] = defaultdict(list)
@@ -834,7 +856,7 @@ def format_journal_section(
     for label, count in theme_counts.most_common(3):
         examples = "；".join(summary.one_sentence for summary in theme_examples[label][:2] if summary.one_sentence)
         detail_lines.append(f"{count} 篇关注 {label}，{examples or '相关内容在单篇总结中已有说明'}")
-    llm_summary = report_analysis.journal_summary(source_name) if report_analysis else None
+    llm_summary = report_analysis.journal_summary(journal_key or source_name) if report_analysis else None
     top_summaries = rank_section_summaries(summaries, preferences)[:3]
     lines = [
         f"### {source_name}",
@@ -852,14 +874,91 @@ def format_journal_section(
     return lines
 
 
-def format_missing_source_section(rows: list) -> list[str]:
-    if not rows:
+def format_missing_source_section(rows: list, skipped_summary_rows: list[SkippedArticleSummary] | None = None) -> list[str]:
+    skipped_summary_rows = skipped_summary_rows or []
+    if not rows and not skipped_summary_rows:
         return ["- 无。"]
     lines: list[str] = []
-    for index, row in enumerate(rows, start=1):
-        citation = build_apa_citation(row)
-        lines.append(f"{index}. {citation}")
+    if skipped_summary_rows:
+        lines.append("#### 未完成单篇总结的文献（LLM 输出失败）")
+        for index, item in enumerate(skipped_summary_rows, start=1):
+            citation = build_report_apa_citation(item.row)
+            reason = item.reason or item.error or "单篇总结生成未完成。"
+            lines.append(f"{index}. {citation}")
+            lines.append(f"   - 原因：{reason}")
+    if rows:
+        if lines:
+            lines.append("")
+        lines.append("#### 未获取摘要/全文的文献（来源材料缺失）")
+        for index, row in enumerate(rows, start=1):
+            citation = build_report_apa_citation(row)
+            lines.append(f"{index}. {citation}")
+            diagnostics = _missing_source_diagnostics(row)
+            if diagnostics:
+                lines.append(f"   - 来源诊断：{'；'.join(diagnostics)}")
+            manual_links = _missing_source_manual_links(row)
+            if manual_links:
+                lines.append(f"   - 人工检索：{' / '.join(manual_links)}")
     return lines
+
+
+def _missing_source_diagnostics(row) -> list[str]:
+    values: list[str] = []
+    for key in ("summary_source_diagnostics", "summary_source_error"):
+        raw = str(row_value(row, key, "") or "")
+        for item in raw.splitlines():
+            clean = re.sub(r"\s+", " ", item).strip()
+            if clean and clean not in values:
+                values.append(clean)
+    return values[:8]
+
+
+def _missing_source_manual_links(row) -> list[str]:
+    raw_urls = str(row_value(row, "summary_manual_search_urls", "") or "")
+    urls = [item.strip() for item in raw_urls.splitlines() if item.strip()]
+    if not urls:
+        doi = str(row_value(row, "doi", "") or "").strip()
+        url = str(row_value(row, "url", "") or "").strip()
+        if doi:
+            urls.append(build_doi_url(doi))
+        if url and url not in urls:
+            urls.append(url)
+    links: list[str] = []
+    seen_labels: set[str] = set()
+    for url in urls:
+        label = _manual_search_label(url)
+        if label in seen_labels and label not in {"DOI", "ScienceDirect"}:
+            continue
+        seen_labels.add(label)
+        links.append(f"[{label}]({url})")
+        if len(links) >= 5:
+            break
+    return links
+
+
+def _manual_search_label(url: str) -> str:
+    lowered = str(url or "").lower()
+    if "doi.org/" in lowered:
+        return "DOI"
+    if "sciencedirect.com" in lowered:
+        return "ScienceDirect"
+    if "scholar.google" in lowered:
+        return "Google Scholar"
+    if "researchgate.net" in lowered:
+        return "ResearchGate"
+    if "google.com/search" in lowered:
+        return "Google"
+    match = re.search(r"https?://([^/]+)", str(url or ""))
+    return match.group(1) if match else "链接"
+
+
+def build_report_apa_citation(row) -> str:
+    citation = build_apa_citation(row)
+    raw_journal = str(row_value(row, "source_name", "") or row_value(row, "journal_title", "") or "")
+    normalized_journal = normalize_report_journal_name(raw_journal)
+    if raw_journal and normalized_journal != raw_journal:
+        citation = citation.replace(f". {raw_journal}. ", f". {normalized_journal}. ")
+    return citation
 
 
 def linked_paper_title(summary: ArticleSummaryResult) -> str:

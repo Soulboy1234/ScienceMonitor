@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import pathlib
 import sys
 import tempfile
 import unittest
+from urllib.error import HTTPError
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -24,10 +26,13 @@ class FakeHTTPClient:
     def __init__(self, pages: dict[str, str]) -> None:
         self.pages = pages
 
-    def get_text(self, url: str) -> str:
+    def get_text(self, url: str, headers: dict | None = None) -> str:
         if url not in self.pages:
             raise RuntimeError("missing page")
-        return self.pages[url]
+        value = self.pages[url]
+        if isinstance(value, Exception):
+            raise value
+        return value
 
 
 class FakeCrossrefClient:
@@ -40,6 +45,10 @@ class FakeCrossrefClient:
 
     def lookup_work_by_title(self, title: str) -> dict | None:
         return self.by_title
+
+
+def json_payload(payload: dict) -> str:
+    return json.dumps(payload, ensure_ascii=False)
 
 
 class ArticleFetchTest(unittest.TestCase):
@@ -110,6 +119,129 @@ class ArticleFetchTest(unittest.TestCase):
         self.assertTrue(material.abstract_only)
         self.assertEqual(material.title, "Example Paper")
         self.assertIn("thermosphere density", material.summary_text)
+
+    def test_resolve_summary_source_material_uses_openalex_abstract_before_missing(self) -> None:
+        doi = "10.1016/j.asr.2026.02.041"
+        material = resolve_summary_source_material(
+            doi=doi,
+            url="",
+            title="Example ASR Paper",
+            journal="Advances in Space Research",
+            abstract="",
+            authors=[],
+            published_date="2026-04-01",
+            http=FakeHTTPClient(
+                {
+                    f"https://api.openalex.org/works/https://doi.org/{doi}": json_payload(
+                        {
+                            "abstract_inverted_index": {
+                                "This": [0],
+                                "paper": [1],
+                                "studies": [2],
+                                "ionospheric": [3],
+                                "disturbances.": [4],
+                            },
+                            "primary_location": {"landing_page_url": "https://example.org/openalex"},
+                        }
+                    )
+                }
+            ),
+            crossref=FakeCrossrefClient(
+                by_doi={
+                    "doi": doi,
+                    "title": "Example ASR Paper",
+                    "journal": "Advances in Space Research",
+                    "url": "",
+                    "authors": [],
+                    "published_date": "2026-04-01",
+                    "abstract": "",
+                    "pdf_urls": [],
+                }
+            ),
+        )
+
+        self.assertEqual(material.source_kind, "openalex_abstract")
+        self.assertTrue(material.abstract_only)
+        self.assertIn("This paper studies ionospheric disturbances.", material.summary_text)
+        self.assertIn("OpenAlex: abstract", material.diagnostics)
+
+    def test_resolve_summary_source_material_continues_from_semantic_scholar_429_to_arxiv(self) -> None:
+        doi = "10.1016/j.asr.2026.03.059"
+        semantic_url = (
+            "https://api.semanticscholar.org/graph/v1/paper/"
+            "DOI:10.1016%2Fj.asr.2026.03.059?fields=title,abstract,url,openAccessPdf"
+        )
+        arxiv_url = "https://export.arxiv.org/api/query?id_list=2603.23929"
+        material = resolve_summary_source_material(
+            doi=doi,
+            url="",
+            title="Solar wind paper",
+            journal="Advances in Space Research",
+            abstract="",
+            authors=[],
+            published_date="2026-04-01",
+            http=FakeHTTPClient(
+                {
+                    f"https://api.openalex.org/works/https://doi.org/{doi}": json_payload(
+                        {
+                            "abstract_inverted_index": None,
+                            "open_access": {"oa_url": "https://arxiv.org/pdf/2603.23929"},
+                            "primary_location": {"landing_page_url": "https://arxiv.org/abs/2603.23929"},
+                        }
+                    ),
+                    semantic_url: HTTPError(semantic_url, 429, "Too Many Requests", {}, None),
+                    arxiv_url: """
+                    <feed>
+                      <entry>
+                        <id>https://arxiv.org/abs/2603.23929</id>
+                        <title>Solar wind paper</title>
+                        <summary>This arXiv abstract describes solar-wind coupling.</summary>
+                        <link title="pdf" href="https://arxiv.org/pdf/2603.23929" />
+                      </entry>
+                    </feed>
+                    """,
+                }
+            ),
+            crossref=FakeCrossrefClient(
+                by_doi={
+                    "doi": doi,
+                    "title": "Solar wind paper",
+                    "journal": "Advances in Space Research",
+                    "url": "",
+                    "authors": [],
+                    "published_date": "2026-04-01",
+                    "abstract": "",
+                    "pdf_urls": [],
+                }
+            ),
+        )
+
+        self.assertEqual(material.source_kind, "arxiv_abstract")
+        self.assertIn("solar-wind coupling", material.summary_text)
+        self.assertIn("Semantic Scholar: HTTP 429", material.diagnostics)
+
+    def test_fetch_article_page_snapshot_extracts_sciencedirect_redirect_and_records_403(self) -> None:
+        doi_url = "https://doi.org/10.1016/j.asr.2026.02.041"
+        sd_url = "https://www.sciencedirect.com/science/article/pii/S027311772600001X"
+        snapshot = fetch_article_page_snapshot(
+            FakeHTTPClient(
+                {
+                    doi_url: f"""
+                    <html>
+                      <head>
+                        <title>Redirecting</title>
+                        <meta http-equiv="refresh" content="0; URL={sd_url}">
+                      </head>
+                    </html>
+                    """,
+                    sd_url: HTTPError(sd_url, 403, "Forbidden", {}, None),
+                }
+            ),
+            [doi_url],
+        )
+
+        self.assertIn(sd_url, snapshot.redirect_urls)
+        self.assertIn("www.sciencedirect.com: HTTP 403", snapshot.diagnostics)
 
     def test_resolve_summary_source_material_prefers_local_pdf_full_text(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

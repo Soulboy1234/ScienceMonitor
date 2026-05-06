@@ -23,16 +23,17 @@ from sciencemonitor.config_ui import (
     _redirect_fragment_for_action,
     _render_page,
     _run_deep_read_action,
+    _run_deep_read_folder_action,
     _run_manual_import_action,
     _save_from_form,
 )
-from sciencemonitor.config_ui_actions import _run_report_action, _start_report_action
+from sciencemonitor.config_ui_actions import _run_report_action, _start_report_action, _uploaded_pdf_title
 from sciencemonitor.config_ui_page_sections import _build_token_tick_values, _token_chart_height_percent, _token_chart_label_indices
-from sciencemonitor.config_ui_runtime import read_config_ui_runtime_state, set_weekly_report_job_state, write_config_ui_runtime_state
+from sciencemonitor.config_ui_runtime import read_config_ui_runtime_state, set_deep_read_job_state, set_weekly_report_job_state, write_config_ui_runtime_state
+from sciencemonitor.config_ui_deep_read_jobs import _run_deep_read_job_worker
 from sciencemonitor.config_ui_report_jobs import _run_report_job_worker
 from sciencemonitor.config_ui_state_summary import detect_token_usage, latest_manual_result_file
-from sciencemonitor.deep_reads import DeepReadResult
-from sciencemonitor.llm import AnalysisQuotaExceeded
+from sciencemonitor.llm import AnalysisProviderTimeout, AnalysisQuotaExceeded
 
 
 def _write_ui_project(root: pathlib.Path) -> None:
@@ -54,7 +55,8 @@ def _write_ui_project(root: pathlib.Path) -> None:
             '"codex_local":{"model":"","executable":"","sandbox":"read-only","timeout_seconds":300},'
             '"openai_api":{"api_key":"","api_key_env":"SCIENCEMONITOR_OPENAI_API_KEY","model":"gpt-5-mini","base_url":"https://api.openai.com/v1/responses","timeout_seconds":120},'
             '"openrouter_api":{"api_key":"","api_key_env":"SCIENCEMONITOR_OPENROUTER_API_KEY","model":"openai/gpt-5-mini","base_url":"https://openrouter.ai/api/v1/chat/completions","timeout_seconds":120},'
-            '"ollama_api":{"model":"gemma4:26b","base_url":"http://127.0.0.1:11434/api/chat","timeout_seconds":300}}\n'
+            '"ollama_api":{"model":"gemma4:26b","base_url":"http://127.0.0.1:11434/api/chat","timeout_seconds":900,'
+            '"keep_alive":0,"num_ctx":32768,"num_predict":4096,"deep_read_num_predict":8192,"deep_read_quality_mode":true}}\n'
         ),
         encoding="utf-8",
     )
@@ -74,7 +76,21 @@ class ConfigUITest(unittest.TestCase):
     def test_redirect_fragment_for_actions(self) -> None:
         self.assertEqual(_redirect_fragment_for_action("/run-report"), "weekly-report")
         self.assertEqual(_redirect_fragment_for_action("/run-deep-read"), "deep-read")
+        self.assertEqual(_redirect_fragment_for_action("/run-deep-read-folder"), "deep-read")
         self.assertEqual(_redirect_fragment_for_action("/manual-llm-create"), "manual-llm")
+
+    def test_uploaded_pdf_title_keeps_journal_dot_prefix(self) -> None:
+        file_item = SimpleNamespace(
+            filename="JGR.SP - Aryan (2023) A Statistical Analysis of the Auroral Streamer Current System.pdf"
+        )
+
+        title = _uploaded_pdf_title(file_item)
+
+        self.assertEqual(
+            title,
+            "JGR.SP - Aryan (2023) A Statistical Analysis of the Auroral Streamer Current System",
+        )
+        self.assertNotEqual(title, "JGR")
         self.assertEqual(_redirect_fragment_for_action("/manual-llm-import-upload"), "manual-llm")
         self.assertEqual(_redirect_fragment_for_action("/save-config"), "settings")
         self.assertEqual(_redirect_fragment_for_action("/unknown"), "")
@@ -131,6 +147,7 @@ class ConfigUITest(unittest.TestCase):
                 },
                 "report_job": {
                     "status": "running",
+                    "stage": "summary_generation",
                     "step": "生成单篇总结",
                     "message": "正在整理单篇总结。",
                     "elapsed_seconds": 12.4,
@@ -143,10 +160,12 @@ class ConfigUITest(unittest.TestCase):
                     "summary_total": 4,
                     "summary_completed": 2,
                     "summary_current_title": "Example Paper",
+                    "summary_current_journal": "JGR: Space Physics",
                     "summary_provider": "codex_local",
                     "summary_model": "gpt-5.4",
                     "summary_reasoning_effort": "medium",
                     "summary_avg_tokens": 17790,
+                    "summary_skipped": 1,
                 },
                 "maintenance_status": {
                     "overall": "ok",
@@ -171,8 +190,15 @@ class ConfigUITest(unittest.TestCase):
         self.assertIn('data-nav-target="deep-read"', html)
         self.assertIn('action="/run-report"', html)
         self.assertIn('action="/run-deep-read"', html)
+        self.assertIn('action="/run-deep-read-folder"', html)
         self.assertIn("深度解读任务面板", html)
+        self.assertIn("深度解读运行状态", html)
+        self.assertIn('data-deep-read-status-root', html)
+        self.assertIn("PDF 文件夹批量深度解读", html)
+        self.assertIn('name="deep_read_pdf_folder_uploads"', html)
+        self.assertIn("webkitdirectory", html)
         self.assertLess(html.index("深度解读任务面板"), html.index("深度解读文章数量统计"))
+        self.assertLess(html.index("PDF 文件夹批量深度解读"), html.index("深度解读文章数量统计"))
         self.assertLess(html.index("深度解读文章数量统计"), html.index("最新深度解读报告"))
         self.assertIn("周报最新结果", html)
         self.assertIn("周报运行状态", html)
@@ -181,6 +207,7 @@ class ConfigUITest(unittest.TestCase):
         self.assertIn("生成单篇总结", html)
         self.assertIn("来源进度：2/6", html)
         self.assertIn("单篇总结：2/4", html)
+        self.assertIn("未完成单篇：1", html)
         self.assertIn("模型：gpt-5.4", html)
         self.assertIn("推理强度：medium", html)
         self.assertIn("平均单篇 token：17790", html)
@@ -197,7 +224,8 @@ class ConfigUITest(unittest.TestCase):
         self.assertIn("visible", html)
         self.assertIn("data-token-date=", html)
         self.assertIn("今天 1,234（1次）", html)
-        self.assertIn("当前单篇：Example Paper", html)
+        self.assertIn("当前单篇：JGR: Space Physics · Example Paper", html)
+        self.assertNotIn("<p>当前来源：", html.split("<script>", 1)[0])
         self.assertLess(html.index("LLM 状态"), html.index("运行状态检查"))
         self.assertIn("weekly-report-grid", html)
         self.assertIn("weekly-report-form-card", html)
@@ -216,6 +244,11 @@ class ConfigUITest(unittest.TestCase):
         self.assertNotIn('value="chatgpt_web_manual"', html)
         self.assertIn("OpenRouter API", html)
         self.assertIn("Ollama 本地", html)
+        self.assertIn('name="ollama_keep_alive" value="0"', html)
+        self.assertIn('name="ollama_num_ctx" value="32768"', html)
+        self.assertIn('name="ollama_num_predict" value="4096"', html)
+        self.assertIn('name="ollama_deep_read_num_predict" value="8192"', html)
+        self.assertIn('name="ollama_deep_read_quality_mode"', html)
         self.assertIn("data-tooltip=", html)
         self.assertNotIn('class="nav-meta"', html)
         self.assertIn("运行状态", html)
@@ -464,7 +497,12 @@ class ConfigUITest(unittest.TestCase):
                     "codex_timeout_seconds": ["300"],
                     "ollama_model": ["gemma4:26b"],
                     "ollama_base_url": ["http://127.0.0.1:11434/api/chat"],
-                    "ollama_timeout_seconds": ["300"],
+                    "ollama_timeout_seconds": ["900"],
+                    "ollama_keep_alive": ["0"],
+                    "ollama_num_ctx": ["32768"],
+                    "ollama_num_predict": ["4096"],
+                    "ollama_deep_read_num_predict": ["8192"],
+                    "ollama_deep_read_quality_mode": ["on"],
                     "local_output_root": ["/tmp/private-vault"],
                 },
             )
@@ -473,7 +511,12 @@ class ConfigUITest(unittest.TestCase):
         self.assertEqual(analysis["provider"], "ollama_api")
         self.assertEqual(analysis["ollama_api"]["model"], "gemma4:26b")
         self.assertEqual(analysis["ollama_api"]["base_url"], "http://127.0.0.1:11434/api/chat")
-        self.assertEqual(analysis["ollama_api"]["timeout_seconds"], 300)
+        self.assertEqual(analysis["ollama_api"]["timeout_seconds"], 900)
+        self.assertEqual(analysis["ollama_api"]["keep_alive"], 0)
+        self.assertEqual(analysis["ollama_api"]["num_ctx"], 32768)
+        self.assertEqual(analysis["ollama_api"]["num_predict"], 4096)
+        self.assertEqual(analysis["ollama_api"]["deep_read_num_predict"], 8192)
+        self.assertTrue(analysis["ollama_api"]["deep_read_quality_mode"])
 
     def test_run_manual_import_action_uses_recommended_response_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -605,7 +648,17 @@ class ConfigUITest(unittest.TestCase):
 
             def fake_execute(project, params, progress_callback=None):
                 assert progress_callback is not None
-                progress_callback({"stage": "fetching", "source_index": 1, "source_total": 3, "fetched_count": 5, "kept_count": 2})
+                progress_callback(
+                    {
+                        "stage": "fetching",
+                        "source_index": 1,
+                        "source_total": 3,
+                        "current_source": "jgr_space_physics",
+                        "fetched_count": 5,
+                        "kept_count": 2,
+                    }
+                )
+                progress_callback({"stage": "summary_generation", "summary_total": 2, "summary_completed": 1})
                 return {
                     "kind": "ok",
                     "title": "周报生成完成",
@@ -633,6 +686,7 @@ class ConfigUITest(unittest.TestCase):
             self.assertEqual(report_job.get("status"), "success")
             self.assertEqual(report_job.get("paper_count"), 2)
             self.assertEqual(report_job.get("journal_count"), 1)
+            self.assertEqual(report_job.get("current_source"), "")
 
     def test_run_report_job_worker_marks_quota_pause_as_recoverable(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -680,6 +734,57 @@ class ConfigUITest(unittest.TestCase):
             self.assertEqual(report_job.get("retry_after"), "11:01 AM")
             self.assertIn("30/32", str(report_job.get("message", "")))
 
+    def test_run_report_job_worker_marks_ollama_timeout_as_recoverable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            _write_ui_project(root)
+            write_config_ui_runtime_state(root, host="127.0.0.1", port=8765, url="http://127.0.0.1:8765/")
+
+            def fake_execute(project, params, progress_callback=None):
+                assert progress_callback is not None
+                progress_callback(
+                    {
+                        "stage": "summary_generation",
+                        "summary_total": 35,
+                        "summary_completed": 2,
+                        "summary_current_index": 3,
+                        "summary_current_title": "Medium-Term Forecasting of Solar F10.7",
+                        "summary_provider": "ollama_api",
+                        "summary_model": "gemma4:26b",
+                        "summary_avg_tokens": 1605,
+                        "summary_token_samples": 2,
+                    }
+                )
+                raise AnalysisProviderTimeout(
+                    "ollama_api",
+                    timeout_seconds=900,
+                    request_name="article_medium_term_forecasting",
+                )
+
+            with mock.patch("sciencemonitor.config_ui_report_jobs.execute_report_action", side_effect=fake_execute):
+                _run_report_job_worker(
+                    root,
+                    {
+                        "run_update": True,
+                        "report_date": date(2026, 4, 17),
+                        "window_days": 7,
+                        "update_days_back": 7,
+                        "max_per_source": 20,
+                        "hydrate": True,
+                        "source_ids": set(),
+                    },
+                )
+
+            report_job = read_config_ui_runtime_state(root).get("report_job", {})
+            self.assertEqual(report_job.get("status"), "paused_timeout")
+            self.assertEqual(report_job.get("step"), "本地模型超时")
+            self.assertTrue(report_job.get("recoverable"))
+            self.assertEqual(report_job.get("summary_provider"), "ollama_api")
+            self.assertEqual(report_job.get("summary_model"), "gemma4:26b")
+            self.assertEqual(report_job.get("summary_avg_tokens"), 1605)
+            self.assertIn("2/35", str(report_job.get("message", "")))
+            self.assertIn("900s", str(report_job.get("error", "")))
+
     def test_guard_no_conflicting_ui_task_blocks_other_actions(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = pathlib.Path(tmpdir)
@@ -696,6 +801,8 @@ class ConfigUITest(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "当前已有周报任务正在运行"):
                 _guard_no_conflicting_ui_task(root, "/run-deep-read")
+            with self.assertRaisesRegex(ValueError, "当前已有周报任务正在运行"):
+                _guard_no_conflicting_ui_task(root, "/run-deep-read-folder")
 
             _guard_no_conflicting_ui_task(root, "/save-config")
 
@@ -703,46 +810,26 @@ class ConfigUITest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = pathlib.Path(tmpdir)
             _write_ui_project(root)
-            output_note = root / "out" / "auto" / "deep_reads" / "sample.md"
-            output_note.parent.mkdir(parents=True, exist_ok=True)
-            output_note.write_text("# sample", encoding="utf-8")
-            output_pdf = root / "out" / "auto" / "deep_reads_pdf" / "sample.pdf"
-            output_pdf.parent.mkdir(parents=True, exist_ok=True)
-            output_pdf.write_bytes(b"%PDF-1.4")
             observed: dict[str, object] = {}
 
-            class FakeMonitor:
-                def __init__(self, project_root):
-                    self.root = project_root
-                    self.storage = object()
+            class BoolRejectingUpload:
+                filename = "paper.pdf"
+                type = "application/pdf"
 
-                def close(self):
-                    observed["closed"] = True
+                def __init__(self) -> None:
+                    self.file = io.BytesIO(b"%PDF-1.4 test")
 
-            def fake_run_deep_read(**kwargs):
-                observed["pdf_path"] = kwargs["pdf_path"]
-                observed["doi"] = kwargs["doi"]
-                observed["title"] = kwargs["title"]
-                observed["runtime_override"] = kwargs["runtime_override"]
-                self.assertTrue(pathlib.Path(kwargs["pdf_path"]).exists())
-                return DeepReadResult(
-                    success=True,
-                    message="ok",
-                    output_path=output_note,
-                    pdf_output_path=output_pdf,
-                    source_kind="pdf",
-                )
+                def __bool__(self):
+                    raise TypeError("Cannot be converted to bool.")
 
-            upload = SimpleNamespace(
-                filename="paper.pdf",
-                type="application/pdf",
-                file=io.BytesIO(b"%PDF-1.4 test"),
-            )
+            upload = BoolRejectingUpload()
 
-            with mock.patch("sciencemonitor.config_ui_actions.ScienceMonitor", FakeMonitor), mock.patch(
-                "sciencemonitor.config_ui_actions.run_deep_read",
-                side_effect=fake_run_deep_read,
-            ):
+            def fake_start(project, params):
+                observed.update(params)
+                observed["pdf_path_exists"] = pathlib.Path(str(params["pdf_path"])).exists()
+                return {"kind": "ok", "title": "深度解读任务已开始", "message": "started", "path": "", "extra_path": ""}
+
+            with mock.patch("sciencemonitor.config_ui_actions.start_deep_read_action", side_effect=fake_start):
                 result = _run_deep_read_action(
                     root,
                     {
@@ -757,13 +844,132 @@ class ConfigUITest(unittest.TestCase):
                 )
 
         self.assertEqual(result["kind"], "ok")
-        self.assertEqual(result["title"], "深度解读完成")
-        self.assertIn("全文来源类型：pdf", result["message"])
+        self.assertEqual(result["title"], "深度解读任务已开始")
         self.assertEqual(observed["doi"], "10.1000/example")
         self.assertEqual(observed["title"], "Example Paper")
-        self.assertEqual(observed["runtime_override"]["deep_read"]["pdf_page_limit"], 0)
+        self.assertEqual(observed["pdf_page_limit"], 0)
         self.assertTrue(str(observed["pdf_path"]).endswith(".pdf"))
-        self.assertTrue(observed["closed"])
+        self.assertTrue(observed["pdf_path_exists"])
+
+    def test_run_deep_read_action_uses_uploaded_pdf_filename_as_title_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            _write_ui_project(root)
+            observed: dict[str, object] = {}
+
+            upload = SimpleNamespace(filename="2026 polar convection paper.pdf", type="application/pdf", file=io.BytesIO(b"%PDF-1.4 test"))
+
+            def fake_start(project, params):
+                observed.update(params)
+                return {"kind": "ok", "title": "深度解读任务已开始", "message": "started", "path": "", "extra_path": ""}
+
+            with mock.patch("sciencemonitor.config_ui_actions.start_deep_read_action", side_effect=fake_start):
+                result = _run_deep_read_action(
+                    root,
+                    {
+                        "deep_read_doi": [""],
+                        "deep_read_title": [""],
+                        "deep_read_journal": [""],
+                        "deep_read_url": [""],
+                        "deep_read_pdf_path": [""],
+                        "deep_read_pdf_page_limit": ["0"],
+                    },
+                    {"deep_read_pdf": upload},
+                )
+
+        self.assertEqual(result["kind"], "ok")
+        self.assertEqual(observed["title"], "2026 polar convection paper")
+
+    def test_render_deep_read_status_alert_on_deep_read_page(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            _write_ui_project(root)
+            output_note = root / "out" / "auto" / "deep_reads" / "sample.md"
+            output_note.parent.mkdir(parents=True, exist_ok=True)
+            output_note.write_text("# sample", encoding="utf-8")
+            html = _render_page(
+                project=root,
+                runtime={
+                    "features": {"weekly_report_enabled": True},
+                    "cli_defaults": {"daily_days_back": 7, "daily_max_per_source": 20, "report_window_days": 7},
+                    "deep_read": {"search_full_text_when_pdf_missing": True, "pdf_page_limit": 40},
+                },
+                analysis={"provider": "codex_local", "codex_local": {"model": ""}},
+                paths={"output_root": "out", "effective_output_root": str(root / "out"), "local_output_root": "", "local_paths_config": ""},
+                doctor={"warnings": [], "current_python": "/tmp/python", "provider_status": {}},
+                status={"kind": "ok", "title": "深度解读完成", "message": "已完成深度解读。", "path": str(output_note)},
+                ui_state={
+                    "counts": {"article_summaries": 0, "deep_reads": 1, "reports": 0, "manual_files": 0},
+                    "journals": [],
+                    "journal_groups": [],
+                    "token_usage": "今天 0（0次） / 本周 0（0次） / 本月 0（0次）",
+                    "token_usage_chart": {"max_tokens": 0, "providers": [], "days": []},
+                },
+            )
+
+        self.assertIn("深度解读完成", html)
+        self.assertIn("已完成深度解读。", html)
+        self.assertIn("打开结果", html)
+
+    def test_run_deep_read_folder_action_passes_folder_options(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            _write_ui_project(root)
+            folder = root / "pdfs"
+            folder.mkdir()
+            observed: dict[str, object] = {}
+
+            def fake_start(project, params):
+                observed.update(params)
+                return {"kind": "ok", "title": "批量深度解读任务已开始", "message": "started", "path": "", "extra_path": ""}
+
+            with mock.patch("sciencemonitor.config_ui_actions.start_deep_read_folder_action", side_effect=fake_start):
+                result = _run_deep_read_folder_action(
+                    root,
+                    {
+                        "deep_read_pdf_folder_path": [str(folder)],
+                        "deep_read_folder_pdf_page_limit": ["0"],
+                        "deep_read_pdf_folder_recursive": ["on"],
+                    },
+                )
+
+        self.assertEqual(result["kind"], "ok")
+        self.assertEqual(result["title"], "批量深度解读任务已开始")
+        self.assertEqual(observed["folder_path"], str(folder))
+        self.assertTrue(observed["recursive"])
+        self.assertEqual(observed["pdf_page_limit"], 0)
+
+    def test_run_deep_read_job_worker_updates_progress_and_success(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            _write_ui_project(root)
+            write_config_ui_runtime_state(root, host="127.0.0.1", port=8765, url="http://127.0.0.1:8765/")
+            set_weekly_report_job_state(root, {"status": "idle"})
+            set_deep_read_job_state(
+                root,
+                {"status": "running", "label": "深度解读", "started_at": "2026-04-29T10:00:00"},
+            )
+
+            def fake_execute(project, params, progress_callback=None):
+                assert progress_callback is not None
+                progress_callback({"stage": "full_text", "message": "reading"})
+                progress_callback({"stage": "ollama_evidence", "message": "evidence"})
+                return {
+                    "kind": "ok",
+                    "title": "深度解读完成",
+                    "message": "done",
+                    "path": str(root / "out" / "auto" / "deep_reads" / "sample.md"),
+                    "extra_path": "",
+                    "source_kind": "provided_pdf",
+                }
+
+            _run_deep_read_job_worker(root, {"pdf_page_limit": 0}, fake_execute)
+
+            deep_read_job = read_config_ui_runtime_state(root).get("deep_read_job", {})
+            self.assertEqual(deep_read_job.get("status"), "success")
+            self.assertEqual(deep_read_job.get("step"), "已完成")
+            self.assertEqual(deep_read_job.get("source_kind"), "provided_pdf")
+            self.assertIn("sample.md", str(deep_read_job.get("output_path", "")))
 
     def test_render_page_renders_markdown_result_content(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

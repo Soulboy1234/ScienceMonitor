@@ -5,15 +5,14 @@ from datetime import date, datetime
 from pathlib import Path
 
 from .article_summary_markdown import sanitize_filename
-from .config import chatgpt_web_manual_responses_root, load_runtime_config
+from .config import chatgpt_web_manual_responses_root
+from .config_ui_deep_read_jobs import start_deep_read_action, start_deep_read_folder_action
 from .config_ui_report_jobs import execute_report_action, start_report_action
 from .config_ui_support import (
     create_manual_request_from_ui,
     import_manual_response_and_generate,
     resolve_request_id_from_upload,
 )
-from .deep_reads import run_deep_read
-from .pipeline import ScienceMonitor
 
 
 def _start_report_action(project: Path, form: dict[str, list[str]]) -> dict[str, str]:
@@ -42,57 +41,59 @@ def _parse_report_form(form: dict[str, list[str]]) -> dict[str, object]:
 def _run_deep_read_action(
     project: Path,
     form: dict[str, list[str]],
-    files: dict[str, cgi.FieldStorage],
+    files: dict[str, object],
 ) -> dict[str, str]:
-    uploaded_pdf = files.get("deep_read_pdf")
-    uploaded_path = _save_uploaded_pdf(project, uploaded_pdf) if uploaded_pdf else None
+    uploaded_pdf = _first_file_item(files.get("deep_read_pdf"))
+    uploaded_title = _uploaded_pdf_title(uploaded_pdf)
+    uploaded_path = _save_uploaded_pdf(project, uploaded_pdf) if uploaded_pdf is not None else None
     local_pdf_path = _text_field(form, "deep_read_pdf_path")
     pdf_path = str(uploaded_path) if uploaded_path else local_pdf_path
     doi = _text_field(form, "deep_read_doi")
     title = _text_field(form, "deep_read_title")
+    if not title and pdf_path:
+        title = uploaded_title or Path(local_pdf_path or pdf_path).expanduser().stem
     journal = _text_field(form, "deep_read_journal")
     url = _text_field(form, "deep_read_url")
 
     if not pdf_path and not doi and not title:
         raise ValueError("请至少提供 PDF、DOI 或论文题目中的一项。")
 
-    runtime = load_runtime_config(project)
-    runtime.setdefault("deep_read", {})
-    runtime["deep_read"]["pdf_page_limit"] = _int_field(form, "deep_read_pdf_page_limit", minimum=0)
+    return start_deep_read_action(
+        project,
+        {
+            "doi": doi,
+            "title": title,
+            "pdf_path": pdf_path,
+            "uploaded_path": str(uploaded_path) if uploaded_path else "",
+            "journal": journal,
+            "url": url,
+            "pdf_page_limit": _int_field(form, "deep_read_pdf_page_limit", minimum=0),
+        },
+    )
 
-    monitor = ScienceMonitor(project)
-    try:
-        result = run_deep_read(
-            root=project,
-            storage=monitor.storage,
-            doi=doi,
-            title=title,
-            pdf_path=pdf_path,
-            journal=journal,
-            url=url,
-            runtime_override=runtime,
-        )
-    finally:
-        monitor.close()
 
-    if not result.success:
-        return {
-            "kind": "error",
-            "title": "深度解读失败",
-            "message": result.message,
-            "path": str(uploaded_path) if uploaded_path else "",
-        }
+def _run_deep_read_folder_action(
+    project: Path,
+    form: dict[str, list[str]],
+    files: dict[str, object] | None = None,
+) -> dict[str, str]:
+    files = files or {}
+    folder_uploads = _file_items(files.get("deep_read_pdf_folder_uploads"))
+    recursive = _bool_field(form, "deep_read_pdf_folder_recursive")
+    uploaded_folder = _save_uploaded_pdf_folder(project, folder_uploads, recursive=recursive)
+    folder_path = _text_field(form, "deep_read_pdf_folder_path")
+    resolved_folder = str(uploaded_folder) if uploaded_folder else folder_path
+    if not resolved_folder:
+        raise ValueError("请选择 PDF 文件夹或填写要批量深度解读的 PDF 文件夹路径。")
 
-    message = f"已完成深度解读，全文来源类型：{result.source_kind or 'unknown'}。"
-    if not pdf_path:
-        message += " 本次未提供 PDF，系统已自动尝试获取全文。"
-    return {
-        "kind": "ok",
-        "title": "深度解读完成",
-        "message": message,
-        "path": str(result.output_path) if result.output_path else "",
-        "extra_path": str(result.pdf_output_path) if result.pdf_output_path else "",
-    }
+    return start_deep_read_folder_action(
+        project,
+        {
+            "folder_path": resolved_folder,
+            "recursive": True if uploaded_folder else recursive,
+            "pdf_page_limit": _int_field(form, "deep_read_folder_pdf_page_limit", minimum=0),
+        },
+    )
 
 
 def _run_manual_import_action(project: Path, form: dict[str, list[str]]) -> dict[str, str]:
@@ -198,6 +199,81 @@ def _save_uploaded_pdf(project: Path, file_item: cgi.FieldStorage | None) -> Pat
         payload = file_item.file.read()
         handle.write(payload if isinstance(payload, bytes) else bytes(payload))
     return candidate
+
+
+def _save_uploaded_pdf_folder(project: Path, file_items: list[object], *, recursive: bool) -> Path | None:
+    pdf_items = [
+        item
+        for item in file_items
+        if getattr(item, "filename", "") and Path(str(item.filename)).suffix.lower() == ".pdf"
+    ]
+    if not pdf_items:
+        return None
+
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    upload_dir = project / "tmp" / "ui_folder_uploads" / timestamp
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    saved_count = 0
+    for item in pdf_items:
+        relative = _safe_upload_relative_path(str(item.filename or "uploaded.pdf"))
+        if not recursive and len(relative.parts) > 2:
+            continue
+        target = upload_dir.joinpath(*relative.parts[-1:] if not recursive and len(relative.parts) > 1 else relative.parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target = _unique_file_path(target)
+        with target.open("wb") as handle:
+            payload = item.file.read()
+            handle.write(payload if isinstance(payload, bytes) else bytes(payload))
+        saved_count += 1
+    return upload_dir if saved_count else None
+
+
+def _safe_upload_relative_path(filename: str) -> Path:
+    parts = []
+    for part in Path(filename).parts:
+        if part in {"", ".", ".."}:
+            continue
+        clean = sanitize_filename(part)
+        if clean:
+            parts.append(clean)
+    if not parts:
+        parts = ["uploaded.pdf"]
+    if Path(parts[-1]).suffix.lower() != ".pdf":
+        parts[-1] = f"{Path(parts[-1]).stem or 'uploaded'}.pdf"
+    return Path(*parts)
+
+
+def _unique_file_path(path: Path) -> Path:
+    if not path.exists():
+        return path
+    stem = path.stem or "uploaded"
+    suffix = path.suffix or ".pdf"
+    index = 1
+    while True:
+        candidate = path.with_name(f"{stem}-{index}{suffix}")
+        if not candidate.exists():
+            return candidate
+        index += 1
+
+
+def _uploaded_pdf_title(file_item: cgi.FieldStorage | None) -> str:
+    if file_item is None or not getattr(file_item, "filename", ""):
+        return ""
+    return sanitize_filename(Path(str(file_item.filename)).stem)
+
+
+def _first_file_item(value: object) -> cgi.FieldStorage | object | None:
+    if isinstance(value, list):
+        return next((item for item in value if getattr(item, "filename", "")), None)
+    return value if getattr(value, "filename", "") else None
+
+
+def _file_items(value: object) -> list[object]:
+    if isinstance(value, list):
+        return [item for item in value if getattr(item, "filename", "")]
+    if getattr(value, "filename", ""):
+        return [value]
+    return []
 
 
 def _date_field(form: dict[str, list[str]], name: str) -> date:

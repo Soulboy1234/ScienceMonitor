@@ -82,3 +82,12 @@ class ArticleSummaryResult:
     recommendation: str
     one_sentence: str
     rendered_markdown: str
+
+
+@dataclass(frozen=True)
+class SkippedArticleSummary:
+    row: Any
+    reason: str
+    provider: str = ""
+    request_name: str = ""
+    error: str = ""

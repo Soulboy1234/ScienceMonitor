@@ -26,6 +26,7 @@ from .config import (
 from .config_ui_actions import (
     _int_field,
     _run_deep_read_action,
+    _run_deep_read_folder_action,
     _run_manual_create_action,
     _run_manual_import_action,
     _run_manual_import_upload_action,
@@ -120,6 +121,7 @@ def _handle_get_request(handler: BaseHTTPRequestHandler, project: Path) -> None:
         handler._send_json(  # type: ignore[attr-defined]
             {
                 "report_job": ui_state.get("report_job", {}),
+                "deep_read_job": ui_state.get("deep_read_job", {}),
                 "active_task": ui_state.get("active_task", {}),
                 "manual_pending": _manual_pending_count(project),
                 "latest_results": _latest_result_descriptors(ui_state),
@@ -199,6 +201,8 @@ def _handle_post_request(handler: BaseHTTPRequestHandler, project: Path) -> None
             params = _start_report_action(project, form)
         elif action == "/run-deep-read":
             params = _run_deep_read_action(project, form, files)
+        elif action == "/run-deep-read-folder":
+            params = _run_deep_read_folder_action(project, form, files)
         elif action == "/manual-llm-create":
             params = _run_manual_create_action(project, form)
         elif action == "/manual-llm-import":
@@ -227,6 +231,7 @@ def _redirect_fragment_for_action(action: str) -> str:
     mapping = {
         "/run-report": "weekly-report",
         "/run-deep-read": "deep-read",
+        "/run-deep-read-folder": "deep-read",
         "/manual-llm-create": "manual-llm",
         "/manual-llm-import": "manual-llm",
         "/manual-llm-import-upload": "manual-llm",
@@ -277,6 +282,7 @@ def _guard_no_conflicting_ui_task(project: Path, action: str) -> None:
     guarded_actions = {
         "/run-report",
         "/run-deep-read",
+        "/run-deep-read-folder",
         "/manual-llm-create",
         "/manual-llm-import",
         "/manual-llm-import-upload",
@@ -374,7 +380,12 @@ def _save_from_form(project: Path, form: dict[str, list[str]]) -> None:
     analysis["openrouter_api"]["timeout_seconds"] = _optional_int_field(form, "openrouter_timeout_seconds", int(analysis["openrouter_api"].get("timeout_seconds", 120) or 120), minimum=30)
     analysis["ollama_api"]["model"] = _text_field(form, "ollama_model") or str(analysis["ollama_api"].get("model", "gemma4:26b") or "gemma4:26b")
     analysis["ollama_api"]["base_url"] = _text_field(form, "ollama_base_url") or str(analysis["ollama_api"].get("base_url", "http://127.0.0.1:11434/api/chat") or "http://127.0.0.1:11434/api/chat")
-    analysis["ollama_api"]["timeout_seconds"] = _optional_int_field(form, "ollama_timeout_seconds", int(analysis["ollama_api"].get("timeout_seconds", 300) or 300), minimum=30)
+    analysis["ollama_api"]["timeout_seconds"] = _optional_int_field(form, "ollama_timeout_seconds", int(analysis["ollama_api"].get("timeout_seconds", 900) or 900), minimum=30)
+    analysis["ollama_api"]["num_ctx"] = _optional_int_field(form, "ollama_num_ctx", int(analysis["ollama_api"].get("num_ctx", 32768) or 32768), minimum=0)
+    analysis["ollama_api"]["num_predict"] = _optional_int_field(form, "ollama_num_predict", int(analysis["ollama_api"].get("num_predict", 4096) or 4096), minimum=0)
+    analysis["ollama_api"]["deep_read_num_predict"] = _optional_int_field(form, "ollama_deep_read_num_predict", int(analysis["ollama_api"].get("deep_read_num_predict", 8192) or 8192), minimum=0)
+    analysis["ollama_api"]["deep_read_quality_mode"] = _checkbox_field(form, "ollama_deep_read_quality_mode")
+    _save_ollama_keep_alive(analysis["ollama_api"], form)
 
     local_output_root = _text_field(form, "local_output_root")
     public_paths = {
@@ -439,7 +450,7 @@ def _status_payload_from_query(query: dict[str, list[str]]) -> dict[str, str]:
     }
 
 
-def _parse_form_data(handler: BaseHTTPRequestHandler) -> tuple[dict[str, list[str]], dict[str, cgi.FieldStorage]]:
+def _parse_form_data(handler: BaseHTTPRequestHandler) -> tuple[dict[str, list[str]], dict[str, object]]:
     environ = {
         "REQUEST_METHOD": "POST",
         "CONTENT_TYPE": handler.headers.get("Content-Type", ""),
@@ -452,12 +463,18 @@ def _parse_form_data(handler: BaseHTTPRequestHandler) -> tuple[dict[str, list[st
         keep_blank_values=True,
     )
     fields: dict[str, list[str]] = {}
-    files: dict[str, cgi.FieldStorage] = {}
+    files: dict[str, object] = {}
     if not form_data.list:
         return fields, files
     for item in form_data.list:
         if item.filename:
-            files[item.name] = item
+            existing = files.get(item.name)
+            if existing is None:
+                files[item.name] = item
+            elif isinstance(existing, list):
+                existing.append(item)
+            else:
+                files[item.name] = [existing, item]
             continue
         fields.setdefault(item.name, []).append(str(item.value or ""))
     return fields, files
@@ -475,6 +492,28 @@ def _optional_int_field(form: dict[str, list[str]], name: str, default: int, min
     if name not in form:
         return default
     return _int_field(form, name, minimum=minimum)
+
+
+def _checkbox_field(form: dict[str, list[str]], name: str) -> bool:
+    return name in form
+
+
+def _save_ollama_keep_alive(settings: dict, form: dict[str, list[str]]) -> None:
+    if "ollama_keep_alive" not in form:
+        settings.setdefault("keep_alive", 0)
+        return
+    raw_value = _text_field(form, "ollama_keep_alive")
+    if not raw_value:
+        settings.pop("keep_alive", None)
+        return
+    settings["keep_alive"] = _coerce_keep_alive_value(raw_value)
+
+
+def _coerce_keep_alive_value(value: str) -> int | str:
+    text = str(value or "").strip()
+    if text.lstrip("-").isdigit():
+        return int(text)
+    return text
 
 
 def _is_relative_to(path: Path, base: Path) -> bool:

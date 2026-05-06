@@ -35,7 +35,7 @@
 {{journal_roundup_block}}
 
 ## 其他
-### 未获取摘要/全文的文献
+### 未完成或未获取摘要/全文的文献
 {{missing_sources_block}}
 
 ### 附注

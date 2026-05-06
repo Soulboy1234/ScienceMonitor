@@ -157,13 +157,13 @@
     "模型/GED": {
       "category": "model_method",
       "family": "models_methods",
-      "count": 249,
+      "count": 389,
       "first_seen": "2026-04-17T01:20:28Z",
-      "last_seen": "2026-04-27T23:04:50Z",
+      "last_seen": "2026-05-06T07:13:48Z",
       "contexts": {
         "article_summary": 3,
-        "article_summary_review": 124,
-        "article_summary_repair": 122
+        "article_summary_review": 194,
+        "article_summary_repair": 192
       },
       "selected": false,
       "note": "",
@@ -233,19 +233,19 @@
     "对象/磁层/感应磁层": {
       "category": "research_object",
       "family": "it_coupling_extensions",
-      "count": 261,
+      "count": 406,
       "first_seen": "2026-04-17T01:26:59Z",
-      "last_seen": "2026-04-27T23:04:50Z",
+      "last_seen": "2026-05-06T07:13:48Z",
       "contexts": {
-        "article_summary": 3,
-        "article_summary_review": 132,
-        "article_summary_repair": 126
+        "article_summary": 6,
+        "article_summary_review": 204,
+        "article_summary_repair": 196
       },
       "selected": false,
       "note": "",
-      "usage_count": 1,
+      "usage_count": 2,
       "usage_by_kind": {
-        "article_summaries": 1,
+        "article_summaries": 2,
         "deep_reads": 0
       }
     },
@@ -385,19 +385,19 @@
     "对象/磁鞘/喷流": {
       "category": "research_object",
       "family": "it_coupling_extensions",
-      "count": 201,
+      "count": 210,
       "first_seen": "2026-04-17T03:15:00Z",
-      "last_seen": "2026-04-23T23:28:18Z",
+      "last_seen": "2026-05-06T05:11:08Z",
       "contexts": {
-        "article_summary": 3,
-        "article_summary_review": 100,
-        "article_summary_repair": 98
+        "article_summary": 6,
+        "article_summary_review": 104,
+        "article_summary_repair": 100
       },
       "selected": false,
       "note": "",
-      "usage_count": 1,
+      "usage_count": 2,
       "usage_by_kind": {
-        "article_summaries": 1,
+        "article_summaries": 2,
         "deep_reads": 0
       }
     },
@@ -411,6 +411,1393 @@
         "article_summary": 1,
         "article_summary_review": 50,
         "article_summary_repair": 49
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/行星际磁层/磁场堆积": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 29,
+      "first_seen": "2026-04-27T23:26:24Z",
+      "last_seen": "2026-04-28T07:11:12Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 14,
+        "article_summary_repair": 12
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "方法/MOSAIK3D": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 14,
+      "first_seen": "2026-04-27T23:27:59Z",
+      "last_seen": "2026-04-28T07:11:12Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 7,
+        "article_summary_repair": 6
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "仪器/WISPR": {
+      "category": "instrument_data",
+      "family": "instruments_missions_observations",
+      "count": 14,
+      "first_seen": "2026-04-27T23:27:59Z",
+      "last_seen": "2026-04-28T07:11:12Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 7,
+        "article_summary_repair": 6
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "方法/VMD-SOBI-DLinear混合模型": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 10,
+      "first_seen": "2026-04-28T04:32:01Z",
+      "last_seen": "2026-04-28T07:11:13Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 5,
+        "article_summary_repair": 4
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/电离层/扰动": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 17,
+      "first_seen": "2026-04-28T05:09:56Z",
+      "last_seen": "2026-04-28T07:11:13Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 8,
+        "article_summary_repair": 6
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/磁层/KC辐射": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 13,
+      "first_seen": "2026-04-28T05:34:51Z",
+      "last_seen": "2026-04-28T07:11:13Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 6,
+        "article_summary_repair": 4
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/磁层/等离子层/等离子体片": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 13,
+      "first_seen": "2026-04-28T05:36:06Z",
+      "last_seen": "2026-04-28T07:11:13Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 6,
+        "article_summary_repair": 4
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/高能粒子/相对论性电子": {
+      "category": "research_object",
+      "family": "magnetosphere_particles",
+      "count": 13,
+      "first_seen": "2026-04-28T05:36:06Z",
+      "last_seen": "2026-04-28T07:11:13Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 6,
+        "article_summary_repair": 4
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/银河宇宙线/通量调制": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 6,
+      "first_seen": "2026-04-28T07:07:20Z",
+      "last_seen": "2026-05-06T05:12:08Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 3,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "模型/SPECTRUM": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 6,
+      "first_seen": "2026-04-28T07:07:20Z",
+      "last_seen": "2026-05-06T05:12:08Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 3,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/太阳风/湍流": {
+      "category": "event_driver",
+      "family": "solar_corona_heliosphere",
+      "count": 6,
+      "first_seen": "2026-04-28T07:09:07Z",
+      "last_seen": "2026-05-06T05:12:55Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 3,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "仪器/Wind": {
+      "category": "instrument_data",
+      "family": "instruments_missions_observations",
+      "count": 6,
+      "first_seen": "2026-04-28T07:09:07Z",
+      "last_seen": "2026-05-06T05:12:55Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 3,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/天体/磁星": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 6,
+      "first_seen": "2026-04-28T07:11:12Z",
+      "last_seen": "2026-05-06T05:12:56Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 3,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "仪器/IXPE": {
+      "category": "instrument_data",
+      "family": "instruments_missions_observations",
+      "count": 6,
+      "first_seen": "2026-04-28T07:11:12Z",
+      "last_seen": "2026-05-06T05:12:56Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 3,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "模型/SWMF-Geospace": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 5,
+      "first_seen": "2026-04-28T07:12:55Z",
+      "last_seen": "2026-04-28T07:12:55Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/电离层/MSTID": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 5,
+      "first_seen": "2026-04-28T07:28:30Z",
+      "last_seen": "2026-04-28T07:28:30Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/大气/重力波/中层大气": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 5,
+      "first_seen": "2026-04-28T07:28:30Z",
+      "last_seen": "2026-04-28T07:28:30Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/太阳活动/27日周期": {
+      "category": "research_object",
+      "family": "solar_corona_heliosphere",
+      "count": 5,
+      "first_seen": "2026-04-28T07:30:36Z",
+      "last_seen": "2026-04-28T07:30:37Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/低层大气/波迫": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 5,
+      "first_seen": "2026-04-28T07:35:20Z",
+      "last_seen": "2026-04-28T07:35:20Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/波/瑞利波": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 5,
+      "first_seen": "2026-04-28T07:37:16Z",
+      "last_seen": "2026-04-28T07:37:16Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "方法/叠加纪元分析": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 5,
+      "first_seen": "2026-04-28T07:49:52Z",
+      "last_seen": "2026-04-28T07:49:52Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "模型/SAMI3": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 2,
+      "first_seen": "2026-04-28T07:51:31Z",
+      "last_seen": "2026-04-28T07:51:31Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 1
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/大气波动/半日潮": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 5,
+      "first_seen": "2026-04-28T07:54:17Z",
+      "last_seen": "2026-04-28T07:54:17Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "事件/南半球平流层突然增温": {
+      "category": "research_object",
+      "family": "solar_corona_heliosphere",
+      "count": 5,
+      "first_seen": "2026-04-28T07:54:17Z",
+      "last_seen": "2026-04-28T07:54:17Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/极区/极帽": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 5,
+      "first_seen": "2026-04-28T08:02:07Z",
+      "last_seen": "2026-04-28T08:02:07Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "方法/机器学习/多层感知器": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 5,
+      "first_seen": "2026-04-28T08:04:02Z",
+      "last_seen": "2026-04-28T08:04:02Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/等离子体/拾取离子": {
+      "category": "research_object",
+      "family": "magnetosphere_particles",
+      "count": 5,
+      "first_seen": "2026-04-28T08:06:11Z",
+      "last_seen": "2026-04-28T08:06:11Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "模型/电路模型": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 5,
+      "first_seen": "2026-04-29T03:59:35Z",
+      "last_seen": "2026-04-29T04:09:28Z",
+      "contexts": {
+        "deep_read": 5
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 0,
+        "deep_reads": 1
+      }
+    },
+    "仪器/THEMIS": {
+      "category": "instrument_data",
+      "family": "instruments_missions_observations",
+      "count": 1,
+      "first_seen": "2026-04-29T22:21:51Z",
+      "last_seen": "2026-04-29T22:21:51Z",
+      "contexts": {
+        "deep_read": 1
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 0,
+        "deep_reads": 1
+      }
+    },
+    "对象/中层大气": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 4,
+      "first_seen": "2026-04-30T07:48:26Z",
+      "last_seen": "2026-04-30T08:02:04Z",
+      "contexts": {
+        "deep_read": 4
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 0,
+        "deep_reads": 1
+      }
+    },
+    "方法/磁场模型改进": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 13,
+      "first_seen": "2026-05-05T23:09:48Z",
+      "last_seen": "2026-05-06T05:05:07Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 6,
+        "article_summary_repair": 4
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/磁层/磁力线/扭曲": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 13,
+      "first_seen": "2026-05-05T23:09:48Z",
+      "last_seen": "2026-05-06T05:05:07Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 6,
+        "article_summary_repair": 4
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/电离层/赤道等离子体泡": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 9,
+      "first_seen": "2026-05-05T23:18:01Z",
+      "last_seen": "2026-05-06T05:06:28Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "方法/变化点检测": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 4,
+      "first_seen": "2026-05-05T23:23:17Z",
+      "last_seen": "2026-05-06T05:07:09Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 2,
+        "article_summary_repair": 1
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "方法/堆叠法": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 4,
+      "first_seen": "2026-05-05T23:23:17Z",
+      "last_seen": "2026-05-06T05:07:09Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 2,
+        "article_summary_repair": 1
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/极区/极光椭圆": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 9,
+      "first_seen": "2026-05-05T23:27:08Z",
+      "last_seen": "2026-05-06T05:11:03Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "仪器/IMAGE磁强计网络": {
+      "category": "instrument_data",
+      "family": "instruments_missions_observations",
+      "count": 9,
+      "first_seen": "2026-05-05T23:27:08Z",
+      "last_seen": "2026-05-06T05:11:03Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/金星/感应磁层": {
+      "category": "research_object",
+      "family": "planetary_environment",
+      "count": 18,
+      "first_seen": "2026-05-05T23:29:28Z",
+      "last_seen": "2026-05-06T05:11:05Z",
+      "contexts": {
+        "article_summary": 6,
+        "article_summary_review": 8,
+        "article_summary_repair": 4
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 2,
+      "usage_by_kind": {
+        "article_summaries": 2,
+        "deep_reads": 0
+      }
+    },
+    "对象/磁通量管": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 9,
+      "first_seen": "2026-05-05T23:29:28Z",
+      "last_seen": "2026-05-06T05:11:04Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "方法/最小方差分析/MVA": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 9,
+      "first_seen": "2026-05-05T23:33:24Z",
+      "last_seen": "2026-05-06T05:11:06Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "仪器/BepiColombo": {
+      "category": "instrument_data",
+      "family": "instruments_missions_observations",
+      "count": 9,
+      "first_seen": "2026-05-05T23:33:24Z",
+      "last_seen": "2026-05-06T05:11:06Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "模型/3D全局混合模拟": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 9,
+      "first_seen": "2026-05-05T23:36:09Z",
+      "last_seen": "2026-05-06T05:11:08Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "仪器/VTX站": {
+      "category": "instrument_data",
+      "family": "instruments_missions_observations",
+      "count": 9,
+      "first_seen": "2026-05-05T23:40:27Z",
+      "last_seen": "2026-05-06T05:12:02Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "模型/IRI": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 9,
+      "first_seen": "2026-05-05T23:40:27Z",
+      "last_seen": "2026-05-06T05:12:02Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/太阳风/压力": {
+      "category": "event_driver",
+      "family": "solar_corona_heliosphere",
+      "count": 9,
+      "first_seen": "2026-05-05T23:42:56Z",
+      "last_seen": "2026-05-06T05:12:03Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "指数/FAC模式复杂度": {
+      "category": "index_control",
+      "family": "magnetosphere_particles",
+      "count": 9,
+      "first_seen": "2026-05-05T23:42:56Z",
+      "last_seen": "2026-05-06T05:12:03Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "方法/Hough模": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 9,
+      "first_seen": "2026-05-05T23:45:18Z",
+      "last_seen": "2026-05-06T05:12:05Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "仪器/Aura": {
+      "category": "instrument_data",
+      "family": "instruments_missions_observations",
+      "count": 9,
+      "first_seen": "2026-05-05T23:45:18Z",
+      "last_seen": "2026-05-06T05:12:05Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/日球层/氦离子": {
+      "category": "research_object",
+      "family": "solar_corona_heliosphere",
+      "count": 9,
+      "first_seen": "2026-05-05T23:47:23Z",
+      "last_seen": "2026-05-06T05:12:06Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "仪器/PEPSSI": {
+      "category": "instrument_data",
+      "family": "instruments_missions_observations",
+      "count": 9,
+      "first_seen": "2026-05-05T23:47:23Z",
+      "last_seen": "2026-05-06T05:12:06Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/过程/光化学耦合": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 9,
+      "first_seen": "2026-05-05T23:49:40Z",
+      "last_seen": "2026-05-06T05:12:07Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/过程/等离子体扩散": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 9,
+      "first_seen": "2026-05-05T23:49:40Z",
+      "last_seen": "2026-05-06T05:12:07Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "事件/磁扰": {
+      "category": "research_object",
+      "family": "solar_corona_heliosphere",
+      "count": 9,
+      "first_seen": "2026-05-05T23:51:36Z",
+      "last_seen": "2026-05-06T05:12:10Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "仪器/HF雷达": {
+      "category": "instrument_data",
+      "family": "instruments_missions_observations",
+      "count": 9,
+      "first_seen": "2026-05-05T23:51:36Z",
+      "last_seen": "2026-05-06T05:12:10Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 4,
+        "article_summary_repair": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "方法/地磁场反演": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 4,
+      "first_seen": "2026-05-05T23:56:31Z",
+      "last_seen": "2026-05-06T05:12:56Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 2,
+        "article_summary_repair": 1
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/地球表面": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 4,
+      "first_seen": "2026-05-05T23:56:31Z",
+      "last_seen": "2026-05-06T05:12:56Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 2,
+        "article_summary_repair": 1
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/电离层/LSTAD": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 5,
+      "first_seen": "2026-05-06T05:05:05Z",
+      "last_seen": "2026-05-06T05:05:06Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "数据/卫星观测": {
+      "category": "instrument_data",
+      "family": "data_assets",
+      "count": 5,
+      "first_seen": "2026-05-06T05:05:05Z",
+      "last_seen": "2026-05-06T05:05:06Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/磁尾/电流片": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 5,
+      "first_seen": "2026-05-06T05:05:44Z",
+      "last_seen": "2026-05-06T05:05:44Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "模型/MHD模拟": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 5,
+      "first_seen": "2026-05-06T05:05:44Z",
+      "last_seen": "2026-05-06T05:05:44Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "仪器/地面观测": {
+      "category": "instrument_data",
+      "family": "instruments_missions_observations",
+      "count": 5,
+      "first_seen": "2026-05-06T05:06:26Z",
+      "last_seen": "2026-05-06T05:06:27Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "模型/HWM": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 5,
+      "first_seen": "2026-05-06T05:06:26Z",
+      "last_seen": "2026-05-06T05:06:27Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "方法/光度分析": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 5,
+      "first_seen": "2026-05-06T05:07:07Z",
+      "last_seen": "2026-05-06T05:07:08Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "仪器/JunoUVS": {
+      "category": "instrument_data",
+      "family": "instruments_missions_observations",
+      "count": 5,
+      "first_seen": "2026-05-06T05:07:07Z",
+      "last_seen": "2026-05-06T05:07:08Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "方法/ART": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 5,
+      "first_seen": "2026-05-06T05:07:44Z",
+      "last_seen": "2026-05-06T05:07:44Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/电离层/F层": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 10,
+      "first_seen": "2026-05-06T05:07:44Z",
+      "last_seen": "2026-05-06T05:08:53Z",
+      "contexts": {
+        "article_summary": 6,
+        "article_summary_review": 4
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 2,
+      "usage_by_kind": {
+        "article_summaries": 2,
+        "deep_reads": 0
+      }
+    },
+    "事件/HILDCAA": {
+      "category": "research_object",
+      "family": "solar_corona_heliosphere",
+      "count": 5,
+      "first_seen": "2026-05-06T05:08:52Z",
+      "last_seen": "2026-05-06T05:08:53Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "方法/耦合函数": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 5,
+      "first_seen": "2026-05-06T05:09:54Z",
+      "last_seen": "2026-05-06T05:09:55Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "事件/地磁活动": {
+      "category": "research_object",
+      "family": "solar_corona_heliosphere",
+      "count": 5,
+      "first_seen": "2026-05-06T05:09:54Z",
+      "last_seen": "2026-05-06T05:09:55Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "方法/多普勒谱展宽": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 5,
+      "first_seen": "2026-05-06T05:11:00Z",
+      "last_seen": "2026-05-06T05:11:01Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "仪器/无线电信号": {
+      "category": "instrument_data",
+      "family": "instruments_missions_observations",
+      "count": 5,
+      "first_seen": "2026-05-06T05:11:00Z",
+      "last_seen": "2026-05-06T05:11:01Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/中国区域": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 5,
+      "first_seen": "2026-05-06T05:12:00Z",
+      "last_seen": "2026-05-06T05:12:01Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "模型/TEC-SOFTS": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 5,
+      "first_seen": "2026-05-06T05:12:00Z",
+      "last_seen": "2026-05-06T05:12:01Z",
+      "contexts": {
+        "article_summary": 3,
+        "article_summary_review": 2
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "方法/理论模型/经典吸收": {
+      "category": "model_method",
+      "family": "models_methods",
+      "count": 2,
+      "first_seen": "2026-05-06T05:12:54Z",
+      "last_seen": "2026-05-06T05:12:54Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 1
+      },
+      "selected": false,
+      "note": "",
+      "usage_count": 1,
+      "usage_by_kind": {
+        "article_summaries": 1,
+        "deep_reads": 0
+      }
+    },
+    "对象/热层/加热": {
+      "category": "research_object",
+      "family": "it_coupling_extensions",
+      "count": 2,
+      "first_seen": "2026-05-06T05:12:54Z",
+      "last_seen": "2026-05-06T05:12:54Z",
+      "contexts": {
+        "article_summary": 1,
+        "article_summary_review": 1
       },
       "selected": false,
       "note": "",

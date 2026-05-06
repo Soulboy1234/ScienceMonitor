@@ -13,10 +13,14 @@ if str(SRC) not in sys.path:
 
 from sciencemonitor.tag_governance import ensure_tag_governance_files, refresh_pending_tag_files
 from sciencemonitor.tag_review import (
+    reconcile_deep_read_output_tags_with_review,
+    reconcile_all_auto_output_tags_with_review,
     reconcile_auto_output_tags_with_review,
     review_generated_tags,
+    run_deep_read_tag_output_review,
     run_tag_output_review,
 )
+from sciencemonitor.tags import infer_preferred_tags_from_text, normalize_tags
 
 
 class TagReviewTest(unittest.TestCase):
@@ -60,6 +64,23 @@ class TagReviewTest(unittest.TestCase):
             )
 
             self.assertEqual(tags, ["对象/电离层/电子密度"])
+
+    def test_deep_read_infers_thermosphere_density_from_plural_title(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            tags = review_generated_tags(
+                ["对象/热层", "仪器/MAVEN"],
+                root=root,
+                title_text="Solar Rotation Effects in Earth and Mars Thermospheric Densities",
+                body_text="The paper analyzes thermospheric density observations at Earth and Mars.",
+                context="deep_read",
+                max_tags=10,
+            )
+
+        self.assertIn("对象/热层/密度", tags)
+        self.assertNotIn("对象/热层", tags)
 
     def test_review_generated_tags_only_keeps_pending_candidates_with_real_output_usage(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -198,6 +219,216 @@ class TagReviewTest(unittest.TestCase):
             self.assertNotIn("仪器/ICON", tags)
             self.assertIn("事件/太阳耀斑", tags)
             self.assertIn("仪器/EOS-08", tags)
+
+    def test_deep_read_tags_normalize_chen_index_aliases_and_drop_false_instruments(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            body = (
+                "The paper analyzes D index st and K index p geomagnetic criteria, including Kp ≥ 7. "
+                "The SNMC algorithm (shift neighborhood matching correlation) compares intense geomagnetic storms "
+                "with global strong earthquake catalogs. Random sampling, binomial and chi-square tests support "
+                "a time-lagged correlation over a 27-28 day window, with probability gain. "
+                "The discussion mentions electrokinetic and inverse ofpiezoelectric effects and cites an IconSpace conference paper, "
+                "but the observations are geomagnetic index and earthquake catalog data rather than upper-atmosphere instruments."
+            )
+            tags = review_generated_tags(
+                ["对象/地磁暴", "对象/D指数", "对象/K指数", "仪器/FPI", "仪器/ICON"],
+                root=root,
+                title_text="On solar-terrestrial interactions: correlation between intense geomagnetic storms and global strong earthquakes",
+                body_text=body,
+                context="deep_read",
+                max_tags=14,
+            )
+
+        self.assertIn("对象/日地耦合", tags)
+        self.assertIn("事件/地震", tags)
+        self.assertIn("指数/Dst", tags)
+        self.assertIn("指数/Kp", tags)
+        self.assertIn("事件/磁暴", tags)
+        self.assertIn("方法/SNMC", tags)
+        self.assertIn("方法/统计研究", tags)
+        self.assertIn("特征/时滞相关", tags)
+        self.assertIn("特征/概率增益", tags)
+        self.assertIn("特征/电渗流", tags)
+        self.assertIn("特征/逆压电效应", tags)
+        self.assertNotIn("对象/地磁暴", tags)
+        self.assertNotIn("对象/D指数", tags)
+        self.assertNotIn("对象/K指数", tags)
+        self.assertNotIn("仪器/FPI", tags)
+        self.assertNotIn("仪器/ICON", tags)
+
+    def test_deep_read_output_reconcile_adds_missing_evidence_tags_from_body(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+            deep_dir = root / "out" / "auto" / "deep_reads"
+            deep_dir.mkdir(parents=True, exist_ok=True)
+            deep = deep_dir / "Chen 2025 - GRL - 太阳-地球相互作用：强地磁暴与全球强震之间的相关性研究 深度解读.md"
+            deep.write_text(
+                "\n".join(
+                    [
+                        "# 深度解读",
+                        "- [PDF](<../deep_reads_pdf/chen.pdf>) #事件/磁暴 #指数/Dst #指数/Kp",
+                        "",
+                        "本文讨论 solar-terrestrial interactions、强地磁暴和全球强震之间的相关性。",
+                        "方法上使用 SNMC algorithm / shift neighborhood matching correlation，并用 random sampling、binomial 和 chi-square tests 做统计检验。",
+                        "结果包括 27-28 day time-lagged correlation、probability gain，并讨论 electrokinetic 与 inverse ofpiezoelectric effects。",
+                        "后续问题提到 moon tides，但题名和正文主线明确是 solar-terrestrial interactions。",
+                        "正文没有使用 FPI、ICON/MIGHTI 或 Ionospheric Connection Explorer 数据。",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            result = reconcile_deep_read_output_tags_with_review(root)
+            rewritten = deep.read_text(encoding="utf-8")
+
+        self.assertEqual(result.scanned_files, 1)
+        self.assertEqual(len(result.modified_entries), 1)
+        for tag in (
+            "#对象/日地耦合",
+            "#事件/磁暴",
+            "#事件/地震",
+            "#指数/Dst",
+            "#指数/Kp",
+            "#方法/SNMC",
+            "#方法/统计研究",
+            "#特征/时滞相关",
+            "#特征/概率增益",
+            "#特征/电渗流",
+            "#特征/逆压电效应",
+        ):
+            self.assertIn(tag, rewritten)
+        self.assertNotIn("#仪器/FPI", rewritten)
+        self.assertNotIn("#仪器/ICON", rewritten)
+
+    def test_deep_read_streamer_and_secs_tags_use_correct_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            tags = review_generated_tags(
+                ["对象/SECS技术", "仪器/Streamers", "Streamers", "场向电流"],
+                root=root,
+                title_text="A Statistical Analysis of the Auroral Streamer Current System",
+                body_text=(
+                    "Auroral streamers are analyzed using the Spherical Elementary Current System (SECS) "
+                    "technique, ground magnetometers, THEMIS ASI images, and field-aligned currents."
+                ),
+                context="deep_read",
+                max_tags=14,
+            )
+
+        self.assertIn("对象/极区/极光", tags)
+        self.assertNotIn("对象/极区/极光/流光", tags)
+        self.assertIn("对象/磁层/电流体系", tags)
+        self.assertIn("方法/SECS", tags)
+        self.assertNotIn("对象/SECS技术", tags)
+        self.assertNotIn("仪器/Streamers", tags)
+
+    def test_streamer_tag_folds_to_aurora_without_global_depth_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            normalized = normalize_tags(["对象/极区/极光/流光", "对象/热层/风场/垂直风"], root=root)
+            inferred = infer_preferred_tags_from_text(
+                title_text="Auroral streamers during a substorm",
+                body_text="The paper analyzes auroral streamers and vertical thermospheric wind.",
+                root=root,
+                max_tags=10,
+            )
+
+        self.assertIn("对象/极区/极光", normalized)
+        self.assertIn("对象/热层/风场/垂直风", normalized)
+        self.assertNotIn("对象/极区/极光/流光", normalized)
+        self.assertIn("对象/极区/极光", inferred)
+        self.assertNotIn("对象/极区/极光/流光", inferred)
+
+    def test_deep_read_eta_ada_and_instrument_tags_use_actual_data_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            tags = review_generated_tags(
+                [
+                    "对象/赤道热层异常",
+                    "方法/上升-下降加速度分析ADA",
+                    "仪器/CHAMP",
+                    "仪器/GRACE",
+                    "仪器/ICON",
+                    "仪器/CHAMPSTAR加速度计",
+                ],
+                root=root,
+                title_text="Distinguishing Density and Wind Perturbations in the Equatorial Thermosphere Anomaly",
+                body_text=(
+                    "This investigation focuses on in-track accelerometer data from the CHAMP mission. "
+                    "The study uses CHAMP STAR accelerometer data from 2003-2004 to separate mass density "
+                    "and thermospheric wind perturbations in the ETA, and removes Kp > 5 intervals. "
+                    "The introduction lists missions such as GRACE, GRACE-FO, GOLD, TIMED and ICON as background, "
+                    "and says the technique can be applied to GRACE in the future, but the analysis here uses CHAMP data."
+                ),
+                context="deep_read",
+                max_tags=14,
+            )
+
+        self.assertIn("对象/热层/ETA", tags)
+        self.assertIn("对象/热层/密度", tags)
+        self.assertIn("对象/热层/风场", tags)
+        self.assertIn("方法/ADA", tags)
+        self.assertIn("指数/Kp", tags)
+        self.assertIn("仪器/CHAMP", tags)
+        self.assertNotIn("对象/赤道热层异常", tags)
+        self.assertNotIn("方法/上升-下降加速度分析ADA", tags)
+        self.assertNotIn("仪器/CHAMPSTAR加速度计", tags)
+        self.assertNotIn("仪器/GRACE", tags)
+        self.assertNotIn("仪器/ICON", tags)
+
+    def test_text_inference_uses_token_boundaries_for_fpi_and_icon(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            tags = infer_preferred_tags_from_text(
+                title_text="Geomagnetic storms and earthquakes",
+                body_text=(
+                    "The reference list contains measurementofpiezoelectricconstants and IconSpace conference, "
+                    "while the actual data are D index st and K index p geomagnetic indices."
+                ),
+                root=root,
+                max_tags=10,
+            )
+
+        self.assertIn("指数/Dst", tags)
+        self.assertIn("指数/Kp", tags)
+        self.assertNotIn("仪器/FPI", tags)
+        self.assertNotIn("仪器/ICON", tags)
+
+    def test_instrument_tags_are_kept_with_explicit_source_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            fpi_tags = review_generated_tags(
+                ["仪器/FPI"],
+                root=root,
+                title_text="Thermospheric wind observations",
+                body_text="The study uses Fabry-Perot Interferometer (FPI) wind observations.",
+                context="deep_read",
+            )
+            icon_tags = review_generated_tags(
+                ["仪器/ICON"],
+                root=root,
+                title_text="MIGHTI wind observations",
+                body_text="The study uses ICON/MIGHTI data from the Ionospheric Connection Explorer mission.",
+                context="deep_read",
+            )
+
+        self.assertIn("仪器/FPI", fpi_tags)
+        self.assertIn("仪器/ICON", icon_tags)
 
     def test_review_generated_tags_drops_storm_tag_when_storm_is_not_main_topic(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -419,6 +650,93 @@ class TagReviewTest(unittest.TestCase):
             self.assertNotIn("应用/预报/短期预测", tags)
             self.assertNotIn("仪器/TIMED-SABER", tags)
 
+    def test_review_generated_tags_governs_abstract_and_misrooted_tags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            tags = review_generated_tags(
+                [
+                    "对象/空间天气/地磁暴",
+                    "对象/物理机制/Joule加热",
+                    "仪器/磁力计",
+                    "应用/空间天气/预报",
+                    "应用/业务化预报",
+                    "模型/物理模型",
+                    "对象/卫星",
+                    "应用/卫星再入/轨迹预测",
+                ],
+                root=root,
+                title_text="Satellite reentry predictions during geomagnetic storms and sudden stratospheric warmings",
+                body_text=(
+                    "The study evaluates satellite re-entry trajectory prediction and orbit decay during SSW. "
+                    "It studies geomagnetic storms and Joule heating, using magnetometer data."
+                ),
+                extra_text="摘要没有说明这是业务化 operational forecast system。",
+                context="article_summary",
+                max_tags=14,
+                record_candidates=True,
+            )
+
+            refresh_pending_tag_files(root)
+            payload = json.loads((root / "config" / "pending_tags.json").read_text(encoding="utf-8"))
+
+        self.assertIn("事件/磁暴", tags)
+        self.assertIn("对象/极区/焦耳加热", tags)
+        self.assertIn("仪器/磁强计", tags)
+        self.assertIn("应用/预测", tags)
+        self.assertIn("应用/卫星轨道衰减", tags)
+        self.assertNotIn("应用/业务化预报", tags)
+        self.assertNotIn("模型/物理模型", tags)
+        self.assertNotIn("对象/卫星", tags)
+        for bad_tag in (
+            "对象/空间天气/地磁暴",
+            "对象/物理机制/Joule加热",
+            "仪器/磁力计",
+            "应用/空间天气/预报",
+            "模型/物理模型",
+            "对象/卫星",
+        ):
+            self.assertNotIn(bad_tag, payload["tags"])
+
+    def test_review_generated_tags_unifies_planetary_environment_tags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+            (root / "config" / "tag" / "formal_tags.md").write_text(
+                (root / "config" / "tag" / "formal_tags.md")
+                .read_text(encoding="utf-8")
+                .replace("行星空间环境【AI总结】", "行星际环境")
+                .replace("行星空间环境", "行星际环境"),
+                encoding="utf-8",
+            )
+
+            tags = review_generated_tags(
+                [
+                    "对象/行星空间环境",
+                    "对象/行星空间环境/IMF构型",
+                    "对象/行星际环境/IMF构型",
+                    "对象/行星际环境/日冕物质抛射CME",
+                ],
+                root=root,
+                title_text="Venus induced magnetosphere under different IMF configurations",
+                body_text="The paper studies IMF configurations, CME-related interplanetary conditions, and geomagnetic storm response.",
+                context="article_summary",
+                max_tags=10,
+                record_candidates=True,
+            )
+
+            refresh_pending_tag_files(root)
+            payload = json.loads((root / "config" / "pending_tags.json").read_text(encoding="utf-8"))
+
+        self.assertIn("对象/行星际环境", tags)
+        self.assertIn("指数/IMF", tags)
+        self.assertIn("事件/磁暴/CME", tags)
+        self.assertNotIn("对象/行星空间环境", tags)
+        self.assertNotIn("对象/行星际环境/IMF构型", tags)
+        self.assertNotIn("对象/行星际环境/日冕物质抛射CME", tags)
+        self.assertEqual(payload["tags"], {})
+
     def test_reconcile_auto_output_tags_with_review_rewrites_outputs_and_clears_audit(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = pathlib.Path(tmpdir)
@@ -453,6 +771,227 @@ class TagReviewTest(unittest.TestCase):
 
             payload = json.loads((root / "config" / "pending_tags.json").read_text(encoding="utf-8"))
             self.assertNotIn("对象/太阳/日冕", payload["tags"])
+
+    def test_reconcile_all_auto_outputs_rewrites_reports_but_pending_ignores_reports(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+            summary_dir = root / "out" / "auto" / "article_summaries"
+            deep_dir = root / "out" / "auto" / "deep_reads"
+            report_dir = root / "out" / "research_reports"
+            summary_dir.mkdir(parents=True, exist_ok=True)
+            deep_dir.mkdir(parents=True, exist_ok=True)
+            report_dir.mkdir(parents=True, exist_ok=True)
+            (summary_dir / "summary.md").write_text(
+                "\n".join(
+                    [
+                        "# Summary",
+                        "- 标签： #对象/空间天气/地磁暴 #对象/物理机制/Joule加热 #仪器/磁力计 #模型/物理模型",
+                        "- 正文： 本文研究地磁暴、Joule heating 和 magnetometer data。",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (deep_dir / "deep.md").write_text(
+                "# Deep\n- [PDF](<../deep_reads_pdf/a.pdf>) #对象/卫星 #事件/卫星会合 #指数/Kp\n\nSatellite conjunction assessment with Kp.\n",
+                encoding="utf-8",
+            )
+            report = report_dir / "2026-05-06 周报.md"
+            report.write_text(
+                "\n".join(
+                    [
+                        "# Report",
+                        "- 本周研究地磁暴响应和空间天气预测。",
+                        "1. 英文题目：Example",
+                        "   - 标签： #对象/空间天气/地磁暴 #应用/空间天气预报 #信息来源/仅摘要",
+                        "2. 英文题目：Ionosphere",
+                        "   - 标签： #对象/电离层 #信息来源/仅摘要",
+                        "3. 英文题目：High-latitude ionosphere",
+                        "   - 标签： #对象/电离层/高纬 #信息来源/仅摘要",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            result = reconcile_all_auto_output_tags_with_review(root)
+            rewritten_summary = (summary_dir / "summary.md").read_text(encoding="utf-8")
+            rewritten_deep = (deep_dir / "deep.md").read_text(encoding="utf-8")
+            rewritten_report = report.read_text(encoding="utf-8")
+            review = run_tag_output_review(root)
+            refresh_pending_tag_files(root)
+            payload = json.loads((root / "config" / "pending_tags.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(result.scanned_files, 3)
+        self.assertIn("#事件/磁暴", rewritten_summary)
+        self.assertIn("#对象/极区/焦耳加热", rewritten_summary)
+        self.assertIn("#仪器/磁强计", rewritten_summary)
+        self.assertNotIn("#模型/物理模型", rewritten_summary)
+        self.assertNotIn("#对象/卫星", rewritten_deep)
+        self.assertIn("#事件/卫星会合", rewritten_deep)
+        self.assertIn("   - 标签： #事件/磁暴 #应用/预测 #信息来源/仅摘要", rewritten_report)
+        self.assertIn("   - 标签： #对象/电离层 #信息来源/仅摘要", rewritten_report)
+        self.assertIn("   - 标签： #对象/电离层/高纬 #信息来源/仅摘要", rewritten_report)
+        self.assertTrue(review.passed)
+        self.assertEqual(payload["tags"], {})
+
+    def test_deep_read_context_drops_or_downgrades_virtual_object_tags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            tags = review_generated_tags(
+                [
+                    "对象/物理机制/电学放电现象",
+                    "对象/能量转换/电感电路模型",
+                    "对象/过程/场向电流",
+                    "对象/物理机制/Joule加热",
+                    "事件/亚暴",
+                ],
+                root=root,
+                context="deep_read",
+                title_text="Auroral substorms as an electrical discharge phenomenon",
+                body_text="The paper discusses field-aligned currents, Joule heating, and auroral substorms.",
+                max_tags=10,
+            )
+
+        self.assertNotIn("对象/物理机制/电学放电现象", tags)
+        self.assertNotIn("对象/能量转换/电感电路模型", tags)
+        self.assertNotIn("对象/过程/场向电流", tags)
+        self.assertIn("模型/电路模型", tags)
+        self.assertIn("对象/磁层/电流体系", tags)
+        self.assertIn("对象/极区/焦耳加热", tags)
+        self.assertIn("事件/亚暴", tags)
+
+    def test_review_generated_tags_does_not_keep_champ_from_chapman_text(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            tags = review_generated_tags(
+                ["仪器/CHAMP", "仪器/磁强计"],
+                root=root,
+                context="deep_read",
+                title_text="Auroral substorms as an electrical discharge phenomenon",
+                body_text="The paper cites Chapman and uses six meridian chains of magnetometers.",
+                max_tags=10,
+            )
+
+        self.assertNotIn("仪器/CHAMP", tags)
+        self.assertIn("仪器/磁强计", tags)
+
+    def test_deep_read_batch_tags_rewrite_misrooted_models_and_instruments(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            tags = review_generated_tags(
+                [
+                    "CO2",
+                    "仪器/SD-WACCM",
+                    "对象/EUV辐射",
+                    "对象/IMAGE网络",
+                    "对象/全天空相机",
+                    "仪器/Swarm-C",
+                    "模型/NRLMSISE-00",
+                    "事件/卫星会合",
+                    "指数/F10．7",
+                    "对象/极地亚暴",
+                    "对象/极慢太阳风",
+                    "对象/西向电喷流",
+                    "对象/低地球轨道",
+                ],
+                root=root,
+                title_text="Evidence of the Lower Thermospheric Winter-to-Summer Circulation From SABER CO2 Observations",
+                body_text=(
+                    "The paper uses TIMED/SABER CO2 observations and SD-WACCM simulations. "
+                    "A separate polar substorm case during slow solar wind uses the IMAGE magnetometer network and all-sky camera observations. "
+                    "The conjunction paper uses NRLMSISE-00 with F10.7, EUV irradiance, and Kp for satellite conjunction assessment. "
+                    "Gasperini et al. use Swarm-C density observations."
+                ),
+                context="deep_read",
+                max_tags=14,
+            )
+
+        self.assertIn("对象/热层/成分", tags)
+        self.assertIn("模型/WACCM", tags)
+        self.assertIn("指数/EUV", tags)
+        self.assertIn("仪器/磁强计", tags)
+        self.assertIn("仪器/全天空相机", tags)
+        self.assertIn("仪器/Swarm", tags)
+        self.assertIn("模型/NRLMSISE-00", tags)
+        self.assertIn("事件/卫星会合", tags)
+        self.assertIn("指数/F107", tags)
+        self.assertIn("事件/亚暴", tags)
+        self.assertIn("对象/太阳风", tags)
+        self.assertIn("对象/极区/PEJ", tags)
+        self.assertIn("应用/卫星轨道", tags)
+        self.assertNotIn("仪器/CO2", tags)
+        self.assertNotIn("仪器/SD-WACCM", tags)
+        self.assertNotIn("对象/IMAGE网络", tags)
+        self.assertNotIn("对象/全天空相机", tags)
+        self.assertNotIn("仪器/Swarm-C", tags)
+        self.assertNotIn("指数/F10．7", tags)
+        self.assertNotIn("对象/极地亚暴", tags)
+        self.assertNotIn("对象/极慢太阳风", tags)
+        self.assertNotIn("对象/西向电喷流", tags)
+        self.assertNotIn("对象/低地球轨道", tags)
+
+    def test_deep_read_drops_champ_when_only_background_mission_example(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            tags = review_generated_tags(
+                ["仪器/CHAMP", "模型/NRLMSISE-00", "事件/卫星会合"],
+                root=root,
+                title_text="Influences of Space Weather Forecasting Uncertainty on Satellite Conjunction Assessment",
+                body_text=(
+                    "Recent in situ measurements from satellite missions like CHAMP, GRACE, and Swarm "
+                    "have provided background observations for atmospheric models. "
+                    "This paper uses NRLMSISE-00 to propagate F10.7 and Kp forecast uncertainty into "
+                    "satellite conjunction assessment."
+                ),
+                context="deep_read",
+                max_tags=10,
+            )
+
+        self.assertNotIn("仪器/CHAMP", tags)
+        self.assertIn("模型/NRLMSISE-00", tags)
+        self.assertIn("事件/卫星会合", tags)
+
+    def test_deep_read_output_reconcile_does_not_touch_article_summaries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+            summary_dir = root / "out" / "auto" / "article_summaries"
+            deep_dir = root / "out" / "auto" / "deep_reads"
+            summary_dir.mkdir(parents=True, exist_ok=True)
+            deep_dir.mkdir(parents=True, exist_ok=True)
+            summary = summary_dir / "summary.md"
+            deep = deep_dir / "deep.md"
+            summary.write_text(
+                "# 单篇\n- 标签： #磁暴 #热层/风\n- 正文：讨论热层风和磁暴。\n",
+                encoding="utf-8",
+            )
+            deep.write_text(
+                "# 深读\n- [PDF](<../deep_reads_pdf/example.pdf>) #对象/物理机制/电学放电现象 #对象/过程/场向电流 #事件/亚暴\n\n亚暴、极光和场向电流。\n",
+                encoding="utf-8",
+            )
+
+            result = reconcile_deep_read_output_tags_with_review(root)
+            summary_text = summary.read_text(encoding="utf-8")
+            deep_text = deep.read_text(encoding="utf-8")
+            review = run_deep_read_tag_output_review(root)
+
+        self.assertEqual(result.scanned_files, 1)
+        self.assertEqual(len(result.modified_entries), 1)
+        self.assertIn("#磁暴 #热层/风", summary_text)
+        self.assertNotIn("对象/物理机制", deep_text)
+        self.assertIn("#对象/磁层/电流体系", deep_text)
+        self.assertIn("#事件/亚暴", deep_text)
+        self.assertTrue(review.passed)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ import json
 import re
 from html import unescape
 from html.parser import HTMLParser
-from urllib.parse import urljoin
+from urllib.parse import unquote, urljoin
 
 from .utils import clean_abstract_text, clean_title_text, first_non_empty
 
@@ -19,6 +19,12 @@ META_CONTENT_RE = re.compile(
     r'(?is)<meta[^>]+(?:name|property)=["\']([^"\']+)["\'][^>]+content=["\']([^"\']+)["\']'
 )
 HREF_RE = re.compile(r'(?is)<a[^>]+href=["\']([^"\']+)["\']')
+META_REFRESH_RE = re.compile(
+    r'(?is)<meta[^>]+http-equiv=["\']?refresh["\']?[^>]+content=["\'][^"\']*url=([^"\']+)["\']'
+)
+HIDDEN_REDIRECT_RE = re.compile(
+    r'(?is)<input[^>]+(?:name|id)=["\'](?:redirectURL|redirect_url|redirect)["\'][^>]+value=["\']([^"\']+)["\']'
+)
 
 
 class MetadataHTMLParser(HTMLParser):
@@ -126,6 +132,26 @@ def extract_pdf_urls(html: str, base_url: str) -> list[str]:
     seen: set[str] = set()
     for item in candidates:
         if item not in seen:
+            deduped.append(item)
+            seen.add(item)
+    return deduped
+
+
+def extract_redirect_urls(html: str, base_url: str) -> list[str]:
+    candidates: list[str] = []
+    for raw in META_REFRESH_RE.findall(html):
+        clean = unescape(raw).strip()
+        if clean:
+            candidates.append(urljoin(base_url, unquote(clean)))
+    for raw in HIDDEN_REDIRECT_RE.findall(html):
+        clean = unescape(raw).strip()
+        if clean:
+            candidates.append(urljoin(base_url, unquote(clean)))
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for item in candidates:
+        if item and item not in seen:
             deduped.append(item)
             seen.add(item)
     return deduped

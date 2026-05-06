@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 from .analysis_providers import ALL_PROVIDER_LABELS, automatic_provider_choices
 from .chatgpt_web_manual import ManualRequestStatus
 from .config import config_ui_state_path, formal_tags_markdown_path, pending_tags_markdown_path
-from .config_ui_result_cards import render_latest_result_card, render_weekly_report_status_card
+from .config_ui_result_cards import render_deep_read_status_card, render_latest_result_card, render_weekly_report_status_card
 
 
 def render_sidebar(project: Path, runtime: dict, analysis: dict, paths: dict, doctor: dict, nav_items: list[tuple[str, str]], ui_state: dict | None = None) -> str:
@@ -236,9 +236,13 @@ def render_deep_read_view(project: Path, runtime: dict, paths: dict, status: dic
         if paths.get("local_output_root")
         else "如需写入私人 Obsidian vault，请在本机私有输出目录中填写路径；该文件不会上传 GitHub。"
     )
+    status_alert = _render_action_status_alert(status, title_prefixes=("深度解读", "批量深度解读"))
+    deep_read_job = ui_state.get("deep_read_job", {})
     return f"""
       <section class="view" data-view="deep-read">
         <div class="section-grid fixed-layout">
+          {status_alert}
+          {render_deep_read_status_card(deep_read_job)}
           <form class="card span-12" method="post" action="/run-deep-read" enctype="multipart/form-data">
             <h4>深度解读任务面板</h4>
             <div class="form-stack">
@@ -255,6 +259,20 @@ def render_deep_read_view(project: Path, runtime: dict, paths: dict, status: dic
               {_number("deep_read_pdf_page_limit", runtime.get("deep_read", {}).get("pdf_page_limit", 40), "PDF 最多读取页数（0 = 全部）", "这个参数控制本次深度解读最多读取多少页 PDF。0 表示读完整篇；值越大，覆盖越完整，但全文抽取和后续分析更慢。")}
               <div class="actions">
                 <button type="submit" title="按当前输入生成一篇深度解读。" data-task-trigger="deep-read">开始深度解读</button>
+              </div>
+            </div>
+          </form>
+          <form class="card span-12" method="post" action="/run-deep-read-folder" enctype="multipart/form-data">
+            <h4>PDF 文件夹批量深度解读</h4>
+            <div class="form-stack">
+              {_directory_input("deep_read_pdf_folder_uploads", "deep_read_pdf_folder_uploads", "选择或拖拽 PDF 文件夹", "这里用于从浏览器直接选择或拖拽一个 PDF 文件夹；提交后文件会先进入本地临时目录，再按批量深度解读流程处理。")}
+              {_text("deep_read_pdf_folder_path", "", "PDF 文件夹路径", "这个字段用于批量深度解读。程序会按文件名顺序处理该文件夹内的 PDF，每篇仍走单篇深度解读、标签审核和报告格式审核；路径越大，运行时间和模型消耗越高。")}
+              <div class="row">
+                {_number("deep_read_folder_pdf_page_limit", runtime.get("deep_read", {}).get("pdf_page_limit", 40), "PDF 最多读取页数（0 = 全部）", "这个参数只影响本次文件夹批处理。0 表示每篇都读完整篇；如果 PDF 很长，设定页数可以缩短抽取和分析时间，但可能损失正文信息。")}
+                {_checkbox("deep_read_pdf_folder_recursive", False, "包含子文件夹", "勾选后会递归扫描所有子文件夹中的 PDF；不勾选时只处理当前文件夹第一层，避免误扫归档大目录。")}
+              </div>
+              <div class="actions">
+                <button type="submit" title="按文件名顺序批量生成深度解读。" data-task-trigger="deep-read-folder">开始批量深度解读</button>
               </div>
             </div>
           </form>
@@ -393,7 +411,14 @@ def _render_llm_settings_card(analysis: dict, provider: str, *, span: str = "spa
                   <div class="form-stack">
                     {_text("ollama_model", analysis.get("ollama_api", {}).get("model", "gemma4:26b"), "Ollama 模型名", "这个字段指定本机 Ollama 使用的模型名，例如 `gemma4:26b`。切换后，单篇总结、周报和深度解读都会请求这个本地模型。")}
                     {_text("ollama_base_url", analysis.get("ollama_api", {}).get("base_url", "http://127.0.0.1:11434/api/chat"), "Ollama base_url", "这个字段定义 Ollama chat API 地址。默认是本机 `/api/chat`；如果 Ollama 运行在其他端口或机器，需要改成对应地址。")}
-                    {_number("ollama_timeout_seconds", analysis.get("ollama_api", {}).get("timeout_seconds", 300), "Ollama 超时秒数", "这个字段控制单次 Ollama 本地请求允许等待多久。本地大模型首 token 和长 JSON 输出可能较慢，建议保留较长超时。")}
+                    {_number("ollama_timeout_seconds", analysis.get("ollama_api", {}).get("timeout_seconds", 900), "Ollama 超时秒数", "这个字段控制单次 Ollama 本地请求允许等待多久。本地大模型首 token 和长 JSON 输出可能较慢，建议保留较长超时。")}
+                    <div class="row">
+                      {_number("ollama_num_ctx", analysis.get("ollama_api", {}).get("num_ctx", 32768), "Ollama num_ctx", "这个字段控制 Ollama 单次请求的上下文窗口。深度解读需要读全文，值太小会导致正文被模型内部截断；值越大越占内存，过大可能降低本机稳定性。")}
+                      {_number("ollama_num_predict", analysis.get("ollama_api", {}).get("num_predict", 4096), "Ollama num_predict", "这个字段控制 Ollama 最多生成多少 token。深度解读结构较长，值太小容易输出半截 JSON；值越大越慢，也更占用本机推理资源。")}
+                    </div>
+                    {_number("ollama_deep_read_num_predict", analysis.get("ollama_api", {}).get("deep_read_num_predict", 8192), "Ollama 深度解读 num_predict", "这个字段只覆盖 Ollama 深度解读请求的最大输出 token。它不影响单篇总结、周报、Codex 或其他 API provider。")}
+                    {_text("ollama_keep_alive", analysis.get("ollama_api", {}).get("keep_alive", 0), "Ollama keep_alive", "这个字段控制 Ollama 在请求结束后保留模型内存多久。填 `0` 表示每篇文章生成后立即卸载模型；留空表示使用 Ollama 默认策略；填 `5m` 表示保留 5 分钟；填 `-1` 表示尽量常驻内存。它不控制对话历史，本项目每篇文章本来就是单独请求。")}
+                    {_checkbox("ollama_deep_read_quality_mode", bool(analysis.get("ollama_api", {}).get("deep_read_quality_mode", True)), "深度解读质量模式", "这个开关只影响 Ollama 深度解读。开启后，程序会先用全文做一次证据预分析，再生成最终深度解读，以提高接近 Codex 的内容完整度；单篇摘要总结不会因此强行读取全文。")}
                   </div>
                 </div>
               </div>
@@ -448,6 +473,23 @@ def _render_run_stats_card(status: dict[str, str], counts: dict) -> str:
           <div class="stat-chip"><strong>人工中转文件数</strong><span>{int(counts.get("manual_files", 0) or 0)}</span></div>
         </div>
       </section>"""
+
+
+def _render_action_status_alert(status: dict[str, str], *, title_prefixes: tuple[str, ...]) -> str:
+    kind = status.get("kind", "")
+    title = status.get("title", "")
+    if kind not in {"ok", "error"} or not any(title.startswith(prefix) for prefix in title_prefixes):
+        return ""
+    message = html.escape(status.get("message", "") or "")
+    css_class = "ok" if kind == "ok" else "error"
+    path = status.get("path", "") or ""
+    path_link = _render_file_link(Path(path), label="打开结果", new_tab=True) if path else ""
+    return f"""
+          <div class="inline-alert {css_class} span-12">
+            <strong>{html.escape(title)}</strong>
+            {f'<p>{message}</p>' if message else ''}
+            {f'<p>{path_link}</p>' if path_link else ''}
+          </div>"""
 
 
 def _render_token_usage(ui_state: dict) -> str:
@@ -766,10 +808,11 @@ def _checkbox(name: str, checked: bool, label: str, help_text: str = "") -> str:
 
 
 def _text(name: str, value: str, label: str, help_text: str = "") -> str:
+    input_value = "" if value is None else str(value)
     return (
         f'<div class="field-shell">'
         f'{_label_html(name, label, help_text)}'
-        f'<input type="text" id="{html.escape(name)}" name="{html.escape(name)}" value="{html.escape(str(value or ""))}">'
+        f'<input type="text" id="{html.escape(name)}" name="{html.escape(name)}" value="{html.escape(input_value)}">'
         f"</div>"
     )
 
@@ -798,6 +841,17 @@ def _file_input(name: str, input_id: str, label: str, help_text: str = "", *, ac
         f'<div class="field-shell field-shell-file">'
         f'{_label_html(input_id, label, help_text)}'
         f'<input type="file" id="{html.escape(input_id)}" name="{html.escape(name)}"{accept_attr}>'
+        f"</div>"
+    )
+
+
+def _directory_input(name: str, input_id: str, label: str, help_text: str = "") -> str:
+    return (
+        f'<div class="field-shell field-shell-file folder-picker" data-folder-picker>'
+        f'{_label_html(input_id, label, help_text)}'
+        f'<input type="file" id="{html.escape(input_id)}" name="{html.escape(name)}" accept=".pdf,application/pdf" multiple webkitdirectory directory data-folder-input data-folder-path-target="deep_read_pdf_folder_path">'
+        f'<div class="folder-drop-zone" data-folder-drop-zone>拖拽文件夹到这里</div>'
+        f'<div class="folder-picker-status" data-folder-status>未选择文件夹</div>'
         f"</div>"
     )
 

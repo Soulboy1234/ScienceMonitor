@@ -51,6 +51,8 @@ def _snapshot_ui_state(page) -> dict[str, object]:
           const hasFormalLink = !!Array.from(document.querySelectorAll('a')).find((node) => node.textContent.trim() === '显示正式标签');
           const hasPendingLink = !!Array.from(document.querySelectorAll('a')).find((node) => node.textContent.trim() === '显示预选标签');
           const hasPromoteButton = !!Array.from(document.querySelectorAll('button')).find((node) => node.textContent.trim() === '标签转正');
+          const hasDeepReadFolderForm = !!document.querySelector('form[action="/run-deep-read-folder"]');
+          const hasDeepReadFolderButton = !!Array.from(document.querySelectorAll('button')).find((node) => node.textContent.trim() === '开始批量深度解读');
           return {
             active_view: activeView ? activeView.getAttribute('data-view') : '',
             active_nav: activeNav ? activeNav.getAttribute('data-nav-target') : '',
@@ -59,6 +61,8 @@ def _snapshot_ui_state(page) -> dict[str, object]:
             has_formal_link: hasFormalLink,
             has_pending_link: hasPendingLink,
             has_promote_button: hasPromoteButton,
+            has_deep_read_folder_form: hasDeepReadFolderForm,
+            has_deep_read_folder_button: hasDeepReadFolderButton,
           };
         }
         """
@@ -151,6 +155,10 @@ def _evaluate_functional_states(states: dict[str, dict[str, object]]) -> list[Co
         issues.append(ConfigUIFunctionalReviewIssue("deep_read_title", f"深度解读标题异常：{deep_read['title']}"))
     if deep_read["active_view"] != "deep-read":
         issues.append(ConfigUIFunctionalReviewIssue("deep_read_view", f"深度解读 active view 异常：{deep_read['active_view']}"))
+    if not deep_read["has_deep_read_folder_form"]:
+        issues.append(ConfigUIFunctionalReviewIssue("deep_read_folder_form", "深度解读页缺少 PDF 文件夹批处理表单。"))
+    if not deep_read["has_deep_read_folder_button"]:
+        issues.append(ConfigUIFunctionalReviewIssue("deep_read_folder_button", "深度解读页缺少“开始批量深度解读”按钮。"))
     if deep_read["scroll_top"] > 4:
         issues.append(
             ConfigUIFunctionalReviewIssue(

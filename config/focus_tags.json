@@ -75,12 +75,38 @@
     {
       "id": "tag_4",
       "label": "对象/热层/密度",
-      "category": "research_object"
+      "category": "research_object",
+      "aliases": [
+        "热层密度",
+        "热层质量密度",
+        "中性密度",
+        "mass density",
+        "neutral density",
+        "thermospheric density"
+      ],
+      "patterns": [
+        "热层(?:质量)?密度",
+        "中性密度",
+        "\\b(?:mass|neutral|thermospheric)\\s+density\\b"
+      ]
     },
     {
       "id": "tag_5",
       "label": "对象/热层/风场",
-      "category": "research_object"
+      "category": "research_object",
+      "aliases": [
+        "热层风",
+        "热层风场",
+        "中性风",
+        "thermospheric wind",
+        "neutral wind"
+      ],
+      "patterns": [
+        "热层风场?",
+        "中性风",
+        "\\bthermospheric\\s+winds?\\b",
+        "\\bneutral\\s+winds?\\b"
+      ]
     },
     {
       "id": "tag_8",
@@ -120,7 +146,16 @@
     {
       "id": "eta",
       "label": "对象/热层/ETA",
-      "category": "research_object"
+      "category": "research_object",
+      "aliases": [
+        "ETA",
+        "赤道热层异常",
+        "equatorial thermosphere anomaly"
+      ],
+      "patterns": [
+        "赤道热层异常",
+        "\\bequatorial\\s+thermosphere\\s+anomaly\\b"
+      ]
     },
     {
       "id": "tag_97",
@@ -298,6 +333,24 @@
       "category": "research_object"
     },
     {
+      "id": "tag_182",
+      "label": "对象/极区/极光/流光",
+      "category": "research_object",
+      "aliases": [
+        "极光流光",
+        "流光",
+        "auroral streamer",
+        "auroral streamers",
+        "streamer",
+        "streamers"
+      ],
+      "patterns": [
+        "极光流光",
+        "\\bauroral\\s+streamers?\\b",
+        "(?<![A-Za-z0-9])streamers?(?![A-Za-z0-9])"
+      ]
+    },
+    {
       "id": "tag_115",
       "label": "对象/极区/等离子体对流",
       "category": "research_object"
@@ -410,7 +463,18 @@
     {
       "id": "tag_138",
       "label": "对象/日地耦合",
-      "category": "research_object"
+      "category": "research_object",
+      "aliases": [
+        "日地耦合",
+        "太阳-地球相互作用",
+        "solar-terrestrial interactions",
+        "solar-terrestrial interaction"
+      ],
+      "patterns": [
+        "日地耦合",
+        "太阳[-－—]地球.{0,8}(?:相互作用|耦合|联系)",
+        "\\bsolar-?terrestrial\\s+interactions?\\b"
+      ]
     },
     {
       "id": "tag_139",
@@ -588,9 +652,14 @@
       "category": "research_object"
     },
     {
-      "id": "tag_25",
-      "label": "对象/行星空间环境",
-      "category": "research_object"
+      "id": "tag_183",
+      "label": "对象/行星际环境",
+      "category": "research_object",
+      "aliases": [
+        "对象/行星空间环境",
+        "行星空间环境",
+        "行星际环境"
+      ]
     },
     {
       "id": "tag_27",
@@ -833,9 +902,47 @@
       "category": "event_driver"
     },
     {
+      "id": "satellite_conjunction",
+      "label": "事件/卫星会合",
+      "category": "event_driver",
+      "aliases": [
+        "卫星会合",
+        "conjunction",
+        "satellite conjunction",
+        "COLA",
+        "collision avoidance"
+      ],
+      "patterns": [
+        "satellite conjunction",
+        "conjunction assessment",
+        "collision avoidance",
+        "\\bcola\\b",
+        "卫星会合",
+        "碰撞规避"
+      ]
+    },
+    {
       "id": "tag_14",
       "label": "事件/磁重联",
       "category": "event_driver"
+    },
+    {
+      "id": "tag_76",
+      "label": "事件/地震",
+      "category": "event_driver",
+      "aliases": [
+        "地震",
+        "强震",
+        "earthquake",
+        "earthquakes",
+        "seismicity"
+      ],
+      "patterns": [
+        "\\bearthquake(?:s)?\\b",
+        "\\bseismicity\\b",
+        "地震",
+        "强震"
+      ]
     },
     {
       "id": "tag_26",
@@ -880,7 +987,33 @@
     {
       "id": "dst",
       "label": "指数/Dst",
-      "category": "index_control"
+      "category": "index_control",
+      "aliases": [
+        "Dst",
+        "D指数",
+        "Dindex",
+        "D-index"
+      ],
+      "patterns": [
+        "(?<![A-Za-z0-9])d\\s*(?:st|指数|[-_]?index\\s*(?:st)?)(?![A-Za-z0-9])"
+      ]
+    },
+    {
+      "id": "kp",
+      "label": "指数/Kp",
+      "category": "index_control",
+      "aliases": [
+        "Kp",
+        "Kp指数",
+        "Kpindex",
+        "K指数",
+        "Kindex",
+        "K-index"
+      ],
+      "patterns": [
+        "(?<![A-Za-z0-9])kp\\s*(?:指数|[-_]?index)?(?![A-Za-z0-9])",
+        "(?<![A-Za-z0-9])k\\s*(?:p|指数|[-_]?index\\s*(?:p)?)(?![A-Za-z0-9])"
+      ]
     },
     {
       "id": "sym_h",
@@ -1005,7 +1138,17 @@
     {
       "id": "swarm",
       "label": "仪器/Swarm",
-      "category": "instrument_data"
+      "category": "instrument_data",
+      "aliases": [
+        "Swarm",
+        "Swarm-A",
+        "Swarm-B",
+        "Swarm-C",
+        "卫星/Swarm"
+      ],
+      "patterns": [
+        "\\bswarm(?:[- ]?[abc])?\\b"
+      ]
     },
     {
       "id": "grace",
@@ -1101,6 +1244,25 @@
       "patterns": [
         "magnetometer",
         "magnetometers"
+      ]
+    },
+    {
+      "id": "all_sky_camera",
+      "label": "仪器/全天空相机",
+      "category": "instrument_data",
+      "aliases": [
+        "全天空相机",
+        "全天空成像仪",
+        "all-sky camera",
+        "all sky camera",
+        "all-sky imager",
+        "all sky imager"
+      ],
+      "patterns": [
+        "all[- ]sky camera",
+        "all[- ]sky imager",
+        "全天空相机",
+        "全天空成像仪"
       ]
     },
     {
@@ -1435,6 +1597,57 @@
       "category": "model_method"
     },
     {
+      "id": "snmc",
+      "label": "方法/SNMC",
+      "category": "model_method",
+      "aliases": [
+        "SNMC",
+        "SNMC算法",
+        "shift neighborhood matching correlation",
+        "移位邻域匹配相关"
+      ],
+      "patterns": [
+        "(?<![A-Za-z0-9])snmc(?![A-Za-z0-9])",
+        "shift\\s*neighborhood\\s*matching\\s*correlation",
+        "移位邻域匹配相关"
+      ]
+    },
+    {
+      "id": "secs",
+      "label": "方法/SECS",
+      "category": "model_method",
+      "aliases": [
+        "SECS",
+        "SECS技术",
+        "Spherical Elementary Current System",
+        "球面基本电流系统"
+      ],
+      "patterns": [
+        "(?<![A-Za-z0-9])secs(?![A-Za-z0-9])",
+        "Spherical\\s+Elementary\\s+Current\\s+System",
+        "球面基本电流系统"
+      ]
+    },
+    {
+      "id": "ada",
+      "label": "方法/ADA",
+      "category": "model_method",
+      "aliases": [
+        "ADA",
+        "ADA技术",
+        "上升-下降加速度分析",
+        "升降轨加速度分析",
+        "Ascending-Descending Accelerometry",
+        "Ascending Descending Accelerometry"
+      ],
+      "patterns": [
+        "(?<![A-Za-z0-9])ada(?![A-Za-z0-9])",
+        "上升[-－—]?下降.{0,8}加速度分析",
+        "升降轨.{0,8}加速度分析",
+        "\\bascending[-\\s]+descending\\s+accelerometry\\b"
+      ]
+    },
+    {
       "id": "tag_175",
       "label": "方法/误差估计",
       "category": "model_method"
@@ -1565,6 +1778,22 @@
       "category": "model_method"
     },
     {
+      "id": "nrlmsise_00",
+      "label": "模型/NRLMSISE-00",
+      "category": "model_method",
+      "aliases": [
+        "NRLMSISE-00",
+        "NRLMSISE 00",
+        "NRLMSISE",
+        "MSISE-00"
+      ],
+      "patterns": [
+        "nrlmsise[- ]?00",
+        "\\bnrlmsise\\b",
+        "msise[- ]?00"
+      ]
+    },
+    {
       "id": "tag_181",
       "label": "模型/修正",
       "category": "model_method"
@@ -1588,6 +1817,22 @@
       "id": "timegcm",
       "label": "模型/TIMEGCM",
       "category": "model_method"
+    },
+    {
+      "id": "waccm",
+      "label": "模型/WACCM",
+      "category": "model_method",
+      "aliases": [
+        "WACCM",
+        "SD-WACCM",
+        "Specified Dynamics WACCM",
+        "Whole Atmosphere Community Climate Model"
+      ],
+      "patterns": [
+        "\\bsd[- ]?waccm\\b",
+        "\\bwaccm\\b",
+        "whole atmosphere community climate model"
+      ]
     },
     {
       "id": "waccm_x",
@@ -1746,6 +1991,65 @@
       "id": "tag_88",
       "label": "特征/高度差异",
       "category": "result_feature"
+    },
+    {
+      "id": "tag_89",
+      "label": "特征/时滞相关",
+      "category": "result_feature",
+      "aliases": [
+        "时滞相关",
+        "time-lagged correlation",
+        "time lag correlation"
+      ],
+      "patterns": [
+        "时滞相关",
+        "延迟.{0,8}(?:相关|窗口|天)",
+        "time[-\\s]?lag(?:ged)?\\s*correlation",
+        "\\blag(?:ged)?\\s+(?:day|window|correlation)"
+      ]
+    },
+    {
+      "id": "tag_90",
+      "label": "特征/概率增益",
+      "category": "result_feature",
+      "aliases": [
+        "概率增益",
+        "probability gain"
+      ],
+      "patterns": [
+        "概率增益",
+        "\\bprobability\\s+gain\\b"
+      ]
+    },
+    {
+      "id": "tag_91",
+      "label": "特征/电渗流",
+      "category": "result_feature",
+      "aliases": [
+        "电渗流",
+        "electrokinetic",
+        "electroosmotic"
+      ],
+      "patterns": [
+        "电渗流",
+        "\\belectrokinetic\\b",
+        "\\belectroosmotic\\b"
+      ]
+    },
+    {
+      "id": "tag_173",
+      "label": "特征/逆压电效应",
+      "category": "result_feature",
+      "aliases": [
+        "逆压电效应",
+        "inverse piezoelectric effect",
+        "inverse ofpiezoelectric effect"
+      ],
+      "patterns": [
+        "逆压电效应",
+        "\\binverse\\s+piezoelectric\\s+effect\\b",
+        "\\binverse\\s+of?piezoelectric\\s+effect(?:s)?\\b"
+      ]
     },
     {
       "id": "tag_17",

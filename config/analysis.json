@@ -1,5 +1,5 @@
 {
-  "provider": "codex_local",
+  "provider": "ollama_api",
   "article_summaries": {
     "reasoning_effort": "medium"
   },
@@ -34,7 +34,14 @@
   "ollama_api": {
     "model": "gemma4:26b",
     "base_url": "http://127.0.0.1:11434/api/chat",
-    "timeout_seconds": 300
+    "timeout_seconds": 500,
+    "keep_alive": 0,
+    "num_ctx": 32768,
+    "num_predict": 4096,
+    "deep_read_num_predict": 8192,
+    "deep_read_quality_mode": true,
+    "deep_read_stage_keep_alive": "1m",
+    "deep_read_final_max_chars": 12000
   },
   "chatgpt_web_manual": {}
 }

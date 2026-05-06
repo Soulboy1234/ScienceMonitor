@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 
+from .article_summary_meta import JOURNAL_ABBREVIATIONS, abbreviate_journal_name
 from .models import ArticleSummaryResult
 
 
@@ -24,7 +25,14 @@ THEME_GENERIC_TAGS = {
     "对象/日地耦合",
     "事件",
 }
-THEME_BLOCKED_PREFIXES = ("对象/日地耦合",)
+THEME_BLOCKED_PREFIXES = (
+    "对象/日地耦合",
+    "对象/物理机制",
+    "对象/现象",
+    "对象/空间天气",
+    "对象/评估",
+    "对象/卫星",
+)
 THEME_BLOCKED_DISPLAYS = {"日地耦合", "数据分析", "统计研究"}
 TOPIC_WEAK_OBJECT_DISPLAYS = {
     "地磁",
@@ -32,6 +40,7 @@ TOPIC_WEAK_OBJECT_DISPLAYS = {
     "太阳/日球层",
     "磁层/弓激波",
 }
+REPORT_JOURNAL_DISPLAY_NAMES = {short: full for full, short in JOURNAL_ABBREVIATIONS.items()}
 
 
 @dataclass(frozen=True)
@@ -88,6 +97,21 @@ def _summary_row_value(summary: ArticleSummaryResult, key: str) -> str:
         return ""
 
 
+def normalize_report_journal_name(name: object) -> str:
+    clean = str(name or "").strip()
+    if not clean:
+        return "未知期刊"
+    return abbreviate_journal_name(clean)
+
+
+def display_report_journal_name(name: object) -> str:
+    clean = str(name or "").strip()
+    if not clean:
+        return "未知期刊"
+    normalized = normalize_report_journal_name(clean)
+    return REPORT_JOURNAL_DISPLAY_NAMES.get(normalized, clean)
+
+
 def _prefer_more_specific_tags(tags: list[str]) -> list[str]:
     ordered = sorted({tag for tag in tags if tag}, key=lambda item: (_theme_depth(item), len(item)), reverse=True)
     selected: list[str] = []
@@ -115,7 +139,7 @@ def collect_report_theme_buckets(
     grouped: dict[str, list[ArticleSummaryResult]] = defaultdict(list)
     journal_counts: dict[str, Counter[str]] = defaultdict(Counter)
     for summary in summaries:
-        source_name = _summary_row_value(summary, "source_name") or _summary_row_value(summary, "journal_title") or "未知期刊"
+        source_name = normalize_report_journal_name(_summary_row_value(summary, "source_name") or _summary_row_value(summary, "journal_title") or "未知期刊")
         for tag in theme_tags_for_summary(summary):
             grouped[tag].append(summary)
             journal_counts[tag][source_name] += 1

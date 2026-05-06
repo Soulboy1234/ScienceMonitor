@@ -33,6 +33,9 @@ def write_config_ui_runtime_state(project: Path, *, host: str, port: int, url: s
         report_job = existing.get("report_job")
         if isinstance(report_job, dict):
             payload["report_job"] = report_job
+        deep_read_job = existing.get("deep_read_job")
+        if isinstance(deep_read_job, dict):
+            payload["deep_read_job"] = deep_read_job
         _write_state_unlocked(path, payload)
 
 
@@ -71,6 +74,25 @@ def clear_weekly_report_job_state(project: Path) -> dict[str, Any]:
     return update_config_ui_runtime_state(project, _apply)
 
 
+def set_deep_read_job_state(project: Path, updates: dict[str, Any]) -> dict[str, Any]:
+    def _apply(payload: dict[str, Any]) -> None:
+        job = payload.get("deep_read_job")
+        if not isinstance(job, dict):
+            job = {}
+        job.update(updates)
+        job["updated_at"] = _now_iso()
+        payload["deep_read_job"] = job
+
+    return update_config_ui_runtime_state(project, _apply)
+
+
+def clear_deep_read_job_state(project: Path) -> dict[str, Any]:
+    def _apply(payload: dict[str, Any]) -> None:
+        payload.pop("deep_read_job", None)
+
+    return update_config_ui_runtime_state(project, _apply)
+
+
 def active_config_ui_task(project: Path) -> dict[str, Any]:
     state = read_config_ui_runtime_state(project)
     return _active_task_from_payload(state)
@@ -84,6 +106,15 @@ def _active_task_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
             "label": "周报任务",
             "step": str(report_job.get("step", "") or "处理中"),
             "message": str(report_job.get("message", "") or ""),
+            "status": "running",
+        }
+    deep_read_job = payload.get("deep_read_job")
+    if isinstance(deep_read_job, dict) and str(deep_read_job.get("status", "") or "") == "running":
+        return {
+            "kind": "deep_read",
+            "label": str(deep_read_job.get("label", "") or "深度解读"),
+            "step": str(deep_read_job.get("step", "") or "处理中"),
+            "message": str(deep_read_job.get("message", "") or ""),
             "status": "running",
         }
     return {}
