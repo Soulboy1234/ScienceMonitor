@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import pathlib
 import sys
 import tempfile
@@ -472,8 +473,8 @@ class ArticleSummariesTest(unittest.TestCase):
             )
             older.write_text(content, encoding="utf-8")
             newer.write_text(content, encoding="utf-8")
-            older.touch()
-            newer.touch()
+            os.utime(older, ns=(1_000_000_000, 1_000_000_000))
+            os.utime(newer, ns=(2_000_000_000, 2_000_000_000))
 
             indexed = index_existing_summary_files(output_dir, root=root)
 
@@ -516,8 +517,8 @@ class ArticleSummariesTest(unittest.TestCase):
             )
             older.write_text(content, encoding="utf-8")
             newer.write_text(content, encoding="utf-8")
-            older.touch()
-            newer.touch()
+            os.utime(older, ns=(1_000_000_000, 1_000_000_000))
+            os.utime(newer, ns=(2_000_000_000, 2_000_000_000))
 
             indexed = index_existing_summary_files(output_dir, root=root)
 

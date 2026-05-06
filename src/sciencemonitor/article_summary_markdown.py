@@ -118,7 +118,7 @@ def index_existing_summary_files(output_dir: Path, *, root: Path | None = None) 
 
     indexed: dict[str, Path] = {}
     for doi, candidates in grouped.items():
-        canonical = max(candidates, key=lambda item: (item.stat().st_mtime, item.name))
+        canonical = max(candidates, key=lambda item: (item.stat().st_mtime_ns, item.name))
         indexed[doi] = canonical
         for duplicate in candidates:
             if duplicate == canonical:
