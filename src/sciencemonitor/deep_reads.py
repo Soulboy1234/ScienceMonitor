@@ -70,6 +70,7 @@ from .tag_governance import refresh_pending_tag_files
 from .utils import clean_abstract_text, clean_title_text
 
 DEEP_READ_EXCLUDED_SUMMARY_TAG_PREFIXES = ("信息来源/",)
+MAX_PDF_DOWNLOAD_BYTES = 100 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -584,6 +585,7 @@ def _resolve_full_text(
             return FullTextResolution(False, "provided_pdf", message=f"提供的 PDF 不存在：{explicit_pdf}")
         extracted = _extract_pdf_text(project, explicit_pdf, runtime)
         if extracted:
+            pdf_page_limit = _runtime_pdf_page_limit(runtime)
             write_article_source_cache(
                 project,
                 doi=metadata.get("doi", ""),
@@ -594,12 +596,13 @@ def _resolve_full_text(
                 pdf_path=str(explicit_pdf),
                 scientific_text=extracted,
                 summary_packet="",
+                pdf_page_limit=pdf_page_limit,
             )
             return FullTextResolution(True, "provided_pdf", full_text=extracted, pdf_path=explicit_pdf, source_url=str(explicit_pdf))
         return FullTextResolution(False, "provided_pdf", message="提供的 PDF 未能提取出足够文本，请确认 PDF 可读。")
 
     cached = load_article_source_cache(project, doi=metadata.get("doi", ""), title=metadata.get("title", ""))
-    if cached and str(cached.get("scientific_text", "")).strip():
+    if cached and str(cached.get("scientific_text", "")).strip() and _cached_source_matches_runtime(cached, runtime):
         cached_pdf = Path(str(cached.get("pdf_path", "") or "")).expanduser() if str(cached.get("pdf_path", "") or "").strip() else None
         if cached_pdf is not None and not cached_pdf.exists():
             cached_pdf = None
@@ -634,6 +637,7 @@ def _resolve_full_text(
             continue
         extracted = _extract_pdf_text(project, downloaded, runtime)
         if extracted:
+            pdf_page_limit = _runtime_pdf_page_limit(runtime)
             write_article_source_cache(
                 project,
                 doi=metadata.get("doi", ""),
@@ -644,6 +648,7 @@ def _resolve_full_text(
                 pdf_path=str(downloaded),
                 scientific_text=extracted,
                 summary_packet="",
+                pdf_page_limit=pdf_page_limit,
             )
             return FullTextResolution(True, "downloaded_pdf", full_text=extracted, pdf_path=downloaded, source_url=pdf_url)
     if snapshot.is_full_text:
@@ -677,7 +682,7 @@ def _resolve_full_text(
 
 def _download_pdf(http: HTTPClient, pdf_url: str, project: Path) -> Path | None:
     try:
-        raw = http.get_bytes(pdf_url, headers={"Accept": "application/pdf,*/*"})
+        raw = http.get_bytes(pdf_url, headers={"Accept": "application/pdf,*/*"}, max_bytes=MAX_PDF_DOWNLOAD_BYTES)
     except Exception:
         return None
     if not raw.startswith(b"%PDF"):
@@ -693,11 +698,11 @@ def _download_pdf(http: HTTPClient, pdf_url: str, project: Path) -> Path | None:
 
 
 def _extract_pdf_text(project: Path, pdf_path: Path, runtime: dict) -> str:
-    extracted = extract_pdf_scientific_text(pdf_path, project_root=project)
+    page_limit = _runtime_pdf_page_limit(runtime)
+    extracted = extract_pdf_scientific_text(pdf_path, project_root=project, page_limit=page_limit)
     if extracted:
         return extracted
     pdftotext_bin = shutil.which("pdftotext") or str(project / ".venv" / "bin" / "pdftotext")
-    page_limit = int(runtime.get("deep_read", {}).get("pdf_page_limit", 40) or 40)
     command = [pdftotext_bin, "-nopgbrk", "-f", "1"]
     if page_limit > 0:
         command.extend(["-l", str(page_limit)])
@@ -712,6 +717,27 @@ def _extract_pdf_text(project: Path, pdf_path: Path, runtime: dict) -> str:
     except Exception:
         return ""
     return clean_abstract_text(result.stdout)
+
+
+def _runtime_pdf_page_limit(runtime: dict) -> int:
+    try:
+        value = int(runtime.get("deep_read", {}).get("pdf_page_limit", 40))
+    except (TypeError, ValueError):
+        return 40
+    return max(value, 0)
+
+
+def _cached_source_matches_runtime(cached: dict, runtime: dict) -> bool:
+    source_kind = str(cached.get("source_kind", "") or "")
+    if source_kind not in {"provided_pdf", "downloaded_pdf", "local_pdf_full_text"}:
+        return True
+    if "pdf_page_limit" not in cached:
+        return False
+    try:
+        cached_limit = int(cached.get("pdf_page_limit"))
+    except (TypeError, ValueError):
+        return False
+    return cached_limit == _runtime_pdf_page_limit(runtime)
 
 
 def _find_related_summary(project: Path, doi: str) -> Path | None:

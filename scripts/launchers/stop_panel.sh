@@ -9,7 +9,7 @@ STATE_PATH="$SUPPORT_ROOT/config_ui_state.json"
 HOST="127.0.0.1"
 BASE_PORT=8765
 MAX_PORT_OFFSET=9
-TITLE_MARKER="<title>ScienceMonitor Config UI</title>"
+HEALTH_MARKER="ScienceMonitor config UI OK"
 
 mkdir -p "$SUPPORT_ROOT"
 cd "$PROJECT_ROOT" || exit 0
@@ -51,9 +51,9 @@ clear_state() {
 
 is_ui() {
   local port="$1"
-  local html
-  html=$(/usr/bin/curl -fsS --max-time 2 "http://$HOST:$port/" 2>/dev/null || true)
-  [[ "$html" == *"$TITLE_MARKER"* ]]
+  local body
+  body=$(/usr/bin/curl -fsS --max-time 2 "http://$HOST:$port/healthz" 2>/dev/null || true)
+  [[ "$body" == *"$HEALTH_MARKER"* ]]
 }
 
 find_running_port() {
@@ -75,7 +75,10 @@ find_running_port() {
 
 request_shutdown() {
   local port="$1"
-  /usr/bin/curl -fsS --max-time 2 -X POST "http://$HOST:$port/shutdown-ui" >/dev/null 2>&1
+  local token
+  token="$(read_state_field token 2>/dev/null || true)"
+  [ -n "$token" ] || return 1
+  /usr/bin/curl -fsS --max-time 2 -X POST "http://$HOST:$port/shutdown-ui?token=$token" >/dev/null 2>&1
 }
 
 wait_until_stopped() {

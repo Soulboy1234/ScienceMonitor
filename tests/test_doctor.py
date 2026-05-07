@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pathlib
+import os
 import sys
 import tempfile
 import unittest
@@ -58,6 +59,7 @@ class DoctorTest(unittest.TestCase):
             self.assertEqual(statuses["daily_report_template"], "ok")
             self.assertEqual(statuses["deep_reading_report_template"], "ok")
             self.assertEqual(statuses["focus_tags"], "ok")
+            self.assertEqual(statuses["output_safety"], "ok")
 
     def test_warns_when_runtime_template_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -113,6 +115,24 @@ class DoctorTest(unittest.TestCase):
             self.assertEqual(report["provider_status"]["provider"], "ollama_api")
             self.assertFalse(report["provider_status"]["ollama_available"])
             self.assertTrue(any("Ollama" in item for item in report["warnings"]))
+
+    def test_warns_when_output_deletions_enabled_for_external_output_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir, tempfile.TemporaryDirectory() as outdir:
+            root = pathlib.Path(tmpdir)
+            _write_doctor_project(root)
+            runtime_path = root / "config" / "runtime.json"
+            runtime = json.loads(runtime_path.read_text(encoding="utf-8"))
+            runtime.setdefault("safety", {})["allow_output_deletions"] = True
+            runtime_path.write_text(json.dumps(runtime, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            local_paths = root / "config" / "local.paths.json"
+            local_paths.write_text(json.dumps({"output_root": outdir}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            with mock.patch.dict(os.environ, {}, clear=False):
+                report = run_doctor(root, strict_runtime=False)
+
+            checks = {item["id"]: item for item in report["consistency_checks"]}
+            self.assertEqual(checks["output_safety"]["status"], "warning")
+            self.assertTrue(any("输出删除保护" in item for item in report["warnings"]))
 
 
 if __name__ == "__main__":

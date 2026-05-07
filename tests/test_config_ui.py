@@ -7,11 +7,16 @@ import pathlib
 import re
 import sys
 import tempfile
+import threading
 import unittest
 from dataclasses import dataclass
 from datetime import date
+from http.server import ThreadingHTTPServer
 from types import SimpleNamespace
 from unittest import mock
+from urllib.error import HTTPError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -19,15 +24,26 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from sciencemonitor.config_ui import (
+    _build_handler,
     _guard_no_conflicting_ui_task,
+    _is_loopback_host,
+    _parse_form_data,
     _redirect_fragment_for_action,
     _render_page,
     _run_deep_read_action,
     _run_deep_read_folder_action,
     _run_manual_import_action,
     _save_from_form,
+    serve_config_ui,
 )
-from sciencemonitor.config_ui_actions import _run_report_action, _start_report_action, _uploaded_pdf_title
+from sciencemonitor.config_ui_actions import (
+    _run_manual_import_upload_action,
+    _run_report_action,
+    _save_uploaded_pdf,
+    _save_uploaded_pdf_folder,
+    _start_report_action,
+    _uploaded_pdf_title,
+)
 from sciencemonitor.config_ui_page_sections import _build_token_tick_values, _token_chart_height_percent, _token_chart_label_indices
 from sciencemonitor.config_ui_runtime import read_config_ui_runtime_state, set_deep_read_job_state, set_weekly_report_job_state, write_config_ui_runtime_state
 from sciencemonitor.config_ui_deep_read_jobs import _run_deep_read_job_worker
@@ -61,6 +77,7 @@ def _write_ui_project(root: pathlib.Path) -> None:
         encoding="utf-8",
     )
     (root / "config" / "paths.json").write_text('{"output_root":"out"}\n', encoding="utf-8")
+    (root / "config" / "sources.json").write_text((ROOT / "config" / "sources.json").read_text(encoding="utf-8"), encoding="utf-8")
 
 
 @dataclass
@@ -231,15 +248,15 @@ class ConfigUITest(unittest.TestCase):
         self.assertIn("weekly-report-form-card", html)
         self.assertIn("weekly-report-journals-card", html)
         self.assertIn('class="form-stack"', html)
-        self.assertIn("请求生成面板", html)
+        self.assertIn('data-ui-panel="manual-create"', html)
         self.assertIn('action="/manual-llm-create"', html)
         self.assertIn('action="/manual-llm-import-upload"', html)
         self.assertIn('name="deep_read_pdf_page_limit"', html)
-        self.assertIn("分析后端与服务", html)
-        self.assertIn("标签管理", html)
-        self.assertIn("显示正式标签", html)
-        self.assertIn("显示预选标签", html)
-        self.assertIn("标签转正", html)
+        self.assertIn('data-ui-panel="provider-settings"', html)
+        self.assertIn('data-ui-panel="tag-management"', html)
+        self.assertIn('data-tag-governance-link="formal"', html)
+        self.assertIn('data-tag-governance-link="pending"', html)
+        self.assertIn('data-tag-action="promote-pending"', html)
         self.assertIn('data-provider-select', html)
         self.assertNotIn('value="chatgpt_web_manual"', html)
         self.assertIn("OpenRouter API", html)
@@ -253,6 +270,86 @@ class ConfigUITest(unittest.TestCase):
         self.assertNotIn('class="nav-meta"', html)
         self.assertIn("运行状态", html)
         self.assertIn("当前无运行任务", html)
+
+    def test_render_page_includes_config_ui_token_in_forms_and_links(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            _write_ui_project(root)
+            report_path = root / "out" / "research_reports" / "latest.md"
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            report_path.write_text("# report", encoding="utf-8")
+            html = _render_page(
+                project=root,
+                runtime={
+                    "features": {"weekly_report_enabled": True},
+                    "cli_defaults": {"daily_days_back": 7, "daily_max_per_source": 20, "report_window_days": 7},
+                    "deep_read": {"search_full_text_when_pdf_missing": True, "pdf_page_limit": 0},
+                },
+                analysis={"provider": "codex_local", "codex_local": {"model": ""}},
+                paths={"output_root": "out", "effective_output_root": str(root / "out"), "local_output_root": "", "local_paths_config": ""},
+                doctor={"warnings": [], "current_python": "/tmp/python", "provider_status": {}},
+                status={},
+                ui_state={
+                    "counts": {"article_summaries": 0, "deep_reads": 0, "reports": 1, "manual_files": 0},
+                    "journals": [],
+                    "journal_groups": [],
+                    "token_usage": "今天 0（0次） / 本周 0（0次） / 本月 0（0次）",
+                    "token_usage_chart": {"max_tokens": 0, "providers": [], "days": []},
+                    "latest_report": str(report_path),
+                },
+                ui_token="secret-token",
+            )
+
+        self.assertIn('meta name="sciencemonitor-ui-token" content="secret-token"', html)
+        self.assertIn('name="_ui_token" value="secret-token"', html)
+        self.assertIn('action="/run-report?token=secret-token"', html)
+        self.assertIn('href="/local-file?', html)
+        self.assertIn("token=secret-token", html)
+        self.assertIn("当前 PDF 页数限制</strong><span>全部</span>", html)
+
+    def test_config_ui_http_requires_token_except_healthz(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            _write_ui_project(root)
+            report_path = root / "out" / "research_reports" / "latest.md"
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            report_path.write_text("# report", encoding="utf-8")
+            server = ThreadingHTTPServer(("127.0.0.1", 0), _build_handler(root, "secret-token"))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base_url = f"http://127.0.0.1:{server.server_address[1]}"
+            try:
+                self.assertIn("ScienceMonitor config UI OK", urlopen(base_url + "/healthz").read().decode("utf-8"))
+                with self.assertRaises(HTTPError) as missing_status:
+                    urlopen(base_url + "/ui-status")
+                self.assertEqual(missing_status.exception.code, 403)
+                with urlopen(base_url + "/ui-status?token=secret-token") as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                self.assertIn("report_job", payload)
+                local_href = base_url + "/local-file?" + urlencode({"path": str(report_path), "token": "secret-token"})
+                with urlopen(local_href) as response:
+                    self.assertIn("# report", response.read().decode("utf-8"))
+                forbidden_href = base_url + "/local-file?" + urlencode({"path": str(root / "config" / "analysis.json"), "token": "secret-token"})
+                with self.assertRaises(HTTPError) as forbidden:
+                    urlopen(forbidden_href)
+                self.assertEqual(forbidden.exception.code, 403)
+                with self.assertRaises(HTTPError) as missing_post:
+                    urlopen(Request(base_url + "/shutdown-ui", method="POST", data=b""))
+                self.assertEqual(missing_post.exception.code, 403)
+                with urlopen(Request(base_url + "/shutdown-ui?token=secret-token", method="POST", data=b"")) as response:
+                    self.assertEqual(response.status, 200)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=3)
+
+    def test_config_ui_rejects_non_loopback_host_by_default(self) -> None:
+        self.assertTrue(_is_loopback_host("127.0.0.1"))
+        self.assertTrue(_is_loopback_host("localhost"))
+        self.assertFalse(_is_loopback_host("0.0.0.0"))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self.assertRaisesRegex(ValueError, "默认只允许绑定"):
+                serve_config_ui(pathlib.Path(tmpdir), host="0.0.0.0", port=0, open_browser=False)
 
     def test_render_page_shows_local_paths_and_manual_status(self) -> None:
         html = _render_page(
@@ -879,6 +976,40 @@ class ConfigUITest(unittest.TestCase):
 
         self.assertEqual(result["kind"], "ok")
         self.assertEqual(observed["title"], "2026 polar convection paper")
+
+    def test_config_ui_rejects_oversized_form_before_parsing(self) -> None:
+        handler = SimpleNamespace(headers={"Content-Length": "10"})
+        with mock.patch("sciencemonitor.config_ui.MAX_CONFIG_UI_FORM_BYTES", 4):
+            with self.assertRaisesRegex(ValueError, "表单内容过大"):
+                _parse_form_data(handler)
+
+    def test_manual_response_upload_has_size_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            _write_ui_project(root)
+            upload = SimpleNamespace(filename="response.json", file=io.BytesIO(b"12345"))
+            with mock.patch("sciencemonitor.config_ui_actions.MAX_MANUAL_RESPONSE_UPLOAD_BYTES", 4):
+                with self.assertRaisesRegex(ValueError, "人工响应 JSON 过大"):
+                    _run_manual_import_upload_action(root, {"manual_request_id": ["req"]}, {"manual_response_upload": upload})
+
+    def test_pdf_upload_has_size_limit(self) -> None:
+        upload = SimpleNamespace(filename="paper.pdf", type="application/pdf", file=io.BytesIO(b"%PDF-12345"))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            with mock.patch("sciencemonitor.config_ui_actions.MAX_SINGLE_PDF_UPLOAD_BYTES", 4):
+                with self.assertRaisesRegex(ValueError, "PDF 上传 过大"):
+                    _save_uploaded_pdf(root, upload)
+
+    def test_pdf_folder_upload_limits_file_count(self) -> None:
+        uploads = [
+            SimpleNamespace(filename="a.pdf", type="application/pdf", file=io.BytesIO(b"%PDF")),
+            SimpleNamespace(filename="b.pdf", type="application/pdf", file=io.BytesIO(b"%PDF")),
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            with mock.patch("sciencemonitor.config_ui_actions.MAX_FOLDER_PDF_UPLOAD_COUNT", 1):
+                with self.assertRaisesRegex(ValueError, "一次最多上传 1 个 PDF"):
+                    _save_uploaded_pdf_folder(root, uploads, recursive=True)
 
     def test_render_deep_read_status_alert_on_deep_read_page(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -96,26 +96,34 @@ fixture 位置：
 入口：
 
 ```bash
-./scripts/run_science_monitor.sh harness-check
+./scripts/run_science_monitor.sh harness-check --profile default
 ```
 
 默认检查：
 
+- 资源预检和 pytest
 - `doctor` 的控制面一致性
+- ExecPlan/docs 治理
 - `golden eval`
+
+默认不扫描当前私人 `output_root`，因此也不检查依赖输出库 usage count 的标签治理。需要输出库标签漂移检查时使用：
+
+```bash
+./scripts/run_science_monitor.sh harness-check --profile output
+```
 
 如需把真实案例也纳入当前 gate：
 
 ```bash
-./scripts/run_science_monitor.sh harness-check --include-real-eval
+./scripts/run_science_monitor.sh harness-check --profile release --include-real-eval
 ```
 
 常见变体：
 
 ```bash
-./scripts/run_science_monitor.sh harness-check --include-real-eval --real-case-ids 2023_sw_resnet_tmd
+./scripts/run_science_monitor.sh harness-check --profile release --include-real-eval --real-case-ids 2023_sw_resnet_tmd
 ./scripts/run_science_monitor.sh harness-check --update-golden
-./scripts/run_science_monitor.sh harness-check --include-real-eval --update-real-fixtures
+./scripts/run_science_monitor.sh harness-check --profile release --include-real-eval --update-real-fixtures
 ```
 
 ## 4. 什么时候更新 fixture
@@ -143,7 +151,7 @@ fixture 位置：
 1. 先跑：
 
 ```bash
-./scripts/run_science_monitor.sh harness-check
+./scripts/run_science_monitor.sh harness-check --profile default
 ```
 
 2. 如果只有 `golden eval` 漂移，先确认是否为预期改动

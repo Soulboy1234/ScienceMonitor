@@ -155,7 +155,7 @@ def run_config_ui_visual_review(
                 metrics,
                 prefix="deep_read",
                 missing_message="深度解读页缺少视觉检查所需的关键 DOM 元素。",
-                required_labels=("深度解读任务面板", "PDF 文件夹批量深度解读", "深度解读文章数量统计", "最新深度解读报告"),
+                required_panels=("deep-read-status", "deep-read-single", "deep-read-folder", "deep-read-stats", "latest-deep-read"),
             )
         )
     if "manual-llm" in reviewed_views:
@@ -164,7 +164,7 @@ def run_config_ui_visual_review(
                 metrics,
                 prefix="manual_llm",
                 missing_message="人工中转页缺少视觉检查所需的关键 DOM 元素。",
-                required_labels=("人工中转最近活动", "请求生成面板", "ChatGPT 响应文件解读面板", "通过响应文件生成的最新结果"),
+                required_panels=("manual-activity", "manual-create", "manual-import", "latest-manual-result"),
             )
         )
     if "settings" in reviewed_views:
@@ -173,7 +173,7 @@ def run_config_ui_visual_review(
                 metrics,
                 prefix="settings",
                 missing_message="设置页缺少视觉检查所需的关键 DOM 元素。",
-                required_labels=("分析后端与服务", "路径与输出", "标签管理", "显示正式标签", "显示预选标签", "标签转正", "保存配置并同步 PROJECT_CONFIG.md", "关闭面板服务"),
+                required_panels=("provider-settings", "path-settings", "tag-management"),
             )
         )
     return ConfigUIVisualReviewReport(
@@ -219,19 +219,19 @@ def _run_visual_browser_session(project: Path, sync_playwright, reviewed_views: 
             page,
             metric_prefix="deep_read",
             view_name="deep-read",
-            labels=("深度解读任务面板", "PDF 文件夹批量深度解读", "深度解读文章数量统计", "最新深度解读报告"),
+            panels=("deep-read-status", "deep-read-single", "deep-read-folder", "deep-read-stats", "latest-deep-read"),
         ),
         "manual-llm": lambda page: _collect_simple_view_metrics(
             page,
             metric_prefix="manual_llm",
             view_name="manual-llm",
-            labels=("人工中转最近活动", "请求生成面板", "ChatGPT 响应文件解读面板", "通过响应文件生成的最新结果"),
+            panels=("manual-activity", "manual-create", "manual-import", "latest-manual-result"),
         ),
         "settings": lambda page: _collect_simple_view_metrics(
             page,
             metric_prefix="settings",
             view_name="settings",
-            labels=("分析后端与服务", "路径与输出", "标签管理", "显示正式标签", "显示预选标签", "标签转正", "保存配置并同步 PROJECT_CONFIG.md", "关闭面板服务"),
+            panels=("provider-settings", "path-settings", "tag-management"),
         ),
     }
     metrics: dict[str, float | bool | str | list[str]] = {}
@@ -409,20 +409,19 @@ def _collect_weekly_report_visual_metrics(page) -> dict[str, float | bool]:
     )
 
 
-def _collect_simple_view_metrics(page, *, metric_prefix: str, view_name: str, labels: tuple[str, ...]) -> dict[str, float | bool | list[str]]:
+def _collect_simple_view_metrics(page, *, metric_prefix: str, view_name: str, panels: tuple[str, ...]) -> dict[str, float | bool | list[str]]:
     return page.evaluate(
         """
-        ({ metricPrefix, viewName, labels }) => {
+        ({ metricPrefix, viewName, panels }) => {
           const root = document.querySelector(`.view[data-view="${viewName}"]`);
           const main = document.querySelector('.main');
           if (!root || !main) {
             return { [`${metricPrefix}_missing`]: true };
           }
-          const visibleText = root.innerText || '';
-          const missingLabels = labels.filter((label) => !visibleText.includes(label));
+          const missingPanels = panels.filter((panel) => !root.querySelector(`[data-ui-panel="${panel}"]`));
           return {
             [`${metricPrefix}_missing`]: false,
-            [`${metricPrefix}_missing_labels`]: missingLabels,
+            [`${metricPrefix}_missing_panels`]: missingPanels,
             [`${metricPrefix}_main_scroll_width`]: main.scrollWidth,
             [`${metricPrefix}_main_client_width`]: main.clientWidth,
             [`${metricPrefix}_document_scroll_width`]: document.documentElement.scrollWidth,
@@ -430,7 +429,7 @@ def _collect_simple_view_metrics(page, *, metric_prefix: str, view_name: str, la
           };
         }
         """,
-        {"metricPrefix": metric_prefix, "viewName": view_name, "labels": list(labels)},
+        {"metricPrefix": metric_prefix, "viewName": view_name, "panels": list(panels)},
     )
 
 
@@ -617,18 +616,18 @@ def _evaluate_simple_view_metrics(
     *,
     prefix: str,
     missing_message: str,
-    required_labels: tuple[str, ...],
+    required_panels: tuple[str, ...],
 ) -> list[ConfigUIVisualReviewIssue]:
     metrics_prefix = prefix.replace("-", "_")
     if metrics.get(f"{metrics_prefix}_missing"):
         return [ConfigUIVisualReviewIssue(f"{metrics_prefix}_missing", missing_message)]
     issues: list[ConfigUIVisualReviewIssue] = []
-    missing_labels = metrics.get(f"{metrics_prefix}_missing_labels", [])
-    if isinstance(missing_labels, list) and missing_labels:
+    missing_panels = metrics.get(f"{metrics_prefix}_missing_panels", [])
+    if isinstance(missing_panels, list) and missing_panels:
         issues.append(
             ConfigUIVisualReviewIssue(
-                f"{metrics_prefix}_missing_labels",
-                f"{VIEW_TITLES[prefix.replace('_', '-')]} 页缺少关键文本：{', '.join(str(item) for item in missing_labels)}。",
+                f"{metrics_prefix}_missing_panels",
+                f"{VIEW_TITLES[prefix.replace('_', '-')]} 页缺少关键面板 hook：{', '.join(str(item) for item in missing_panels)}。",
             )
         )
     main_scroll = float(metrics.get(f"{metrics_prefix}_main_scroll_width", 0) or 0)

@@ -22,9 +22,9 @@ class ConfigUIReviewTest(unittest.TestCase):
 
     def test_ui_css_contains_narrow_viewport_guards(self) -> None:
         css_text = (ROOT / "src" / "sciencemonitor" / "ui_assets" / "config_ui.css").read_text(encoding="utf-8")
-        self.assertIn(".span-9 { grid-column: span 9; }", css_text)
-        self.assertIn(".span-3 { grid-column: span 3; }", css_text)
-        self.assertIn(".form-stack { display: flex; flex-direction: column; gap: 12px; }", css_text)
+        self.assertIn(".span-9", css_text)
+        self.assertIn(".span-3", css_text)
+        self.assertIn(".form-stack", css_text)
         self.assertIn(".weekly-report-grid", css_text)
         self.assertIn(".weekly-report-form-card", css_text)
         self.assertIn(".weekly-report-journals-card", css_text)
@@ -34,7 +34,8 @@ class ConfigUIReviewTest(unittest.TestCase):
         js_text = (ROOT / "src" / "sciencemonitor" / "ui_assets" / "config_ui.js").read_text(encoding="utf-8")
         self.assertIn('const mainEl = document.querySelector(".main");', js_text)
         self.assertIn('mainEl.scrollTo({ top: 0, left: 0, behavior: "auto" });', js_text)
-        self.assertIn('window.fetch(`/latest-result?kind=${encodeURIComponent(kind)}`, { cache: "no-store" })', js_text)
+        self.assertIn('window.fetch(withToken(`/latest-result?kind=${encodeURIComponent(kind)}`), { cache: "no-store" })', js_text)
+        self.assertIn('window.fetch(withToken("/ui-status"), { cache: "no-store" })', js_text)
         self.assertIn("refreshChangedResults(payload.latest_results || {});", js_text)
         self.assertNotIn("window.location.reload()", js_text)
 

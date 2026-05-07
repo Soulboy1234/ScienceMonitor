@@ -51,51 +51,30 @@
 命令：
 
 ```bash
-./scripts/run_science_monitor.sh harness-check
+./scripts/run_science_monitor.sh harness-check --profile default
 ```
 
-这是当前统一的 harness gate。它现在会检查：
+这是当前分层 harness gate。`--profile` 决定检查范围：
 
-1. `doctor`
-   - 是否存在运行警告
+- `smoke`：doctor consistency、ExecPlan/docs 轻量检查和核心单元测试子集
+- `default`：日常本地/CI gate，包含资源预检、pytest、harness 自审、ExecPlan/docs 和 golden eval，不扫描私人输出库
+- `output`：输出库治理，检查当前有效 `output_root` 下的标签治理和标签输出漂移；扫描 0 个文件时会显示 `empty`
+- `ui`：配置面板结构、功能和视觉检查，并运行相关 UI 单测子集
+- `release`：发布前完整 gate，包含 default、output、ui 和可选真实案例 fixture 检查
 
-2. `exec_plan_review`
-   - `config/templates/exec_plan_template.md` 是否作为模板 source of truth
-   - `docs/exec_plans/active/` 中计划的结构、标题、勾选项是否合规
-   - 当前活动计划的完成/未完成摘要
+常用命令：
 
-3. `docs_review`
-   - 说明文件是否放在正确目录
-   - 只面向用户阅读的文档是否归入 `docs/user_guides/`
+```bash
+./scripts/run_science_monitor.sh harness-check --profile smoke
+./scripts/run_science_monitor.sh harness-check --profile default
+./scripts/run_science_monitor.sh harness-check --profile output
+./scripts/run_science_monitor.sh harness-check --profile ui
+./scripts/run_science_monitor.sh harness-check --profile release
+```
 
-4. `config_ui_review`
-   - UI 关键 HTML/CSS/JS 片段是否存在
-   - 关键说明和关键类名是否没有回退
+`tag_output_review` 只在 `output` / `release` profile 或显式 `--include-output-review` 时运行。它依赖当前有效 `output_root`，因此不作为默认 CI 硬 gate。
 
-5. `config_ui_functional_review`
-   - 导航切换是否正常
-   - 页面标题是否同步更新
-   - 切换功能页后右侧滚动区是否回到顶部
-   - provider 切换后对应设置面板显隐是否正确
-
-6. `config_ui_visual_review`
-   - 固定视口下的周报页等关键布局是否正常
-   - 卡片是否保持同一行
-   - 是否横向溢出
-   - 表单纵向节奏是否均匀
-   - 截图产物会落到 `log/ui_visual_review/`
-
-7. `golden-eval`
-   - 单篇总结、周报、深度解读的稳定基线是否仍匹配
-
-8. `tag_output_review`
-   - 自动输出中的标签是否仍然符合 formal 风格
-   - 可归并到 formal 的标签是否已经被归并
-   - 是否仍有“应被审核 agent 重写却没重写”的历史标签
-
-9. 可选的 `real-eval fixture` 检查
-   - 只有显式带 `--include-real-eval` 时才检查
-   - 用于真实案例输出和 fixture 漂移治理
+可选的 `real-eval fixture` 仍然只有显式带 `--include-real-eval` 时才检查，用于真实案例输出和 fixture 漂移治理。
 
 它回答的是：**当前项目的治理链路是否整体健康**。
 ### 2.5 `harness-audit`

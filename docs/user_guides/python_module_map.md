@@ -92,7 +92,13 @@
   真实案例结果治理层。负责 fixture 比较、漂移 diff、结果汇总文本和评测输出标准化。
 
 - [harness.py](../../src/sciencemonitor/harness.py)
-  统一 harness gate。负责把 `doctor`、`golden eval` 和可选的 `real eval fixture` 检查收成一个 `harness-check` 入口。
+  分层 harness gate。负责 `smoke/default/output/ui/release` profile 调度、输出库按需检查、pytest 资源预检和可选真实案例 fixture 检查。
+
+- [resource_checks.py](../../src/sciencemonitor/resource_checks.py)
+  资源预检层。负责检查项目根目录和测试临时目录的可用磁盘空间，并解析 `SCIENCEMONITOR_TEST_TMPDIR`。
+
+- [test_runner.py](../../src/sciencemonitor/test_runner.py)
+  测试命令运行层。负责统一调用 pytest，并把测试临时目录落到项目忽略目录或用户指定目录。
 
 - [harness_audit.py](../../src/sciencemonitor/harness_audit.py)
   Harness 自监督层。负责评估当前 harness 是否还覆盖了当前工作流的关键风险点，并输出审计报告。
@@ -169,9 +175,6 @@
 - [tag_governance_review.py](../../src/sciencemonitor/tag_governance_review.py)
   标签治理审查层。负责检查 formal/pending 文件一致性、正式/预选重叠和预选使用次数漂移，并供 harness 调用。
 
-- [tag_candidates.py](../../src/sciencemonitor/tag_candidates.py)
-  预选标签兼容入口。为 CLI 和旧调用点提供 `pending_tags` 工作流的兼容包装。
-
 - [article_index.py](../../src/sciencemonitor/article_index.py)
   输出索引与链接修复主流程。负责维护 Obsidian 输出目录下的 `article_index/`、同步子索引、目录页和链接修复编排。
 
@@ -242,7 +245,7 @@
 - [test_reporting.py](../../tests/test_reporting.py)
   测试周报生成、模板契约和输出结构。
 
-- [test_tag_candidates.py](../../tests/test_tag_candidates.py)
+- [test_tag_governance.py](../../tests/test_tag_governance.py)
   测试预选标签统计、Markdown 渲染和转正流程。
 
 - [test_tag_governance_review.py](../../tests/test_tag_governance_review.py)

@@ -282,6 +282,7 @@ def resolve_summary_source_material(
             pdf_path=str(local_pdf_path or ""),
             scientific_text=scientific_text,
             summary_packet=summary_text,
+            pdf_page_limit=local_pdf_page_limit if source_kind == "local_pdf_full_text" else None,
         )
 
     return SummarySourceMaterial(
@@ -538,8 +539,12 @@ def _extract_local_pdf_text(
         return "", ""
 
     try:
+        command = [pdftotext_bin, "-layout", "-nopgbrk", "-f", "1"]
+        if page_limit > 0:
+            command.extend(["-l", str(page_limit)])
+        command.extend([str(pdf_path), "-"])
         result = subprocess.run(
-            [pdftotext_bin, "-layout", "-nopgbrk", str(pdf_path), "-"],
+            command,
             check=True,
             capture_output=True,
             text=True,
@@ -551,8 +556,8 @@ def _extract_local_pdf_text(
     return scientific_text, summary_packet
 
 
-def extract_pdf_scientific_text(pdf_path: Path, *, project_root: Path | None = None) -> str:
-    scientific_text, _ = _extract_local_pdf_text(pdf_path, project_root=project_root)
+def extract_pdf_scientific_text(pdf_path: Path, *, project_root: Path | None = None, page_limit: int = 6) -> str:
+    scientific_text, _ = _extract_local_pdf_text(pdf_path, project_root=project_root, page_limit=page_limit)
     return scientific_text
 
 
@@ -629,6 +634,7 @@ def write_article_source_cache(
     pdf_path: str,
     scientific_text: str,
     summary_packet: str,
+    pdf_page_limit: int | None = None,
 ) -> str:
     cache_path = article_source_cache_root(project_root) / f"{_article_source_cache_key(doi, title)}.json"
     payload = {
@@ -641,6 +647,8 @@ def write_article_source_cache(
         "scientific_text": scientific_text,
         "summary_packet": summary_packet,
     }
+    if pdf_page_limit is not None:
+        payload["pdf_page_limit"] = pdf_page_limit
     cache_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return str(cache_path)
 

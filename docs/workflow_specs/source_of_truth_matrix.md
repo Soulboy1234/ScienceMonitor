@@ -44,8 +44,8 @@
 | 深度解读 Markdown 合法性检查 | `src/sciencemonitor/deep_reads.py` | `config/templates/deep_reading_report_template.md` | 必需标题、禁用旧区块、文本收口当前都由代码校验 |
 | 报告生成后格式审核规则 | `src/sciencemonitor/article_summaries.py` + `src/sciencemonitor/deep_read_markdown.py` + `src/sciencemonitor/reporting_template.py` | `docs/workflow_specs/report_review_rules.md`、`config/templates/*.md`、相关测试 | 模板表达静态骨架；编号换行、否定转折清理、摘要级来源说明、eval 链接语义等动态规则由 Python 审核层强制执行 |
 | 输出索引和目录挂接 | `src/sciencemonitor/article_index.py` | `docs/workflow_specs/rules.md`、`docs/user_guides/literature_directory_integration_guide.md` | 目录整合原则写在文档里，具体挂接逻辑在代码里 |
-| 运行与评测 gate | `src/sciencemonitor/harness.py` + `src/sciencemonitor/doctor.py` + `src/sciencemonitor/golden_eval.py` + `src/sciencemonitor/real_case_eval.py` | `docs/user_guides/eval_governance_runbook.md` | 运行一致性与评测治理以这些 Python 入口为准 |
-| 代码维护 gate | `src/sciencemonitor/maintenance.py` + `src/sciencemonitor/entropy.py` + `tests/` | `docs/user_guides/maintenance_governance_runbook.md` | 代码级“审核 -> 调整 -> 测试 -> 再审核”以维护循环和测试结果为准 |
+| 运行与评测 gate | `src/sciencemonitor/harness.py` + `src/sciencemonitor/doctor.py` + `src/sciencemonitor/golden_eval.py` + `src/sciencemonitor/real_case_eval.py` + `src/sciencemonitor/resource_checks.py` + `src/sciencemonitor/test_runner.py` | `docs/user_guides/eval_governance_runbook.md` | 运行一致性、profile 分层、资源预检、pytest 调用与评测治理以这些 Python 入口为准 |
+| 代码维护 gate | `src/sciencemonitor/maintenance.py` + `src/sciencemonitor/entropy.py` + `src/sciencemonitor/resource_checks.py` + `tests/` | `docs/user_guides/maintenance_governance_runbook.md` | 代码级“审核 -> 资源/熵预检 -> 测试 -> 再审核”以维护循环和测试结果为准 |
 
 ## 修改时的操作规范
 

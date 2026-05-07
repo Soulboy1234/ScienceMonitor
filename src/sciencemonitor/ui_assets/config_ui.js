@@ -14,6 +14,7 @@
   const tokenUsageRoot = document.querySelector("[data-token-usage-root]");
   const taskTriggerButtons = Array.from(document.querySelectorAll("[data-task-trigger]"));
   const latestResultBodies = Array.from(document.querySelectorAll("[data-latest-result-body]"));
+  const uiToken = (document.querySelector('meta[name="sciencemonitor-ui-token"]') || {}).content || "";
   let pollTimer = null;
   const meta = {
     "overview": { title: "总览" },
@@ -113,6 +114,12 @@
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#39;");
+  }
+
+  function withToken(path) {
+    if (!uiToken) return path;
+    const separator = path.includes("?") ? "&" : "?";
+    return `${path}${separator}token=${encodeURIComponent(uiToken)}`;
   }
 
   function renderWeeklyReportStatus(reportJob) {
@@ -307,7 +314,7 @@
     const target = latestResultBodies.find((node) => node.dataset.latestResultBody === kind);
     if (!target) return;
     try {
-      const response = await window.fetch(`/latest-result?kind=${encodeURIComponent(kind)}`, { cache: "no-store" });
+      const response = await window.fetch(withToken(`/latest-result?kind=${encodeURIComponent(kind)}`), { cache: "no-store" });
       if (!response.ok) return;
       const payload = await response.json();
       target.innerHTML = payload.html || "";
@@ -333,7 +340,7 @@
 
   async function pollUiStatus() {
     try {
-      const response = await window.fetch("/ui-status", { cache: "no-store" });
+      const response = await window.fetch(withToken("/ui-status"), { cache: "no-store" });
       if (!response.ok) return;
       const payload = await response.json();
       const reportJob = payload.report_job || {};

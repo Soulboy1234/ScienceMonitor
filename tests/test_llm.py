@@ -15,6 +15,7 @@ if str(SRC) not in sys.path:
 
 from sciencemonitor import llm as llm_module
 from sciencemonitor.llm import AnalysisEngine, AnalysisProviderInvalidOutput, AnalysisProviderTimeout, AnalysisQuotaExceeded
+from sciencemonitor.llm_api_support import _parse_structured_output
 from sciencemonitor.tags import infer_preferred_tags_from_text
 
 
@@ -713,6 +714,202 @@ class LLMProviderResolutionTest(unittest.TestCase):
             self.assertTrue(normalized["one_sentence_overview"].startswith("这篇文章通过"))
             self.assertNotIn('{"硬结论"', normalized["key_results"])
             self.assertNotIn("[", normalized["limitations"])
+
+    def test_ollama_deep_read_evidence_parser_repairs_markdown_bullet_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = self._prepare_root(tmpdir)
+            engine = AnalysisEngine(root)
+            raw = """{
+  "research_problem": ["研究问题"],
+  "introduction_gap": ["引言空白"],
+- "method_chain": ["方法链"],
+  "hard_findings": ["硬结论一", "硬结论二"],
+  "secondary_findings": ["次级结论"],
+  "reasonable_inferences": ["合理推论"],
+  "open_questions": ["待验证问题"],
+  "contribution_points": ["贡献"],
+  "limitations": ["局限"],
+  "reproducibility_notes": ["复现线索"],
+  "relation_to_my_work_evidence": ["间接相关"],
+  "manual_review_points": ["复核图表"]
+}"""
+
+            payload = _parse_structured_output(
+                "ollama_api",
+                raw,
+                schema=engine._ollama_deep_read_evidence_schema_v2(),
+            )
+
+            self.assertEqual(payload["method_chain"], ["方法链"])
+            self.assertEqual(payload["hard_findings"], ["硬结论一", "硬结论二"])
+
+    def test_ollama_deep_read_evidence_parser_drops_bare_array_fragment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = self._prepare_root(tmpdir)
+            engine = AnalysisEngine(root)
+            raw = """{
+  "research_problem": ["研究问题"],
+  "introduction_gap": ["引言空白"],
+  "method_chain": ["方法链"],
+  "hard_findings": [
+    "硬结论一",
+    ually,
+    "硬结论二"
+  ],
+  "secondary_findings": ["次级结论"],
+  "reasonable_inferences": ["合理推论"],
+  "open_questions": ["待验证问题"],
+  "contribution_points": ["贡献"],
+  "limitations": ["局限"],
+  "reproducibility_notes": ["复现线索"],
+  "relation_to_my_work_evidence": ["间接相关"],
+  "manual_review_points": ["复核图表"]
+}"""
+
+            payload = _parse_structured_output(
+                "ollama_api",
+                raw,
+                schema=engine._ollama_deep_read_evidence_schema_v2(),
+            )
+
+            self.assertEqual(payload["hard_findings"], ["硬结论一", "硬结论二"])
+
+    def test_ollama_deep_read_final_parser_repairs_fence_latex_and_object_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = self._prepare_root(tmpdir)
+            engine = AnalysisEngine(root)
+            raw = r'''```json
+{
+  "chinese_title": "中文题目",
+  "tags": ["对象/辐射带", "方法/机器学习", "指数/Dst"],
+  "paper_type": "研究论文",
+  "one_sentence_overview": "本文识别辐射带电子通量下降的关键驱动因子。",
+  "why": "作者要解决的问题是：解释电子通量 $\le$ 阈值时的控制因素。",
+  "how": "方法结合机器学习和事件分析。",
+  "key_results": {
+    "硬结论": ["通量变化与 $\Delta T$ 有关。", "控制参数包含 $\kappa$。"],
+    "次级结论": ["模型稳定性需要复核。"]
+  },
+  "contribution": ["给出可解释特征排序。"],
+  "limitations": {"论文自身局限": ["样本边界需要复核。"]},
+  "reproducibility": "可复核方法链。",
+  "relation": "与空间天气扰动研究间接相关。",
+  "final_conclusion": "结论需要结合图表复核。",
+  "relation_to_my_work": "间接相关。",
+  "follow_up_questions": ["哪些事件最敏感？"],
+  "needs_manual_review": ["复核公式 $\xi$ 和图表。"],
+  "knowledge_position": "机器学习归因案例。"
+}
+```'''
+
+            payload = _parse_structured_output("ollama_api", raw, schema=engine._deep_read_schema())
+            normalized = engine._normalize_ollama_deep_read_payload(payload)
+
+            self.assertIn("硬结论：\n1. 通量变化与", normalized["key_results"])
+            self.assertIn("\\Delta", normalized["key_results"])
+            self.assertIn("论文自身局限：\n1. 样本边界需要复核。", normalized["limitations"])
+            self.assertIn("1. 哪些事件最敏感？", normalized["follow_up_questions"])
+            self.assertIn("\\xi", normalized["needs_manual_review"])
+
+    def test_ollama_deep_read_structured_retry_runs_after_unrepairable_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = self._prepare_root(tmpdir)
+            engine = AnalysisEngine(root)
+            schema = {
+                "name": "sample_schema",
+                "schema": {
+                    "type": "object",
+                    "properties": {"body": {"type": "string"}},
+                    "required": ["body"],
+                    "additionalProperties": False,
+                },
+            }
+            calls: list[tuple[str, str]] = []
+
+            def fake_run(prompt, schema_arg, name):
+                calls.append((name, prompt))
+                if len(calls) == 1:
+                    raise AnalysisProviderInvalidOutput(
+                        "ollama_api",
+                        request_name=name,
+                        detail="still broken",
+                        raw_preview='{"body": "unterminated',
+                    )
+                return {"body": "ok"}
+
+            with mock.patch.object(engine, "_run_ollama_structured", side_effect=fake_run):
+                payload = engine._run_ollama_deep_read_structured_with_repair(
+                    "bad prompt",
+                    schema,
+                    "deep_read_sample",
+                    stage="final",
+                    retry_prompt="strict retry prompt",
+                )
+
+            self.assertEqual(payload["body"], "ok")
+            self.assertEqual(calls[0], ("deep_read_sample", "bad prompt"))
+            self.assertEqual(calls[1], ("deep_read_sample_json_retry", "strict retry prompt"))
+
+    def test_ollama_deep_read_revision_invalid_json_keeps_final_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = self._prepare_root(tmpdir)
+            engine = AnalysisEngine(root)
+            engine.provider = "ollama_api"
+            engine.config["provider"] = "ollama_api"
+            calls: list[str] = []
+
+            def fake_run(prompt, schema, name):
+                calls.append(name)
+                if name.startswith("deep_read_evidence_v2_"):
+                    return {
+                        "research_problem": ["问题1", "问题2"],
+                        "introduction_gap": ["空白1", "空白2"],
+                        "method_chain": ["方法1", "方法2"],
+                        "hard_findings": ["硬结论1", "硬结论2"],
+                        "secondary_findings": ["次级1", "次级2"],
+                        "reasonable_inferences": ["推论1", "推论2"],
+                        "open_questions": ["问题1", "问题2"],
+                        "contribution_points": ["贡献1", "贡献2"],
+                        "limitations": ["局限1", "全文抽取缺损"],
+                        "reproducibility_notes": ["复现1", "复现2"],
+                        "relation_to_my_work_evidence": "间接相关。",
+                        "manual_review_points": "需要复核图表和抽取缺损。",
+                    }
+                if name.startswith("deep_read_revision_"):
+                    raise AnalysisProviderInvalidOutput(
+                        "ollama_api",
+                        request_name=name,
+                        detail="broken revision json",
+                    )
+                return {
+                    "chinese_title": "初稿题目",
+                    "tags": ["对象/磁层", "事件/亚暴"],
+                    "paper_type": "理论论文",
+                    "one_sentence_overview": "短。",
+                    "why": "短。",
+                    "how": "短。",
+                    "key_results": "硬结论：\n1. 一个结论。",
+                    "contribution": "短。",
+                    "limitations": "短。",
+                    "reproducibility": "短。",
+                    "relation": "短。",
+                    "final_conclusion": "短。",
+                    "relation_to_my_work": "直接相关。可用于热层密度和卫星阻力。",
+                    "follow_up_questions": "短。",
+                    "needs_manual_review": "短。",
+                    "knowledge_position": "短。",
+                }
+
+            with mock.patch.object(engine, "_run_ollama_structured", side_effect=fake_run):
+                result = engine.analyze_deep_read(
+                    {"title": "Revision Failure", "journal": "JGR: Space Physics", "doi": "10.1000/revision-failure"},
+                    "Introduction\nThis paper identifies a gap.\n2. Results\nThe paper reports results.",
+                )
+
+            self.assertIsNotNone(result)
+            self.assertTrue(any(name.startswith("deep_read_revision_") for name in calls))
+            self.assertIn("Ollama 修订阶段结构化输出无效", result.needs_manual_review)
+            self.assertIn("间接相关", result.relation_to_my_work)
 
     def test_codex_deep_read_does_not_use_ollama_quality_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

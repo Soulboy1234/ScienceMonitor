@@ -21,6 +21,7 @@ from sciencemonitor.golden_eval import GoldenEvalCaseResult
 from sciencemonitor.harness_audit import HarnessAuditReport
 from sciencemonitor.harness import HarnessCheckReport
 from sciencemonitor.maintenance import SubprocessCheckResult, run_maintenance_cycle
+from sciencemonitor.resource_checks import ResourceCheckReport
 from sciencemonitor.tag_governance_review import TagGovernanceReviewReport
 from sciencemonitor.tag_review import TagReviewAuditReport
 
@@ -69,6 +70,17 @@ def _harness_report(passed: bool) -> HarnessCheckReport:
         real_eval_results=[],
         real_fixture_results=[],
         include_real_eval=False,
+        include_pytest=False,
+    )
+
+
+def _resource_report(passed: bool) -> ResourceCheckReport:
+    return ResourceCheckReport(
+        passed=passed,
+        min_free_bytes=1,
+        test_tmpdir=ROOT / "tmp" / "pytest",
+        checks={"project_root": passed, "test_tmpdir": passed},
+        issues=[],
     )
 
 
@@ -83,6 +95,9 @@ class MaintenanceCycleTest(unittest.TestCase):
                 "sciencemonitor.maintenance.run_entropy_check",
                 side_effect=[_entropy_report(True), _entropy_report(True)],
             ), mock.patch(
+                "sciencemonitor.maintenance.run_resource_precheck",
+                return_value=_resource_report(True),
+            ), mock.patch(
                 "sciencemonitor.maintenance._run_pytest_suite",
                 return_value=SubprocessCheckResult(
                     name="pytest",
@@ -91,10 +106,10 @@ class MaintenanceCycleTest(unittest.TestCase):
                     exit_code=0,
                     output="all passed",
                 ),
-            ), mock.patch(
+            ) as pytest_mock, mock.patch(
                 "sciencemonitor.maintenance.run_harness_check",
                 return_value=_harness_report(True),
-            ), mock.patch(
+            ) as harness_mock, mock.patch(
                 "sciencemonitor.maintenance.sync_configs_from_project_markdown",
                 return_value=[root / "config" / "runtime.json"],
             ):
@@ -102,6 +117,8 @@ class MaintenanceCycleTest(unittest.TestCase):
                 self.assertTrue(report.passed)
                 self.assertEqual(len(report.attempts), 1)
                 self.assertTrue(any(action.applied for action in report.final_attempt.actions))
+                pytest_mock.assert_called_once()
+                harness_mock.assert_called_once()
 
     def test_maintenance_cycle_stops_without_safe_repair_when_failures_remain(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -122,6 +139,9 @@ class MaintenanceCycleTest(unittest.TestCase):
                 "sciencemonitor.maintenance.run_entropy_check",
                 side_effect=[failing_entropy, failing_entropy],
             ), mock.patch(
+                "sciencemonitor.maintenance.run_resource_precheck",
+                return_value=_resource_report(True),
+            ), mock.patch(
                 "sciencemonitor.maintenance._run_pytest_suite",
                 return_value=SubprocessCheckResult(
                     name="pytest",
@@ -130,10 +150,10 @@ class MaintenanceCycleTest(unittest.TestCase):
                     exit_code=0,
                     output="all passed",
                 ),
-            ), mock.patch(
+            ) as pytest_mock, mock.patch(
                 "sciencemonitor.maintenance.run_harness_check",
                 return_value=_harness_report(True),
-            ), mock.patch(
+            ) as harness_mock, mock.patch(
                 "sciencemonitor.maintenance.sync_configs_from_project_markdown",
                 return_value=[],
             ):
@@ -141,6 +161,32 @@ class MaintenanceCycleTest(unittest.TestCase):
                 self.assertFalse(report.passed)
                 self.assertEqual(len(report.attempts), 1)
                 self.assertTrue(any("manual refactor" in action.detail for action in report.final_attempt.actions))
+                self.assertTrue(report.final_attempt.pytest_result.skipped)
+                self.assertIsNone(report.final_attempt.harness_report)
+                pytest_mock.assert_not_called()
+                harness_mock.assert_not_called()
+
+    def test_maintenance_cycle_skips_tests_when_resource_precheck_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            with mock.patch(
+                "sciencemonitor.maintenance.run_doctor",
+                side_effect=[{"warnings": []}, {"warnings": []}],
+            ), mock.patch(
+                "sciencemonitor.maintenance.run_entropy_check",
+                side_effect=[_entropy_report(True), _entropy_report(True)],
+            ), mock.patch(
+                "sciencemonitor.maintenance.run_resource_precheck",
+                return_value=_resource_report(False),
+            ), mock.patch("sciencemonitor.maintenance._run_pytest_suite") as pytest_mock, mock.patch(
+                "sciencemonitor.maintenance.run_harness_check"
+            ) as harness_mock:
+                report = run_maintenance_cycle(root=root, auto_repair=False, write_report=False)
+                self.assertFalse(report.passed)
+                self.assertTrue(report.final_attempt.pytest_result.skipped)
+                self.assertEqual(report.final_attempt.skipped_checks, ("pytest", "harness"))
+                pytest_mock.assert_not_called()
+                harness_mock.assert_not_called()
 
 
 if __name__ == "__main__":

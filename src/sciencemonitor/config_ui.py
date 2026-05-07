@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import cgi
 import json
+import mimetypes
+import secrets
 import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from ipaddress import ip_address
 from pathlib import Path
 from threading import Thread
 from urllib.parse import parse_qs, urlencode, urlparse, unquote
@@ -14,11 +17,20 @@ from .chatgpt_web_manual import (
     list_manual_requests,
 )
 from .config import (
+    article_index_root,
+    article_summaries_root,
+    chatgpt_web_manual_requests_root,
+    deep_reads_pdf_root,
+    deep_reads_root,
+    formal_tags_markdown_path,
     local_path_config_path,
     load_runtime_config,
+    manual_notes_root,
     output_root,
     path_config_path,
+    pending_tags_markdown_path,
     project_root,
+    reports_root,
     runtime_config_path,
     sync_configs_from_project_markdown,
     write_project_config_markdown,
@@ -54,16 +66,26 @@ from .llm import DEFAULT_ANALYSIS_CONFIG
 from .tag_governance import ensure_tag_governance_files, promote_selected_pending_tags
 
 
+MAX_CONFIG_UI_FORM_BYTES = 600 * 1024 * 1024
+MAX_LOCAL_FILE_BYTES = 100 * 1024 * 1024
+LOCAL_FILE_EXTENSIONS = {".md", ".json", ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".txt"}
+
+
 def serve_config_ui(
     root: Path | None = None,
     host: str = "127.0.0.1",
     port: int = 8765,
     open_browser: bool = True,
+    allow_non_loopback: bool = False,
 ) -> None:
     project = root or project_root()
-    server = ThreadingHTTPServer((host, port), _build_handler(project))
-    url = f"http://{host}:{port}/"
-    write_config_ui_runtime_state(project, host=host, port=port, url=url)
+    if not allow_non_loopback and not _is_loopback_host(host):
+        raise ValueError("config-ui 默认只允许绑定 localhost/loopback；如确需局域网访问，请显式使用 --allow-non-loopback。")
+    token = secrets.token_urlsafe(32)
+    server = ThreadingHTTPServer((host, port), _build_handler(project, token))
+    base_url = f"http://{_url_host(host)}:{port}/"
+    url = base_url + "?" + urlencode({"token": token})
+    write_config_ui_runtime_state(project, host=host, port=port, url=url, token=token)
     print(f"ScienceMonitor config UI is running at {url}")
     print("Press Ctrl-C to stop.")
     if open_browser:
@@ -77,13 +99,13 @@ def serve_config_ui(
         clear_config_ui_runtime_state(project)
 
 
-def _build_handler(project: Path):
+def _build_handler(project: Path, token: str):
     class ConfigUIHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
-            _handle_get_request(self, project)
+            _handle_get_request(self, project, token)
 
         def do_POST(self) -> None:  # noqa: N802
-            _handle_post_request(self, project)
+            _handle_post_request(self, project, token)
 
         def log_message(self, format: str, *args) -> None:  # noqa: A003
             return
@@ -104,14 +126,62 @@ def _build_handler(project: Path):
             self.end_headers()
             self.wfile.write(encoded)
 
+        def _send_text(self, payload: str, status: HTTPStatus = HTTPStatus.OK) -> None:
+            encoded = payload.encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
         def _send_local_file(self, parsed) -> None:
             _serve_local_file(self, project, parsed)
 
     return ConfigUIHandler
 
 
-def _handle_get_request(handler: BaseHTTPRequestHandler, project: Path) -> None:
+def _is_loopback_host(host: str) -> bool:
+    normalized = str(host or "").strip().strip("[]").lower()
+    if normalized in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    if not normalized:
+        return False
+    try:
+        return ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
+def _url_host(host: str) -> str:
+    clean = str(host or "").strip()
+    if ":" in clean and not clean.startswith("["):
+        return f"[{clean}]"
+    return clean
+
+
+def _request_has_valid_token(handler: BaseHTTPRequestHandler, parsed, expected_token: str) -> bool:
+    if not expected_token:
+        return True
+    candidates: list[str] = []
+    candidates.extend(parse_qs(parsed.query).get("token", []))
+    header_token = handler.headers.get("X-ScienceMonitor-UI-Token", "")
+    if header_token:
+        candidates.append(header_token)
+    auth = handler.headers.get("Authorization", "")
+    prefix = "Bearer "
+    if auth.startswith(prefix):
+        candidates.append(auth[len(prefix) :].strip())
+    return any(secrets.compare_digest(candidate, expected_token) for candidate in candidates if candidate)
+
+
+def _handle_get_request(handler: BaseHTTPRequestHandler, project: Path, token: str) -> None:
     parsed = urlparse(handler.path)
+    if parsed.path == "/healthz":
+        handler._send_text("ScienceMonitor config UI OK")  # type: ignore[attr-defined]
+        return
+    if not _request_has_valid_token(handler, parsed, token):
+        handler._send_html(_render_error_page(project, "无效或缺失的 config-ui 会话 token。"), status=HTTPStatus.FORBIDDEN)  # type: ignore[attr-defined]
+        return
     if parsed.path == "/local-file":
         handler._send_local_file(parsed)  # type: ignore[attr-defined]
         return
@@ -139,7 +209,7 @@ def _handle_get_request(handler: BaseHTTPRequestHandler, project: Path) -> None:
         return
     if parsed.path == "/latest-result":
         ui_state = collect_config_ui_state(project)
-        payload = _latest_result_payload(project, ui_state, parse_qs(parsed.query).get("kind", [""])[0])
+        payload = _latest_result_payload(project, ui_state, parse_qs(parsed.query).get("kind", [""])[0], token)
         handler._send_json(payload)  # type: ignore[attr-defined]
         return
     sync_configs_from_project_markdown(project)
@@ -161,12 +231,17 @@ def _handle_get_request(handler: BaseHTTPRequestHandler, project: Path) -> None:
         status,
         manual_requests=manual_requests,
         ui_state=ui_state,
+        ui_token=token,
     )
     handler._send_html(payload)  # type: ignore[attr-defined]
 
 
-def _handle_post_request(handler: BaseHTTPRequestHandler, project: Path) -> None:
-    action = urlparse(handler.path).path or "/save-config"
+def _handle_post_request(handler: BaseHTTPRequestHandler, project: Path, token: str) -> None:
+    parsed = urlparse(handler.path)
+    action = parsed.path or "/save-config"
+    if not _request_has_valid_token(handler, parsed, token):
+        handler._send_html(_render_error_page(project, "无效或缺失的 config-ui 会话 token。"), status=HTTPStatus.FORBIDDEN)  # type: ignore[attr-defined]
+        return
     try:
         _guard_no_conflicting_ui_task(project, action)
         if action == "/shutdown-ui":
@@ -219,7 +294,8 @@ def _handle_post_request(handler: BaseHTTPRequestHandler, project: Path) -> None
         return
 
     redirect_fragment = _redirect_fragment_for_action(action)
-    location = "/?" + urlencode(params)
+    location_params = {"token": token, **params}
+    location = "/?" + urlencode(location_params)
     if redirect_fragment:
         location += f"#{redirect_fragment}"
     handler.send_response(HTTPStatus.SEE_OTHER)
@@ -260,7 +336,7 @@ def _latest_result_descriptors(ui_state: dict) -> dict[str, dict[str, str]]:
     }
 
 
-def _latest_result_payload(project: Path, ui_state: dict, kind: str) -> dict[str, str]:
+def _latest_result_payload(project: Path, ui_state: dict, kind: str, token: str = "") -> dict[str, str]:
     config = {
         "weekly_report": ("latest_report", "当前没有周报结果。"),
         "deep_read": ("latest_deep_read", "当前没有深度解读结果。"),
@@ -274,7 +350,7 @@ def _latest_result_payload(project: Path, ui_state: dict, kind: str) -> dict[str
         "kind": kind,
         "path": path_value,
         "revision": result_file_revision(path_value),
-        "html": render_latest_result_content(project, path_value, empty_text),
+        "html": render_latest_result_content(project, path_value, empty_text, ui_token=token),
     }
 
 
@@ -304,20 +380,16 @@ def _serve_local_file(handler: BaseHTTPRequestHandler, project: Path, parsed) ->
         handler._send_html(_render_error_page(project, "缺少 path 参数。"), status=HTTPStatus.BAD_REQUEST)  # type: ignore[attr-defined]
         return
     target = Path(unquote(raw_path)).expanduser().resolve()
-    allowed_roots = [project.resolve(), output_root(project).resolve()]
-    if not any(_is_relative_to(target, base) for base in allowed_roots):
-        handler._send_html(_render_error_page(project, "只允许访问项目目录或输出目录内的文件。"), status=HTTPStatus.FORBIDDEN)  # type: ignore[attr-defined]
-        return
     if not target.exists() or not target.is_file():
         handler._send_html(_render_error_page(project, f"文件不存在：{target}"), status=HTTPStatus.NOT_FOUND)  # type: ignore[attr-defined]
         return
-    content_type = "text/plain; charset=utf-8"
-    if target.suffix.lower() == ".md":
-        content_type = "text/markdown; charset=utf-8"
-    elif target.suffix.lower() == ".json":
-        content_type = "application/json; charset=utf-8"
-    elif target.suffix.lower() == ".pdf":
-        content_type = "application/pdf"
+    if not _is_allowed_local_file(project, target):
+        handler._send_html(_render_error_page(project, "只允许访问受信任的输出产物或人工中转请求文件。"), status=HTTPStatus.FORBIDDEN)  # type: ignore[attr-defined]
+        return
+    if target.stat().st_size > MAX_LOCAL_FILE_BYTES:
+        handler._send_html(_render_error_page(project, "文件过大，无法通过 config-ui 直接打开。"), status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE)  # type: ignore[attr-defined]
+        return
+    content_type = _local_file_content_type(target)
     encoded = target.read_bytes()
     handler.send_response(HTTPStatus.OK)
     handler.send_header("Content-Type", content_type)
@@ -325,6 +397,39 @@ def _serve_local_file(handler: BaseHTTPRequestHandler, project: Path, parsed) ->
     handler.send_header("Content-Disposition", f'inline; filename="{target.name}"')
     handler.end_headers()
     handler.wfile.write(encoded)
+
+
+def _is_allowed_local_file(project: Path, target: Path) -> bool:
+    if target.suffix.lower() not in LOCAL_FILE_EXTENSIONS:
+        return False
+    trusted_files = {
+        formal_tags_markdown_path(project).resolve(),
+        pending_tags_markdown_path(project).resolve(),
+    }
+    if target in trusted_files:
+        return True
+    trusted_roots = [
+        reports_root(project),
+        article_summaries_root(project),
+        deep_reads_root(project),
+        deep_reads_pdf_root(project),
+        article_index_root(project),
+        manual_notes_root(project),
+        chatgpt_web_manual_requests_root(project),
+    ]
+    return any(_is_relative_to(target, root.resolve()) for root in trusted_roots)
+
+
+def _local_file_content_type(target: Path) -> str:
+    suffix = target.suffix.lower()
+    if suffix == ".md":
+        return "text/markdown; charset=utf-8"
+    if suffix == ".json":
+        return "application/json; charset=utf-8"
+    if suffix == ".txt":
+        return "text/plain; charset=utf-8"
+    guessed = mimetypes.guess_type(str(target))[0]
+    return guessed or "application/octet-stream"
 
 
 def _save_from_form(project: Path, form: dict[str, list[str]]) -> None:
@@ -451,6 +556,9 @@ def _status_payload_from_query(query: dict[str, list[str]]) -> dict[str, str]:
 
 
 def _parse_form_data(handler: BaseHTTPRequestHandler) -> tuple[dict[str, list[str]], dict[str, object]]:
+    content_length = _parse_content_length(handler)
+    if content_length > MAX_CONFIG_UI_FORM_BYTES:
+        raise ValueError("表单内容过大，config-ui 已拒绝处理。")
     environ = {
         "REQUEST_METHOD": "POST",
         "CONTENT_TYPE": handler.headers.get("Content-Type", ""),
@@ -478,6 +586,17 @@ def _parse_form_data(handler: BaseHTTPRequestHandler) -> tuple[dict[str, list[st
             continue
         fields.setdefault(item.name, []).append(str(item.value or ""))
     return fields, files
+
+
+def _parse_content_length(handler: BaseHTTPRequestHandler) -> int:
+    raw_value = handler.headers.get("Content-Length", "0") or "0"
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ValueError("Content-Length 无效，config-ui 已拒绝处理。") from exc
+    if value < 0:
+        raise ValueError("Content-Length 无效，config-ui 已拒绝处理。")
+    return value
 
 
 def _deep_update(target: dict, override: dict) -> None:

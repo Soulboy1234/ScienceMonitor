@@ -15,6 +15,13 @@ from .config_ui_support import (
 )
 
 
+UPLOAD_CHUNK_BYTES = 1024 * 1024
+MAX_MANUAL_RESPONSE_UPLOAD_BYTES = 5 * 1024 * 1024
+MAX_SINGLE_PDF_UPLOAD_BYTES = 100 * 1024 * 1024
+MAX_FOLDER_PDF_UPLOAD_COUNT = 200
+MAX_FOLDER_PDF_UPLOAD_BYTES = 500 * 1024 * 1024
+
+
 def _start_report_action(project: Path, form: dict[str, list[str]]) -> dict[str, str]:
     params = _parse_report_form(form)
     return start_report_action(project, params)
@@ -154,7 +161,7 @@ def _run_manual_import_upload_action(
     upload = files.get("manual_response_upload")
     if upload is None or not getattr(upload, "filename", ""):
         raise ValueError("请先上传 ChatGPT 返回的响应文件。")
-    response_bytes = upload.file.read()
+    response_bytes = _read_upload_bytes(upload.file, MAX_MANUAL_RESPONSE_UPLOAD_BYTES, "人工响应 JSON")
     response_text = response_bytes.decode("utf-8") if isinstance(response_bytes, bytes) else str(response_bytes)
     request_id = resolve_request_id_from_upload(
         project,
@@ -195,9 +202,12 @@ def _save_uploaded_pdf(project: Path, file_item: cgi.FieldStorage | None) -> Pat
         candidate = upload_dir / f"{timestamp}-{stem}-{index}.pdf"
         index += 1
 
-    with candidate.open("wb") as handle:
-        payload = file_item.file.read()
-        handle.write(payload if isinstance(payload, bytes) else bytes(payload))
+    try:
+        with candidate.open("wb") as handle:
+            _copy_upload_to_handle(file_item.file, handle, max_bytes=MAX_SINGLE_PDF_UPLOAD_BYTES, label="PDF 上传")
+    except Exception:
+        candidate.unlink(missing_ok=True)
+        raise
     return candidate
 
 
@@ -209,11 +219,14 @@ def _save_uploaded_pdf_folder(project: Path, file_items: list[object], *, recurs
     ]
     if not pdf_items:
         return None
+    if len(pdf_items) > MAX_FOLDER_PDF_UPLOAD_COUNT:
+        raise ValueError(f"一次最多上传 {MAX_FOLDER_PDF_UPLOAD_COUNT} 个 PDF 文件。")
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     upload_dir = project / "tmp" / "ui_folder_uploads" / timestamp
     upload_dir.mkdir(parents=True, exist_ok=True)
     saved_count = 0
+    total_bytes = 0
     for item in pdf_items:
         relative = _safe_upload_relative_path(str(item.filename or "uploaded.pdf"))
         if not recursive and len(relative.parts) > 2:
@@ -221,11 +234,49 @@ def _save_uploaded_pdf_folder(project: Path, file_items: list[object], *, recurs
         target = upload_dir.joinpath(*relative.parts[-1:] if not recursive and len(relative.parts) > 1 else relative.parts)
         target.parent.mkdir(parents=True, exist_ok=True)
         target = _unique_file_path(target)
-        with target.open("wb") as handle:
-            payload = item.file.read()
-            handle.write(payload if isinstance(payload, bytes) else bytes(payload))
+        try:
+            with target.open("wb") as handle:
+                written = _copy_upload_to_handle(item.file, handle, max_bytes=MAX_SINGLE_PDF_UPLOAD_BYTES, label="PDF 文件夹上传")
+        except Exception:
+            target.unlink(missing_ok=True)
+            raise
+        total_bytes += written
+        if total_bytes > MAX_FOLDER_PDF_UPLOAD_BYTES:
+            target.unlink(missing_ok=True)
+            raise ValueError("PDF 文件夹上传总量过大，config-ui 已拒绝处理。")
         saved_count += 1
     return upload_dir if saved_count else None
+
+
+def _read_upload_bytes(file_obj, max_bytes: int, label: str) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = file_obj.read(UPLOAD_CHUNK_BYTES)
+        if not chunk:
+            break
+        if isinstance(chunk, str):
+            chunk = chunk.encode("utf-8")
+        total += len(chunk)
+        if total > max_bytes:
+            raise ValueError(f"{label} 过大，config-ui 已拒绝处理。")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _copy_upload_to_handle(file_obj, handle, *, max_bytes: int, label: str) -> int:
+    total = 0
+    while True:
+        chunk = file_obj.read(UPLOAD_CHUNK_BYTES)
+        if not chunk:
+            break
+        if isinstance(chunk, str):
+            chunk = chunk.encode("utf-8")
+        total += len(chunk)
+        if total > max_bytes:
+            raise ValueError(f"{label} 过大，config-ui 已拒绝处理。")
+        handle.write(chunk)
+    return total
 
 
 def _safe_upload_relative_path(filename: str) -> Path:

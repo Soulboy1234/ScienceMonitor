@@ -343,22 +343,78 @@ def _repair_structured_payload_aliases(payload: dict, schema: dict | None) -> di
 
 
 def _escape_invalid_json_backslashes(candidate: str) -> str:
-    return re.sub(r'\\(?!["\\/bfnrtu])', r"\\\\", candidate)
+    text = str(candidate or "")
+    result: list[str] = []
+    index = 0
+    valid_escape_next = set('"\\/bfnrtu')
+    while index < len(text):
+        char = text[index]
+        if char != "\\":
+            result.append(char)
+            index += 1
+            continue
+        if index + 1 >= len(text):
+            result.append("\\\\")
+            index += 1
+            continue
+        next_char = text[index + 1]
+        if next_char in valid_escape_next:
+            result.append("\\" + next_char)
+            index += 2
+            continue
+        result.append("\\\\")
+        index += 1
+    return "".join(result)
 
 
 def _ollama_json_repair_candidates(candidate: str) -> list[str]:
-    escaped = _escape_invalid_json_backslashes(candidate)
-    without_trailing_commas = _strip_json_trailing_commas(candidate)
-    escaped_without_trailing_commas = _strip_json_trailing_commas(escaped)
+    markdown_cleaned = _strip_ollama_json_markdown_artifacts(candidate)
+    base_variants = [
+        candidate,
+        markdown_cleaned,
+        _strip_json_trailing_commas(candidate),
+        _strip_json_trailing_commas(markdown_cleaned),
+    ]
     candidates: list[str] = []
-    for item in [candidate, escaped, without_trailing_commas, escaped_without_trailing_commas]:
-        candidates.append(item)
-        candidates.append(_quote_unquoted_json_object_keys(item))
+    for item in base_variants:
+        escaped = _escape_invalid_json_backslashes(item)
+        for variant in [item, escaped, _strip_json_trailing_commas(escaped)]:
+            candidates.append(variant)
+            candidates.append(_quote_unquoted_json_object_keys(variant))
     deduped: list[str] = []
     for item in candidates:
         if item != candidate and item not in deduped:
             deduped.append(item)
     return deduped
+
+
+def _strip_ollama_json_markdown_artifacts(candidate: str) -> str:
+    text = str(candidate or "")
+    text = re.sub(r"(?m)^(\s*)[-*]\s+(?=\"[^\"]+\"\s*:)", r"\1", text)
+    text = re.sub(r"(?m)^(\s*)[-*]\s+(?=[A-Za-z_][A-Za-z0-9_]*\s*:)", r"\1", text)
+    text = re.sub(r"(?m)^(\s*)[-*]\s+(?=\")", r"\1", text)
+    return _drop_ollama_json_fragment_lines(text)
+
+
+def _drop_ollama_json_fragment_lines(candidate: str) -> str:
+    cleaned: list[str] = []
+    for line in str(candidate or "").splitlines():
+        stripped = line.strip()
+        if (
+            stripped.endswith(",")
+            and re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,48},", stripped)
+            and ":" not in stripped
+            and '"' not in stripped
+        ):
+            continue
+        if (
+            re.match(r"^[A-Za-z]", stripped)
+            and not re.match(r"^[A-Za-z_][A-Za-z0-9_]*\s*:", stripped)
+            and (stripped.endswith('"') or stripped.endswith('",'))
+        ):
+            continue
+        cleaned.append(line)
+    return "\n".join(cleaned)
 
 
 def _quote_unquoted_json_object_keys(candidate: str) -> str:

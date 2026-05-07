@@ -21,6 +21,57 @@
 
 - 下一轮变更待规划。
 
+## [v2.1.1] - 2026-05-08
+
+Tag: `v2.1.1`
+
+Snapshot commit:
+
+- `TO_BE_FILLED_AFTER_TAG`
+
+版本定位：
+
+- `v2.1.0` 之后的正式小版本检查点
+- 目标是把当前稳定性、安全性、CI 和 harness gate 治理收束为可同步 GitHub 的发布基线
+
+主要变化：
+
+- 强化发布 gate 和 CI：
+  - `harness-check` 支持 `smoke/default/output/ui/release` 分层 profile
+  - default/release profile 内置资源预检与 pytest，CI 改为执行 `harness-check --profile default`
+  - 维护循环加入资源预检，避免磁盘不足时产生级联误报
+- 强化 config-ui 安全边界：
+  - 默认只允许 loopback 绑定，非 loopback 访问需要显式开关
+  - 页面、状态轮询、最新结果和关闭请求使用短期 token
+  - 本地文件访问限制到受信任输出产物和人工中转请求文件，并限制文件类型和大小
+  - 表单、人工响应和 PDF 上传增加大小上限
+- 强化网络与路径边界：
+  - HTTP 抓取加入响应体大小限制，避免异常大响应拖垮本地运行
+  - article index 解析 wiki target 时拒绝绝对路径和目录穿越
+  - doctor 新增输出删除保护检查
+- 强化测试运行稳定性：
+  - 新增统一 pytest runner 和 `SCIENCEMONITOR_TEST_TMPDIR` 资源隔离
+  - 删除历史 `tag_candidates` 兼容入口与旧测试，标签治理测试改为直接覆盖当前入口
+  - 文档、runbook、source of truth matrix 和 Python module map 已同步新 gate 边界
+- 稳定性与安全性复核：
+  - 未发现 `shell=True`、`eval()`、`exec()`、`os.system()` 高危执行点
+  - 受控子进程调用均保留参数数组形式
+  - `real-eval` 未作为本轮阻塞项，保留为后续非阻塞真实案例验证
+
+发版时状态：
+
+- `git diff --check`：通过
+- `./scripts/run_science_monitor.sh doctor`：通过
+- `./scripts/run_science_monitor.sh entropy-check`：通过
+- `./scripts/run_science_monitor.sh harness-audit`：通过
+- `./scripts/run_science_monitor.sh harness-check --profile smoke`：通过
+- `./scripts/run_science_monitor.sh harness-check --profile default`：通过
+- `./scripts/run_science_monitor.sh harness-check --profile output`：通过
+- `./scripts/run_science_monitor.sh harness-check --profile ui`：通过
+- `./scripts/run_science_monitor.sh harness-check --profile release`：通过
+- `./scripts/run_science_monitor.sh maintenance-check --auto-repair --max-passes 2`：通过
+- `./.venv/bin/python -m pytest -q`：通过
+
 ## [v2.1.0] - 2026-05-06
 
 Tag: `v2.1.0`

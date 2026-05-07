@@ -6,10 +6,10 @@
 
 ## 当前状态
 
-- 当前目标版本：`v2.1.1（待规划）`
-- 当前备份版本：`v2.1.0`
-- 当前结构治理状态：Phase 1 到 Phase 11 已完成；`chatgpt_web_manual` 工作流已完成并记录为 `v1.1.0`；agent skill、私有路径覆盖和格式审核治理已记录为 `v1.2.0`；`v1.3.0` 已完成大检查、provider 语义收束和根文档契约治理；`v1.4.0` 已完成 UI 重构、标签治理重构、token 监测和输出文件保护治理；`v2.0.0` 已完成 Ollama 本地模型接入、周报输出与推荐链路优化、维护预算重校准、entropy 检查修复和完整 gate 复核；`v2.1.0` 已完成 Ollama 长任务稳定性、深度解读批处理与质量模式、周报摘要兜底、标签治理强化和 config-ui 运行反馈修复
-- 当前 `docs/exec_plans/active/`：空
+- 当前目标版本：`v2.1.2（待规划）`
+- 当前备份版本：`v2.1.1`
+- 当前结构治理状态：Phase 1 到 Phase 11 已完成；`chatgpt_web_manual` 工作流已完成并记录为 `v1.1.0`；agent skill、私有路径覆盖和格式审核治理已记录为 `v1.2.0`；`v1.3.0` 已完成大检查、provider 语义收束和根文档契约治理；`v1.4.0` 已完成 UI 重构、标签治理重构、token 监测和输出文件保护治理；`v2.0.0` 已完成 Ollama 本地模型接入、周报输出与推荐链路优化、维护预算重校准、entropy 检查修复和完整 gate 复核；`v2.1.0` 已完成 Ollama 长任务稳定性、深度解读批处理与质量模式、周报摘要兜底、标签治理强化和 config-ui 运行反馈修复；`v2.1.1` 已完成稳定性与安全性验证、分层 harness release gate、资源预检和 config-ui 安全边界收束
+- 当前 `docs/exec_plans/active/`：无
 - 当前发布阻塞项：无
 
 ## 当前 Gate 状态
@@ -18,7 +18,7 @@
   - 命令：`./scripts/run_science_monitor.sh maintenance-check --auto-repair --max-passes 2`
   - 最新报告：`log/maintenance/latest.md`
 - Harness gate：
-  - 命令：`./scripts/run_science_monitor.sh harness-check`
+  - 命令：`./scripts/run_science_monitor.sh harness-check --profile default`
 - 熵检查：
   - 命令：`./scripts/run_science_monitor.sh entropy-check`
 - 全量测试：

@@ -22,7 +22,7 @@ DEFAULT_SUPPORT_ROOT = Path.home() / "Library" / "Application Support" / "Scienc
 LOG_PATH = Path(os.environ.get("SCIENCEMONITOR_CONFIG_UI_LOG_PATH", DEFAULT_SUPPORT_ROOT / "config_ui_launcher.log")).expanduser()
 STATE_PATH = Path(os.environ.get("SCIENCEMONITOR_CONFIG_UI_STATE_PATH", DEFAULT_SUPPORT_ROOT / "config_ui_state.json")).expanduser()
 ENTRYPOINT = PROJECT_ROOT / "science_monitor.py"
-TITLE_MARKER = '<meta name="sciencemonitor-ui" content="config-ui">'
+HEALTH_MARKER = "ScienceMonitor config UI OK"
 
 
 def _log(message: str) -> None:
@@ -40,9 +40,9 @@ def _port_in_use(port: int) -> bool:
 
 def _is_sciencemonitor_ui(port: int) -> bool:
     try:
-        with urlopen(f"http://{HOST}:{port}/", timeout=1.0) as response:
-            html = response.read(4096).decode("utf-8", errors="ignore")
-            return TITLE_MARKER in html
+        with urlopen(f"http://{HOST}:{port}/healthz", timeout=1.0) as response:
+            body = response.read(256).decode("utf-8", errors="ignore")
+            return HEALTH_MARKER in body
     except URLError:
         return False
     except Exception:
@@ -68,6 +68,18 @@ def _get_running_port_from_state() -> int | None:
     if port > 0 and _is_sciencemonitor_ui(port):
         return port
     return None
+
+
+def _url_from_state(port: int) -> str:
+    state = _load_state()
+    url = str(state.get("url", "") or "")
+    if url:
+        return url
+    return f"http://{HOST}:{port}/"
+
+
+def _token_from_state() -> str:
+    return str(_load_state().get("token", "") or "")
 
 
 def _choose_port() -> int:
@@ -140,8 +152,12 @@ def _find_running_port() -> int | None:
 
 
 def _request_shutdown(port: int) -> bool:
+    token = _token_from_state()
+    if not token:
+        _log(f"shutdown skipped on port {port}: missing token in state")
+        return False
     try:
-        request = Request(f"http://{HOST}:{port}/shutdown-ui", method="POST", data=b"")
+        request = Request(f"http://{HOST}:{port}/shutdown-ui?token={token}", method="POST", data=b"")
         with urlopen(request, timeout=2.0) as response:
             response.read(2048)
     except Exception as exc:
@@ -221,7 +237,7 @@ def _launch() -> int:
             _log(f"failed to start ui on port {port}")
             print("ERROR: config-ui did not become ready", file=sys.stderr)
             return 1
-        url = f"http://{HOST}:{port}/"
+        url = _url_from_state(port)
         _log(f"ui ready: {url}")
         print(url)
         return 0
@@ -236,7 +252,7 @@ def _status() -> int:
     if port is None:
         print("STOPPED")
         return 1
-    print(f"http://{HOST}:{port}/")
+    print(_url_from_state(port))
     return 0
 
 
@@ -285,7 +301,7 @@ def _launch_open() -> int:
         _log("launch-open could not locate running port after launch")
         print("ERROR: running port missing after launch", file=sys.stderr)
         return 1
-    url = f"http://{HOST}:{port}/"
+    url = _url_from_state(port)
     try:
         opened = webbrowser.open(url)
         _log(f"launch-open browser_open={opened} url={url}")

@@ -10,7 +10,7 @@ STATE_PATH="$SUPPORT_ROOT/config_ui_state.json"
 HOST="127.0.0.1"
 BASE_PORT=8765
 MAX_PORT_OFFSET=9
-TITLE_MARKER='<meta name="sciencemonitor-ui" content="config-ui">'
+HEALTH_MARKER='ScienceMonitor config UI OK'
 
 mkdir -p "$SUPPORT_ROOT"
 cd "$PROJECT_ROOT" || exit 0
@@ -57,9 +57,9 @@ EOF
 
 is_ui() {
   local port="$1"
-  local html
-  html=$(/usr/bin/curl -fsS --max-time 2 "http://$HOST:$port/" 2>/dev/null || true)
-  [[ "$html" == *"$TITLE_MARKER"* ]]
+  local body
+  body=$(/usr/bin/curl -fsS --max-time 2 "http://$HOST:$port/healthz" 2>/dev/null || true)
+  [[ "$body" == *"$HEALTH_MARKER"* ]]
 }
 
 port_in_use() {
@@ -151,8 +151,7 @@ if ! wait_until_ready "$PORT"; then
   exit 0
 fi
 
-write_state "$PORT" "${PID:-0}"
-URL="http://$HOST:$PORT/"
+URL="$(read_state_field url 2>/dev/null || echo "http://$HOST:$PORT/")"
 log "ui ready: $URL"
 
 if ! open_url "$URL"; then

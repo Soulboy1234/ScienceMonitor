@@ -13,40 +13,70 @@ DEFAULT_HEADERS = {
     "User-Agent": "ScienceMonitor/0.1 (+https://crossref.org/; mailto:science-monitor@example.com)",
     "Accept": "*/*",
 }
+DEFAULT_MAX_RESPONSE_BYTES = 25 * 1024 * 1024
+READ_CHUNK_BYTES = 1024 * 1024
+
+
+class ResponseTooLargeError(RuntimeError):
+    pass
 
 
 class HTTPClient:
-    def __init__(self, timeout: int = 15) -> None:
+    def __init__(self, timeout: int = 15, max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES) -> None:
         self.timeout = timeout
+        self.max_response_bytes = max_response_bytes
         self.ssl_context = ssl.create_default_context()
 
-    def get_text(self, url: str, headers: dict[str, str] | None = None) -> str:
-        raw, charset = self._read_response_bytes(url, headers=headers)
+    def get_text(self, url: str, headers: dict[str, str] | None = None, *, max_bytes: int | None = None) -> str:
+        raw, charset = self._read_response_bytes(url, headers=headers, max_bytes=max_bytes)
         charset = charset or "utf-8"
         return raw.decode(charset, errors="replace")
 
-    def get_bytes(self, url: str, headers: dict[str, str] | None = None) -> bytes:
-        raw, _ = self._read_response_bytes(url, headers=headers)
+    def get_bytes(self, url: str, headers: dict[str, str] | None = None, *, max_bytes: int | None = None) -> bytes:
+        raw, _ = self._read_response_bytes(url, headers=headers, max_bytes=max_bytes)
         return raw
 
     def _read_response_bytes(
         self,
         url: str,
         headers: dict[str, str] | None = None,
+        max_bytes: int | None = None,
     ) -> tuple[bytes, str | None]:
+        limit = self.max_response_bytes if max_bytes is None else max_bytes
         req = request.Request(url, headers={**DEFAULT_HEADERS, **(headers or {})})
         with self._deadline(self.timeout, url):
             resp = request.urlopen(req, timeout=self.timeout, context=self.ssl_context)
         with resp:
-            raw = resp.read()
+            content_length = resp.headers.get("Content-Length")
+            if content_length:
+                try:
+                    declared = int(content_length)
+                except ValueError:
+                    declared = -1
+                if declared > limit:
+                    raise ResponseTooLargeError(f"Response from {url} is {declared} bytes, limit is {limit} bytes")
+            raw = self._read_limited(resp, limit, url)
             charset = resp.headers.get_content_charset()
         return raw, charset
 
-    def get_json(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _read_limited(self, resp, limit: int, url: str) -> bytes:
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = resp.read(READ_CHUNK_BYTES)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > limit:
+                raise ResponseTooLargeError(f"Response from {url} exceeded {limit} bytes")
+            chunks.append(chunk)
+        return b"".join(chunks)
+
+    def get_json(self, url: str, params: dict[str, Any] | None = None, *, max_bytes: int | None = None) -> dict[str, Any]:
         final_url = url
         if params:
             final_url = f"{url}?{parse.urlencode(params)}"
-        body = self.get_text(final_url, headers={"Accept": "application/json"})
+        body = self.get_text(final_url, headers={"Accept": "application/json"}, max_bytes=max_bytes)
         return json.loads(body)
 
     @contextmanager

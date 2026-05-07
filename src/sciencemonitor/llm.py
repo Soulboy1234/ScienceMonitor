@@ -32,6 +32,7 @@ from .llm_api_support import (
     check_ollama_available,
     _extract_json_object_candidate,
     _ollama_json_repair_candidates,
+    _parse_structured_output,
     resolve_api_key,
     resolve_api_key_source,
     resolve_base_url,
@@ -609,10 +610,19 @@ class AnalysisEngine:
             related_summary,
             evidence_context=evidence_context,
         )
-        payload = self._run_ollama_structured(
+        retry_prompt = self._build_ollama_deep_read_final_retry_prompt_v2(
+            metadata,
+            final_context,
+            related_summary,
+            evidence_context=evidence_context,
+        )
+        payload = self._run_ollama_deep_read_structured_with_repair(
             prompt,
             self._deep_read_schema(),
             f"deep_read_{cache_key}",
+            stage="final",
+            retry_prompt=retry_prompt,
+            progress_callback=progress_callback,
         )
         payload = self._normalize_ollama_deep_read_payload(payload)
         issues = self._ollama_deep_read_quality_issues(payload, evidence_payload)
@@ -624,12 +634,23 @@ class AnalysisEngine:
                 issues,
                 evidence_context,
             )
-            revised = self._run_ollama_structured(
-                revision_prompt,
-                self._deep_read_schema(),
-                f"deep_read_revision_{cache_key[:20]}",
-            )
-            payload = self._normalize_ollama_deep_read_payload(revised)
+            try:
+                revised = self._run_ollama_deep_read_structured_with_repair(
+                    revision_prompt,
+                    self._deep_read_schema(),
+                    f"deep_read_revision_{cache_key[:20]}",
+                    stage="revision",
+                    retry_prompt=self._append_ollama_strict_json_retry_rules(revision_prompt, stage="revision"),
+                    progress_callback=progress_callback,
+                )
+                payload = self._normalize_ollama_deep_read_payload(revised)
+            except AnalysisProviderInvalidOutput:
+                _emit_analysis_progress(
+                    progress_callback,
+                    stage="ollama_revision_skipped",
+                    message="Ollama 修订阶段 JSON 仍无效，已保留最终初稿并标记人工复核。",
+                )
+                payload = self._mark_ollama_revision_skipped(payload)
         return self._downgrade_ollama_relation_overreach(payload)
 
     def _ollama_deep_read_source_text(self, raw_full_text: str, normalized_full_text: str) -> str:
@@ -653,13 +674,131 @@ class AnalysisEngine:
             return cached
         _emit_analysis_progress(progress_callback, stage="ollama_evidence", message="正在用全文整理证据边界。")
         prompt = self._build_ollama_deep_read_evidence_prompt_v2(metadata, full_text, related_summary)
-        payload = self._run_ollama_structured(
+        retry_prompt = self._build_ollama_deep_read_evidence_retry_prompt_v2(metadata, full_text, related_summary)
+        payload = self._run_ollama_deep_read_structured_with_repair(
             prompt,
             self._ollama_deep_read_evidence_schema_v2(),
             f"deep_read_evidence_v2_{cache_key[:20]}",
+            stage="evidence",
+            retry_prompt=retry_prompt,
+            progress_callback=progress_callback,
         )
         self._write_json_cache("deep_read_evidence", evidence_key, payload)
         return payload
+
+    def _run_ollama_deep_read_structured_with_repair(
+        self,
+        prompt: str,
+        schema: dict,
+        name: str,
+        *,
+        stage: str,
+        retry_prompt: str | None = None,
+        progress_callback: Callable[[dict], None] | None = None,
+    ) -> dict:
+        try:
+            return self._run_ollama_structured(prompt, schema, name)
+        except AnalysisProviderInvalidOutput as exc:
+            repaired = self._repair_ollama_deep_read_payload_from_error(schema, exc)
+            if repaired is not None:
+                _emit_analysis_progress(
+                    progress_callback,
+                    stage=f"ollama_{stage}_json_repaired",
+                    message=f"Ollama 深度解读{self._ollama_deep_read_stage_label(stage)} JSON 已本地修复。",
+                )
+                return repaired
+            if not retry_prompt:
+                raise
+            retry_name = f"{name}_json_retry"
+            try:
+                payload = self._run_ollama_structured(retry_prompt, schema, retry_name)
+            except AnalysisProviderInvalidOutput as retry_exc:
+                raise retry_exc from exc
+            _emit_analysis_progress(
+                progress_callback,
+                stage=f"ollama_{stage}_json_retried",
+                message=f"Ollama 深度解读{self._ollama_deep_read_stage_label(stage)} JSON 已通过严格重试恢复。",
+            )
+            return payload
+
+    def _repair_ollama_deep_read_payload_from_error(
+        self,
+        schema: dict,
+        exc: AnalysisProviderInvalidOutput,
+    ) -> dict | None:
+        raw = self._invalid_output_text(exc)
+        if not raw:
+            return None
+        try:
+            return _parse_structured_output("ollama_api", raw, schema=schema)
+        except StructuredOutputParseError:
+            return None
+
+    def _build_ollama_deep_read_evidence_retry_prompt_v2(
+        self,
+        metadata: dict[str, str],
+        full_text: str,
+        related_summary: dict[str, str] | None,
+    ) -> str:
+        source_text = self._ollama_deep_read_retry_context(full_text, max_chars=9000)
+        prompt = self._build_ollama_deep_read_evidence_prompt_v2(metadata, source_text, related_summary)
+        return self._append_ollama_strict_json_retry_rules(prompt, stage="evidence")
+
+    def _build_ollama_deep_read_final_retry_prompt_v2(
+        self,
+        metadata: dict[str, str],
+        final_context: str,
+        related_summary: dict[str, str] | None,
+        *,
+        evidence_context: str,
+    ) -> str:
+        retry_context = self._ollama_deep_read_retry_context(final_context, max_chars=9000)
+        prompt = self._build_ollama_deep_read_final_prompt_v2(
+            metadata,
+            retry_context,
+            related_summary,
+            evidence_context=evidence_context,
+        )
+        return self._append_ollama_strict_json_retry_rules(prompt, stage="final")
+
+    def _ollama_deep_read_retry_context(self, text: str, *, max_chars: int) -> str:
+        clean = str(text or "").strip()
+        if len(clean) <= max_chars:
+            return clean
+        return self._ollama_head_mid_tail_context(clean, max_chars=max_chars)
+
+    def _append_ollama_strict_json_retry_rules(self, prompt: str, *, stage: str) -> str:
+        field_rule = ""
+        if stage in {"final", "revision"}:
+            field_rule = (
+                "schema 中的字符串字段必须输出字符串，不要输出对象或数组；需要分点时在同一个字符串内写 1. 2. 3.。"
+            )
+        return "\n".join(
+            [
+                str(prompt or "").strip(),
+                "",
+                "上一次 Ollama 深度解读结构化输出不是合法 JSON。本次是恢复重试，必须严格遵守：",
+                "1. 只输出一个 JSON 对象，不要代码块、markdown bullet、解释文字或前后缀。",
+                "2. 对象 key 必须是双引号字符串；数组元素必须是双引号字符串；不要留下孤立英文残片或尾逗号。",
+                "3. LaTeX 或公式里的反斜杠必须写成双反斜杠，或者改成中文变量名描述。",
+                "4. required 字段必须全部出现；证据不足时填空字符串或空数组。",
+                field_rule,
+            ]
+        ).strip()
+
+    def _ollama_deep_read_stage_label(self, stage: str) -> str:
+        return {
+            "evidence": "证据阶段",
+            "final": "最终阶段",
+            "revision": "修订阶段",
+        }.get(str(stage or "").strip(), "阶段")
+
+    def _mark_ollama_revision_skipped(self, payload: dict) -> dict:
+        adjusted = dict(payload or {})
+        note = "Ollama 修订阶段结构化输出无效，已保留最终初稿；需人工复核修订建议。"
+        existing = str(adjusted.get("needs_manual_review", "") or "").strip()
+        adjusted["needs_manual_review"] = f"{existing}\n{note}".strip() if existing else note
+        return adjusted
 
     def _format_ollama_deep_read_evidence_context_v2(self, payload: dict) -> str:
         labels = [

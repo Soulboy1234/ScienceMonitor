@@ -8,17 +8,27 @@ from .config import output_root
 from .config_ui_markdown import render_obsidian_markdown_file
 
 
-def render_latest_result_card(project: Path, title: str, path_value: str, empty_text: str, *, result_key: str = "") -> str:
-    content = render_latest_result_content(project, path_value, empty_text)
+def render_latest_result_card(
+    project: Path,
+    title: str,
+    path_value: str,
+    empty_text: str,
+    *,
+    result_key: str = "",
+    ui_token: str = "",
+) -> str:
+    content = render_latest_result_content(project, path_value, empty_text, ui_token=ui_token)
     result_attrs = ""
+    panel_attr = ""
     if result_key:
+        panel_attr = f' data-ui-panel="latest-{html.escape(result_key).replace("_", "-")}"'
         result_attrs = (
             f' data-latest-result-body="{html.escape(result_key)}"'
             f' data-latest-result-path="{html.escape(str(path_value or ""))}"'
             f' data-latest-result-revision="{html.escape(result_file_revision(path_value))}"'
         )
     return f"""
-      <section class="panel span-12">
+      <section class="panel span-12"{panel_attr}>
         <div class="panel-header">
           <div><h3>{html.escape(title)}</h3></div>
         </div>
@@ -28,10 +38,10 @@ def render_latest_result_card(project: Path, title: str, path_value: str, empty_
       </section>"""
 
 
-def render_latest_result_content(project: Path, path_value: str, empty_text: str) -> str:
+def render_latest_result_content(project: Path, path_value: str, empty_text: str, *, ui_token: str = "") -> str:
     if not path_value:
         return f'<p class="muted">{html.escape(empty_text)}</p>'
-    return _render_file_summary(project, Path(path_value))
+    return _render_file_summary(project, Path(path_value), ui_token=ui_token)
 
 
 def result_file_revision(path_value: str) -> str:
@@ -65,7 +75,7 @@ def render_weekly_report_status_card(report_job: object) -> str:
             f"</div>"
         )
     return f"""
-      <section class="panel span-12" data-weekly-report-status-root>
+      <section class="panel span-12" data-weekly-report-status-root data-ui-panel="weekly-report-status">
         <div class="panel-header">
           <div><h3>周报运行状态</h3></div>
         </div>
@@ -95,7 +105,7 @@ def render_deep_read_status_card(deep_read_job: object) -> str:
             f"</div>"
         )
     return f"""
-      <section class="panel span-12" data-deep-read-status-root>
+      <section class="panel span-12" data-deep-read-status-root data-ui-panel="deep-read-status">
         <div class="panel-header">
           <div><h3>深度解读运行状态</h3></div>
         </div>
@@ -224,18 +234,18 @@ def _optional_status_line(label: str, value: str, *, mono: bool = False) -> str:
     return f"<p>{html.escape(label)}：{content}</p>"
 
 
-def _render_file_summary(project: Path, path: Path) -> str:
+def _render_file_summary(project: Path, path: Path, *, ui_token: str = "") -> str:
     if not path.exists():
         return f'<p class="muted">文件不存在：<code>{html.escape(str(path))}</code></p>'
     if path.suffix.lower() == ".md":
-        return _render_markdown_file_summary(project, path)
-    link = _render_file_link(path, label=path.name, new_tab=True)
+        return _render_markdown_file_summary(project, path, ui_token=ui_token)
+    link = _render_file_link(path, label=path.name, new_tab=True, ui_token=ui_token)
     relative_hint = _render_relative_hint(project, path)
     return f'<div class="result-block"><div class="result-path">{link}</div><div class="muted">{relative_hint}</div></div>'
 
 
-def _render_markdown_file_summary(project: Path, path: Path) -> str:
-    link = _render_file_link(path, label=path.name, new_tab=True)
+def _render_markdown_file_summary(project: Path, path: Path, *, ui_token: str = "") -> str:
+    link = _render_file_link(path, label=path.name, new_tab=True, ui_token=ui_token)
     relative_hint = _render_relative_hint(project, path)
     rendered = render_obsidian_markdown_file(path)
     return f"""
@@ -272,8 +282,10 @@ def _format_duration_seconds(value: object) -> str:
     return f"{remain}s"
 
 
-def _render_file_link(path: Path, *, label: str, download: bool = False, new_tab: bool = False) -> str:
+def _render_file_link(path: Path, *, label: str, download: bool = False, new_tab: bool = False, ui_token: str = "") -> str:
     params = {"path": str(path)}
+    if ui_token:
+        params["token"] = ui_token
     if download:
         params["download"] = "1"
     href = "/local-file?" + urlencode(params)

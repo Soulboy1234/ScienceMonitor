@@ -27,6 +27,7 @@
 它当前审的内容：
 
 - `doctor`
+- 资源预检（磁盘空间和测试临时目录）
 - `pytest`
 - `harness-check`
 
@@ -78,7 +79,7 @@
 
 如果当前 `provider=chatgpt_web_manual`：
 
-- `maintenance-check` 仍然可以做 `doctor`、`entropy-check`、`pytest` 和默认 `harness-check`
+- `maintenance-check` 仍然可以做 `doctor`、资源预检、`entropy-check`、`pytest` 和默认 `harness-check`
 - 但任何依赖真实自动分析完成的检查都不应假设它能无人值守通过
 - 需要真实案例自动完成时，应临时切回 `codex_local` 或 `openai_api`
 
@@ -106,15 +107,18 @@ Phase 6 只允许低风险、确定性的自动调整。
 
 1. 初始审核
    - `doctor`
+   - 资源预检
    - `entropy-check`
 2. 安全自动调整
    - 同步 `PROJECT_CONFIG.md`
 3. 测试
    - `pytest`
-   - `harness-check`
+   - `harness-check --profile default`，但关闭 harness 内部 pytest，避免重复
 4. 再次审核
    - `doctor`
    - `entropy-check`
+
+如果资源预检或初始 `entropy-check` 已失败，维护循环会跳过 pytest 和 harness，并在摘要中显示 `skipped`。这样可以避免在已知硬失败或磁盘不足时产生大量低信号级联错误。
 
 输出报告位置：
 
@@ -126,6 +130,7 @@ Phase 6 只允许低风险、确定性的自动调整。
 维护循环通过的条件：
 
 - 最终 `doctor` 无告警
+- 资源预检通过
 - `pytest` 通过
 - `harness-check` 通过
 - `entropy-check` 通过

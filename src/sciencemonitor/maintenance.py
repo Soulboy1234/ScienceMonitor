@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import subprocess
-import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -10,6 +8,9 @@ from .config import logs_root, project_root, sync_configs_from_project_markdown
 from .doctor import run_doctor
 from .entropy import EntropyCheckReport, render_entropy_check_summary, run_entropy_check
 from .harness import HarnessCheckReport, render_harness_check_summary, run_harness_check
+from .resource_checks import ResourceCheckReport, render_resource_check_summary, run_resource_precheck
+from .test_runner import CommandCheckResult as SubprocessCheckResult
+from .test_runner import run_pytest_suite, skipped_command_result
 
 
 @dataclass(frozen=True)
@@ -32,18 +33,22 @@ class SubprocessCheckResult:
 class MaintenanceAttempt:
     pass_index: int
     initial_doctor: dict
+    resource_report: ResourceCheckReport
     initial_entropy: EntropyCheckReport
     actions: list[MaintenanceAction]
     pytest_result: SubprocessCheckResult
-    harness_report: HarnessCheckReport
+    harness_report: HarnessCheckReport | None
     final_doctor: dict
     final_entropy: EntropyCheckReport
+    skipped_checks: tuple[str, ...] = ()
 
     @property
     def passed(self) -> bool:
         return (
             not self.final_doctor.get("warnings")
+            and self.resource_report.passed
             and self.pytest_result.passed
+            and self.harness_report is not None
             and self.harness_report.passed
             and self.final_entropy.passed
         )
@@ -84,28 +89,45 @@ def run_maintenance_cycle(
 
     for pass_index in range(1, max(1, max_passes) + 1):
         initial_doctor = run_doctor(project, strict_runtime=False)
+        resource_report = run_resource_precheck(project)
         initial_entropy = run_entropy_check(project)
         actions = _apply_safe_maintenance_repairs(project, initial_doctor, initial_entropy) if auto_repair else []
-        pytest_result = _run_pytest_suite(project)
-        harness_report = run_harness_check(
-            project,
-            include_real_eval=include_real_eval,
-            real_case_ids=real_case_ids,
-            limit=limit,
-            include_report=include_report,
-            include_deep_read=include_deep_read,
-        )
+        skipped_checks: tuple[str, ...] = ()
+        if not resource_report.passed or not initial_entropy.passed:
+            reason_parts: list[str] = []
+            if not resource_report.passed:
+                reason_parts.append("resource precheck failed")
+            if not initial_entropy.passed:
+                reason_parts.append("entropy check failed")
+            reason = "; ".join(reason_parts)
+            pytest_result = skipped_command_result("pytest", _pytest_command_preview(project), f"{reason}; pytest skipped")
+            harness_report = None
+            skipped_checks = ("pytest", "harness")
+        else:
+            pytest_result = _run_pytest_suite(project)
+            harness_report = run_harness_check(
+                project,
+                profile="default",
+                include_real_eval=include_real_eval,
+                real_case_ids=real_case_ids,
+                limit=limit,
+                include_report=include_report,
+                include_deep_read=include_deep_read,
+                include_pytest=False,
+            )
         final_doctor = run_doctor(project, strict_runtime=False)
         final_entropy = run_entropy_check(project)
         attempt = MaintenanceAttempt(
             pass_index=pass_index,
             initial_doctor=initial_doctor,
+            resource_report=resource_report,
             initial_entropy=initial_entropy,
             actions=actions,
             pytest_result=pytest_result,
             harness_report=harness_report,
             final_doctor=final_doctor,
             final_entropy=final_entropy,
+            skipped_checks=skipped_checks,
         )
         attempts.append(attempt)
         if attempt.passed:
@@ -129,8 +151,9 @@ def render_maintenance_summary(report: MaintenanceCycleReport) -> str:
         "",
         "Reliability Reviewer:",
         f"- doctor={'ok' if not final_attempt.final_doctor.get('warnings') else 'warning'}",
-        f"- pytest={'ok' if final_attempt.pytest_result.passed else 'failed'}",
-        f"- harness={'ok' if final_attempt.harness_report.passed else 'failed'}",
+        f"- resources={'ok' if final_attempt.resource_report.passed else 'failed'}",
+        f"- pytest={_subprocess_status(final_attempt.pytest_result)}",
+        f"- harness={_harness_status(final_attempt.harness_report, final_attempt.skipped_checks)}",
         "",
         "Entropy Steward:",
         f"- entropy={'ok' if final_attempt.final_entropy.passed else 'failed'}",
@@ -172,8 +195,9 @@ def _render_maintenance_markdown(report: MaintenanceCycleReport) -> str:
                 "### Reliability Reviewer",
                 "",
                 f"- 初始 doctor 告警数：{len(attempt.initial_doctor.get('warnings', []))}",
-                f"- pytest：{'通过' if attempt.pytest_result.passed else '失败'}",
-                f"- harness-check：{'通过' if attempt.harness_report.passed else '失败'}",
+                f"- 资源预检：{'通过' if attempt.resource_report.passed else '失败'}",
+                f"- pytest：{_subprocess_status(attempt.pytest_result)}",
+                f"- harness-check：{_harness_status(attempt.harness_report, attempt.skipped_checks)}",
                 "",
                 "### Entropy Steward",
                 "",
@@ -198,7 +222,13 @@ def _render_maintenance_markdown(report: MaintenanceCycleReport) -> str:
                 "### Harness Output",
                 "",
                 "```text",
-                render_harness_check_summary(attempt.harness_report).strip(),
+                render_harness_check_summary(attempt.harness_report).strip() if attempt.harness_report else "skipped",
+                "```",
+                "",
+                "### Resource Precheck Output",
+                "",
+                "```text",
+                render_resource_check_summary(attempt.resource_report).strip(),
                 "```",
                 "",
                 "### Final Entropy Output",
@@ -250,21 +280,22 @@ def _apply_safe_maintenance_repairs(
 
 
 def _run_pytest_suite(root: Path) -> SubprocessCheckResult:
+    return run_pytest_suite(root)
+
+
+def _pytest_command_preview(root: Path) -> tuple[str, ...]:
     local_python = root / ".venv" / "bin" / "python"
-    python_bin = str(local_python if local_python.exists() else Path(sys.executable))
-    command = (python_bin, "-m", "pytest", "-q")
-    completed = subprocess.run(
-        command,
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    output = (completed.stdout or "") + ((completed.stderr or "") if completed.stderr else "")
-    return SubprocessCheckResult(
-        name="pytest",
-        command=command,
-        passed=completed.returncode == 0,
-        exit_code=completed.returncode,
-        output=output.strip() or "(no output)",
-    )
+    python_bin = str(local_python if local_python.exists() else "python")
+    return (python_bin, "-m", "pytest", "-q")
+
+
+def _subprocess_status(result: SubprocessCheckResult) -> str:
+    if result.skipped:
+        return "skipped"
+    return "ok" if result.passed else "failed"
+
+
+def _harness_status(report: HarnessCheckReport | None, skipped_checks: tuple[str, ...]) -> str:
+    if report is None or "harness" in skipped_checks:
+        return "skipped"
+    return "ok" if report.passed else "failed"

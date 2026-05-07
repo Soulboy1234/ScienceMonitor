@@ -12,9 +12,39 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from sciencemonitor.article_index import sync_out_library
+from sciencemonitor.article_index_paths import resolve_note_target_path
 
 
 class ArticleIndexTest(unittest.TestCase):
+    def test_resolve_note_target_path_rejects_traversal_and_absolute_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            library = root / "out"
+            library.mkdir()
+            inside = library / "inside.md"
+            inside.write_text("inside", encoding="utf-8")
+            outside = root / "outside.md"
+            outside.write_text("outside", encoding="utf-8")
+
+            self.assertEqual(resolve_note_target_path("inside", library_root=library), inside.resolve())
+            self.assertIsNone(resolve_note_target_path("../outside", library_root=library))
+            self.assertIsNone(resolve_note_target_path(str(outside), library_root=library))
+
+    def test_resolve_note_target_path_rejects_symlink_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            library = root / "out"
+            library.mkdir()
+            outside = root / "outside.md"
+            outside.write_text("outside", encoding="utf-8")
+            link = library / "link.md"
+            try:
+                link.symlink_to(outside)
+            except OSError:
+                self.skipTest("symlink not supported")
+
+            self.assertIsNone(resolve_note_target_path("link", library_root=library))
+
     def test_sync_out_library_repairs_links_and_updates_sub_index(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = pathlib.Path(tmpdir)

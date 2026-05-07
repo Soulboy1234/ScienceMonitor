@@ -19,13 +19,14 @@ def read_config_ui_runtime_state(project: Path) -> dict[str, Any]:
         return _read_state_unlocked(path)
 
 
-def write_config_ui_runtime_state(project: Path, *, host: str, port: int, url: str) -> None:
+def write_config_ui_runtime_state(project: Path, *, host: str, port: int, url: str, token: str = "") -> None:
     path = config_ui_state_path(project)
     payload = {
         "pid": os.getpid(),
         "host": host,
         "port": port,
         "url": url,
+        "token": token,
         "started_at": _now_iso(),
     }
     with _STATE_LOCK:

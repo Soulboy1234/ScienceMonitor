@@ -73,10 +73,19 @@ def prefix_lookup_key(stem: str) -> str:
 
 
 def resolve_note_target_path(target: str, library_root: Path) -> Path | None:
-    candidate = library_root / target
+    raw_target = Path(target)
+    if raw_target.is_absolute():
+        return None
+    root = library_root.resolve()
+    candidate = library_root / raw_target
     normalized = candidate if target.lower().endswith(".md") else Path(f"{candidate.as_posix()}.md")
-    if normalized.exists():
-        return normalized
+    try:
+        resolved = normalized.resolve()
+        resolved.relative_to(root)
+    except ValueError:
+        return None
+    if resolved.exists():
+        return resolved
     return None
 
 

@@ -17,14 +17,14 @@ from .doctor import run_doctor
 from .entropy import render_entropy_check_summary, run_entropy_check
 from .golden_eval import render_golden_eval_summary, run_golden_eval
 from .harness_audit import render_harness_audit_summary, run_harness_audit
-from .harness import render_harness_check_summary, run_harness_check
+from .harness import VALID_HARNESS_PROFILES, render_harness_check_summary, run_harness_check
 from .harness_optimize import render_harness_optimize_summary, run_harness_optimize
 from .maintenance import render_maintenance_summary, run_maintenance_cycle
 from .pipeline import ScienceMonitor
 from .real_case_eval import run_real_case_eval, run_real_case_fixture_eval
 from .real_case_outputs import render_real_case_eval_summary, render_real_case_fixture_summary
 from .source_audit import generate_source_audit
-from .tag_candidates import filter_tag_candidates, write_tag_candidates_report
+from .tag_governance import filter_tag_candidates, write_tag_candidates_report
 
 
 def build_parser(defaults: dict) -> argparse.ArgumentParser:
@@ -138,7 +138,9 @@ def _add_eval_and_maintenance_commands(subparsers: argparse._SubParsersAction) -
     real_eval.add_argument("--check-fixtures", action="store_true", help="Compare generated real-case artifacts against approved fixtures under evals/real_cases/fixtures.")
     real_eval.add_argument("--update-fixtures", action="store_true", help="Refresh approved real-case fixtures from the current generated artifacts.")
 
-    harness_check = subparsers.add_parser("harness-check", help="Run the standard eval governance gate: doctor + golden eval, and optionally real-case fixtures.")
+    harness_check = subparsers.add_parser("harness-check", help="Run a layered harness gate profile.")
+    harness_check.add_argument("--profile", choices=VALID_HARNESS_PROFILES, default="default", help="Gate profile to run: smoke, default, output, ui, or release.")
+    harness_check.add_argument("--include-output-review", action="store_true", help="Also scan the effective output_root for tag-output drift.")
     harness_check.add_argument("--include-real-eval", action="store_true", help="Also run real-case fixture checks after doctor and golden eval.")
     harness_check.add_argument("--real-case-ids", default="", help="Comma-separated real case ids for the real-eval portion of harness-check.")
     harness_check.add_argument("--limit", type=int, default=0, help="Only run the first N selected real cases during harness-check. Use 0 for all.")
@@ -163,6 +165,7 @@ def _add_support_commands(subparsers: argparse._SubParsersAction) -> None:
     config_ui.add_argument("--host", default="127.0.0.1", help="Host to bind the local config UI.")
     config_ui.add_argument("--port", type=int, default=8765, help="Port to bind the local config UI.")
     config_ui.add_argument("--no-browser", action="store_true", help="Do not auto-open the browser.")
+    config_ui.add_argument("--allow-non-loopback", action="store_true", help="Allow binding config-ui to a non-loopback host. This is unsafe unless the machine is otherwise protected.")
     manual_status = subparsers.add_parser("manual-llm-status", help="List chatgpt_web_manual request bundles and their current status.")
     manual_status.add_argument("--limit", type=int, default=50, help="Maximum number of requests to show. Use 0 for all.")
     manual_status.add_argument("--pending-only", action="store_true", help="Only show requests still waiting for imported responses.")
@@ -235,7 +238,13 @@ def _handle_doctor(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
 
 
 def _handle_config_ui(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
-    serve_config_ui(monitor.root, host=args.host, port=args.port, open_browser=not args.no_browser)
+    serve_config_ui(
+        monitor.root,
+        host=args.host,
+        port=args.port,
+        open_browser=not args.no_browser,
+        allow_non_loopback=args.allow_non_loopback,
+    )
     return 0
 
 
@@ -378,7 +387,7 @@ def _handle_real_eval(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
 
 def _handle_harness_check(args: argparse.Namespace, monitor: ScienceMonitor) -> int:
     real_case_ids = _parse_source_ids(args.real_case_ids)
-    report = run_harness_check(monitor.root, include_real_eval=bool(args.include_real_eval), real_case_ids=real_case_ids or None, limit=args.limit, include_report=bool(args.include_report), include_deep_read=bool(args.include_deep_read), update_golden=bool(args.update_golden), update_real_fixtures=bool(args.update_real_fixtures))
+    report = run_harness_check(monitor.root, profile=args.profile, include_real_eval=bool(args.include_real_eval), real_case_ids=real_case_ids or None, limit=args.limit, include_report=bool(args.include_report), include_deep_read=bool(args.include_deep_read), include_output_review=bool(args.include_output_review), update_golden=bool(args.update_golden), update_real_fixtures=bool(args.update_real_fixtures))
     print(render_harness_check_summary(report))
     return 0 if report.passed else 1
 

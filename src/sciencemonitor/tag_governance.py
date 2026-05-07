@@ -22,7 +22,6 @@ from .config import (
 from .tags import normalize_haystack_text
 
 
-LEGACY_PENDING_TAGS_PATH = Path("data/tag_candidates.json")
 FORMAL_TAGS_TITLE = "# 正式标签"
 PENDING_TAGS_TITLE = "# 预选标签"
 GROUP_SUFFIX = "（分组）"
@@ -564,8 +563,7 @@ def ensure_tag_governance_files(
 
     pending_path = pending_tags_json_path(project)
     if not pending_path.exists():
-        migrated = _migrate_legacy_pending_tags(project)
-        _write_json_if_changed(pending_path, migrated)
+        _write_json_if_changed(pending_path, _default_pending_payload())
     if allow_refresh_call and (refresh_pending or not pending_tags_markdown_path(project).exists()):
         refresh_pending_tag_files(project)
 
@@ -1493,42 +1491,6 @@ def _sync_focus_tags_payload_from_formal(focus_payload: dict, labels_by_category
         tag_rules.setdefault("pending_tags_path", "config/pending_tags.json")
         tag_rules.pop("candidate_log_path", None)
     return payload
-
-
-def _migrate_legacy_pending_tags(project: Path) -> dict:
-    focus_payload = _load_json_file(focus_tags_config_path(project), default={})
-    formal_labels = formal_tag_labels(project)
-    pending_path = project / LEGACY_PENDING_TAGS_PATH
-    legacy = _load_json_file(pending_path, default={}) if pending_path.exists() else {}
-    raw_candidates = legacy.get("candidates", {}) if isinstance(legacy, dict) else {}
-    tags: dict[str, dict] = {}
-    if isinstance(raw_candidates, dict):
-        for tag, entry in raw_candidates.items():
-            if not isinstance(entry, dict):
-                continue
-            canonical = str(tag or "").strip()
-            if not canonical:
-                continue
-            decision = govern_pending_candidate_tag(canonical, formal_labels=formal_labels, focus_payload=focus_payload)
-            if decision.status != "pending":
-                continue
-            tags[decision.tag] = {
-                "category": decision.category_id,
-                "family": decision.family_id,
-                "count": int(entry.get("count", 0) or 0),
-                "first_seen": str(entry.get("first_seen", "") or ""),
-                "last_seen": str(entry.get("last_seen", "") or ""),
-                "contexts": {str(key): int(value or 0) for key, value in (entry.get("contexts", {}) or {}).items()},
-                "selected": False,
-                "note": "",
-                "usage_count": 0,
-                "usage_by_kind": {"article_summaries": 0, "deep_reads": 0},
-            }
-    return {
-        "version": 2,
-        "description": "Pending tags normalized into review families after runtime outputs are cleaned and deduplicated.",
-        "tags": tags,
-    }
 
 
 def _default_pending_payload() -> dict:

@@ -252,6 +252,7 @@ export SCIENCEMONITOR_OPENAI_API_KEY="YOUR_API_KEY"
 ./scripts/run_science_monitor.sh entropy-check
 ./scripts/run_science_monitor.sh harness-audit
 ./scripts/run_science_monitor.sh harness-optimize
+./scripts/run_science_monitor.sh harness-check --profile default
 ./scripts/run_science_monitor.sh maintenance-check --auto-repair
 ./scripts/run_science_monitor.sh manual-llm-status
 ./scripts/run_science_monitor.sh config-ui
@@ -387,8 +388,11 @@ export SCIENCEMONITOR_LOG_ROOT="$HOME/Library/Application Support/ScienceMonitor
 运行统一 harness gate：
 
 ```bash
-./scripts/run_science_monitor.sh harness-check
-./scripts/run_science_monitor.sh harness-check --include-real-eval --real-case-ids 2023_sw_resnet_tmd
+./scripts/run_science_monitor.sh harness-check --profile smoke
+./scripts/run_science_monitor.sh harness-check --profile default
+./scripts/run_science_monitor.sh harness-check --profile output
+./scripts/run_science_monitor.sh harness-check --profile ui
+./scripts/run_science_monitor.sh harness-check --profile release --include-real-eval --real-case-ids 2023_sw_resnet_tmd
 ```
 
 运行代码维护治理：
@@ -417,10 +421,10 @@ export SCIENCEMONITOR_LOG_ROOT="$HOME/Library/Application Support/ScienceMonitor
 - `real-eval --update-fixtures` 只在你确认“新输出更正确”时使用
 - `harness-audit` 负责监督当前 harness 是否仍覆盖了现有工作流的关键风险点
 - `harness-optimize` 负责按审计结论做低风险、确定性的治理修补，再重新审计
-- `harness-check` 是本地和 CI 的统一 gate，默认只跑 `doctor` 一致性检查和 `golden eval`- `harness-audit` 负责监督当前 harness 是否覆盖了现有工作流的关键风险点
-- `harness-optimize` 负责按审计建议做低风险、确定性的治理修补
-
-- `maintenance-check` 是代码维护 gate，负责“审核 -> 调整 -> 测试 -> 再审核”
+- `harness-check --profile default` 是本地和 CI 的日常 gate，会跑资源预检、pytest、关键治理检查和 golden eval
+- `harness-check --profile output` 才扫描当前有效 `output_root`，适合本机输出库维护
+- `harness-check --profile ui` 跑配置面板结构、功能和视觉审查
+- `maintenance-check` 是代码维护 gate，负责“审核 -> 资源/熵预检 -> 测试 -> 再审核”
 - `entropy-check` 负责代码熵预算，不检查业务输出正确性
 
 ## 相关文档

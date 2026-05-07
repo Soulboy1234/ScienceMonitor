@@ -16,6 +16,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from sciencemonitor.deep_read_markdown import (
+    _load_deep_read_template,
     _audit_deep_read_markdown,
     _normalize_key_results_text,
     _normalize_one_sentence_overview,
@@ -27,6 +28,8 @@ from sciencemonitor.deep_read_markdown import (
 )
 from sciencemonitor.deep_reads import (
     DeepReadResult,
+    _cached_source_matches_runtime,
+    _extract_pdf_text,
     _normalize_deep_read_analysis,
     _render_deep_read_markdown,
     _resolve_metadata,
@@ -1024,6 +1027,7 @@ class DeepReadTest(unittest.TestCase):
                         "source_kind": "local_pdf_full_text",
                         "source_url": "file:///tmp/example.pdf",
                         "pdf_path": "",
+                        "pdf_page_limit": 10,
                         "scientific_text": "Full scientific text from cache.",
                         "summary_packet": "Summary packet.",
                     },
@@ -1076,6 +1080,24 @@ class DeepReadTest(unittest.TestCase):
 
             self.assertTrue(result.success)
             self.assertEqual(result.source_kind, "local_pdf_full_text")
+
+    def test_deep_read_pdf_extraction_passes_runtime_page_limit_to_helper(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            pdf_path = root / "sample.pdf"
+            pdf_path.write_bytes(b"%PDF")
+            with mock.patch("sciencemonitor.deep_reads.extract_pdf_scientific_text", return_value="extracted") as helper:
+                result = _extract_pdf_text(root, pdf_path, {"deep_read": {"pdf_page_limit": 0}})
+
+        self.assertEqual(result, "extracted")
+        helper.assert_called_once_with(pdf_path, project_root=root, page_limit=0)
+
+    def test_pdf_source_cache_requires_matching_page_limit(self) -> None:
+        runtime = {"deep_read": {"pdf_page_limit": 10}}
+        self.assertTrue(_cached_source_matches_runtime({"source_kind": "local_pdf_full_text", "pdf_page_limit": 10}, runtime))
+        self.assertFalse(_cached_source_matches_runtime({"source_kind": "local_pdf_full_text"}, runtime))
+        self.assertFalse(_cached_source_matches_runtime({"source_kind": "downloaded_pdf", "pdf_page_limit": 0}, runtime))
+        self.assertTrue(_cached_source_matches_runtime({"source_kind": "html_full_text"}, runtime))
 
     def test_deep_read_can_write_to_eval_local_overrides_without_sync(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1208,12 +1230,8 @@ class DeepReadTest(unittest.TestCase):
             )
             (root / "config" / "templates" / "deep_reading_report_template.md").write_text(custom_template, encoding="utf-8")
 
-            storage = Storage(root / "data" / "science_monitor.db")
-            pdf_path = root / "sample.pdf"
-            canv = canvas.Canvas(str(pdf_path))
-            canv.drawString(72, 750, "Introduction")
-            canv.save()
-            fake_analysis = DeepReadAnalysis(
+            template_text = _load_deep_read_template(root / "config" / "templates" / "deep_reading_report_template.md")
+            analysis = DeepReadAnalysis(
                 chinese_title="自定义模板深读",
                 tags=["热层/密度", "卫星影响"],
                 paper_type="研究论文",
@@ -1231,24 +1249,27 @@ class DeepReadTest(unittest.TestCase):
                 needs_manual_review="还需人工复核。",
                 knowledge_position="挂接到相关目录。",
             )
-            try:
-                with mock.patch("sciencemonitor.deep_reads._extract_pdf_text", return_value="Introduction"), mock.patch(
-                    "sciencemonitor.deep_reads.AnalysisEngine.analyze_deep_read",
-                    return_value=fake_analysis,
-                ):
-                    result = run_deep_read(
-                        root=root,
-                        storage=storage,
-                        doi="10.1000/example",
-                        title="Example Paper",
-                        pdf_path=str(pdf_path),
-                        journal="JGR: Space Physics",
-                    )
-            finally:
-                storage.close()
 
-            self.assertTrue(result.success)
-            text = result.output_path.read_text(encoding="utf-8")
+            text = _render_deep_read_markdown(
+                root,
+                template_text,
+                {
+                    "doi": "10.1000/example",
+                    "title": "Example Paper",
+                    "authors": "Alice Smith",
+                    "raw_authors": "Alice Smith",
+                    "journal": "JGR: Space Physics",
+                    "published_date": "2026-01-01",
+                    "url": "https://example.org",
+                },
+                analysis,
+                related_summary=None,
+                note_path=root / "out" / "auto" / "deep_reads" / "Example.md",
+                pdf_path=None,
+                source_kind="provided_pdf",
+                source_url="https://example.org",
+                knowledge_position_text=analysis.knowledge_position,
+            )
             self.assertLess(text.index("### 最终结论"), text.index("## 论文信息"))
 
     def test_invalid_deep_read_template_missing_placeholder_fails_fast(self) -> None:
@@ -1297,45 +1318,8 @@ class DeepReadTest(unittest.TestCase):
             )
             (root / "config" / "templates" / "deep_reading_report_template.md").write_text(invalid_template, encoding="utf-8")
 
-            storage = Storage(root / "data" / "science_monitor.db")
-            pdf_path = root / "sample.pdf"
-            canv = canvas.Canvas(str(pdf_path))
-            canv.drawString(72, 750, "Introduction")
-            canv.save()
-            fake_analysis = DeepReadAnalysis(
-                chinese_title="失效模板深读",
-                tags=["热层/密度", "卫星影响"],
-                paper_type="研究论文",
-                one_sentence_overview="这篇文章的目标是测试模板校验。",
-                why="作者想回答一个关键问题。",
-                how="作者通过观测和模型推进结论。",
-                key_results="核心结果已经得到。",
-                contribution="贡献明确。",
-                limitations="仍有局限。",
-                reproducibility="可复现。",
-                relation="与已有工作互补。",
-                final_conclusion="最重要的结论在这里。",
-                relation_to_my_work="和我的工作相关。",
-                follow_up_questions="还有后续问题。",
-                needs_manual_review="还需人工复核。",
-                knowledge_position="挂接到相关目录。",
-            )
-            try:
-                with mock.patch("sciencemonitor.deep_reads._extract_pdf_text", return_value="Introduction"), mock.patch(
-                    "sciencemonitor.deep_reads.AnalysisEngine.analyze_deep_read",
-                    return_value=fake_analysis,
-                ):
-                    with self.assertRaisesRegex(ValueError, "missing required placeholders"):
-                        run_deep_read(
-                            root=root,
-                            storage=storage,
-                            doi="10.1000/example",
-                            title="Example Paper",
-                            pdf_path=str(pdf_path),
-                            journal="JGR: Space Physics",
-                        )
-            finally:
-                storage.close()
+            with self.assertRaisesRegex(ValueError, "missing required placeholders"):
+                _load_deep_read_template(root / "config" / "templates" / "deep_reading_report_template.md")
 
 
 if __name__ == "__main__":

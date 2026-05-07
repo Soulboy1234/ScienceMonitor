@@ -836,6 +836,39 @@ class TagReviewTest(unittest.TestCase):
         self.assertTrue(review.passed)
         self.assertEqual(payload["tags"], {})
 
+    def test_tag_output_review_audits_summaries_deep_reads_and_reports(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+            summary_dir = root / "out" / "auto" / "article_summaries"
+            deep_dir = root / "out" / "auto" / "deep_reads"
+            report_dir = root / "out" / "research_reports"
+            summary_dir.mkdir(parents=True, exist_ok=True)
+            deep_dir.mkdir(parents=True, exist_ok=True)
+            report_dir.mkdir(parents=True, exist_ok=True)
+            summary = summary_dir / "summary.md"
+            deep = deep_dir / "deep.md"
+            report = report_dir / "report.md"
+            summary.write_text(
+                "# Summary\n- 标签： #磁暴 #热层/风\n- 正文：讨论磁暴期间的热层风场。\n",
+                encoding="utf-8",
+            )
+            deep.write_text(
+                "# Deep\n- [PDF](<../deep_reads_pdf/a.pdf>) #对象/物理机制/电学放电现象 #对象/过程/场向电流 #事件/亚暴\n\n亚暴和场向电流。\n",
+                encoding="utf-8",
+            )
+            report.write_text(
+                "# Report\n1. 英文题目：Example\n   - 标签： #对象/空间天气/地磁暴 #应用/空间天气预报 #信息来源/仅摘要\n",
+                encoding="utf-8",
+            )
+
+            review = run_tag_output_review(root)
+
+        self.assertFalse(review.passed)
+        self.assertEqual(review.scanned_files, 3)
+        issue_paths = {item.path for item in review.issues}
+        self.assertEqual(issue_paths, {summary, deep, report})
+
     def test_deep_read_context_drops_or_downgrades_virtual_object_tags(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = pathlib.Path(tmpdir)

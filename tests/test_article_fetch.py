@@ -15,6 +15,7 @@ if str(SRC) not in sys.path:
 
 from sciencemonitor.article_fetch import (
     _compact_pdf_text_for_summary,
+    _extract_local_pdf_text,
     build_candidate_article_urls,
     fetch_article_page_snapshot,
     load_article_source_cache,
@@ -283,6 +284,48 @@ class ArticleFetchTest(unittest.TestCase):
             cached = load_article_source_cache(project_root, doi="10.1000/example", title="Example Paper")
             self.assertIsNotNone(cached)
             self.assertEqual(cached["scientific_text"], "Full text from local PDF with methods and results.")
+            self.assertEqual(cached["pdf_page_limit"], 6)
+
+    def test_extract_local_pdf_text_passes_page_limit_to_pdftotext(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            pdf_path = root / "sample.pdf"
+            pdf_path.write_bytes(b"%PDF")
+            observed: dict[str, list[str]] = {}
+
+            def fake_run(command, **kwargs):
+                observed["command"] = command
+                return mock.Mock(stdout="Abstract\nThis is the abstract.\n1. Introduction\nBody text.")
+
+            with mock.patch("sciencemonitor.article_fetch.shutil.which", return_value="/usr/bin/pdftotext"), mock.patch(
+                "sciencemonitor.article_fetch.subprocess.run",
+                side_effect=fake_run,
+            ):
+                _extract_local_pdf_text(pdf_path, project_root=root, page_limit=3)
+
+            self.assertIn("-f", observed["command"])
+            self.assertIn("-l", observed["command"])
+            self.assertIn("3", observed["command"])
+
+    def test_extract_local_pdf_text_omits_page_limit_when_zero(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            pdf_path = root / "sample.pdf"
+            pdf_path.write_bytes(b"%PDF")
+            observed: dict[str, list[str]] = {}
+
+            def fake_run(command, **kwargs):
+                observed["command"] = command
+                return mock.Mock(stdout="Abstract\nThis is the abstract.")
+
+            with mock.patch("sciencemonitor.article_fetch.shutil.which", return_value="/usr/bin/pdftotext"), mock.patch(
+                "sciencemonitor.article_fetch.subprocess.run",
+                side_effect=fake_run,
+            ):
+                _extract_local_pdf_text(pdf_path, project_root=root, page_limit=0)
+
+            self.assertIn("-f", observed["command"])
+            self.assertNotIn("-l", observed["command"])
 
     def test_resolve_summary_source_material_ignores_redirect_page_title(self) -> None:
         html = """

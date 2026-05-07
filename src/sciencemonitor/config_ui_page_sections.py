@@ -95,11 +95,11 @@ def render_topbar() -> str:
       </section>"""
 
 
-def render_runtime_checks_panel(project: Path, doctor: dict, ui_state: dict) -> str:
+def render_runtime_checks_panel(project: Path, doctor: dict, ui_state: dict, *, ui_token: str = "") -> str:
     warnings = doctor.get("warnings", [])
     maintenance = ui_state.get("maintenance_status", {}) or {}
     maintenance_path = str(maintenance.get("path", "") or "")
-    maintenance_link = _render_file_link(Path(maintenance_path), label="打开维护报告", new_tab=True) if maintenance_path else ""
+    maintenance_link = _render_file_link(Path(maintenance_path), label="打开维护报告", new_tab=True, ui_token=ui_token) if maintenance_path else ""
     environment_text = "正常" if not warnings else "；".join(str(item) for item in warnings)
     maintenance_overall = str(maintenance.get("overall", "unknown") or "unknown")
     maintenance_summary = {
@@ -147,6 +147,8 @@ def render_overview_view(
     status: dict[str, str],
     manual_requests: list[ManualRequestStatus],
     ui_state: dict,
+    *,
+    ui_token: str = "",
 ) -> str:
     counts = ui_state.get("counts", {})
     provider_status = doctor.get("provider_status", {})
@@ -168,7 +170,7 @@ def render_overview_view(
             </div>
           </div>
         </div>
-        {render_runtime_checks_panel(project, doctor, ui_state)}
+        {render_runtime_checks_panel(project, doctor, ui_state, ui_token=ui_token)}
         <div class="section-grid fixed-layout">
           <div class="card span-12">
             <h4>运行环境</h4>
@@ -182,7 +184,7 @@ def render_overview_view(
       </section>"""
 
 
-def render_weekly_report_view(project: Path, runtime: dict, status: dict[str, str], ui_state: dict) -> str:
+def render_weekly_report_view(project: Path, runtime: dict, status: dict[str, str], ui_state: dict, *, ui_token: str = "") -> str:
     latest_report = _resolve_latest_result_path(ui_state.get("latest_report", ""), status, status_title_prefixes=("周报生成完成",))
     report_job = ui_state.get("report_job", {})
     journal_groups = ui_state.get("journal_groups", [])
@@ -193,7 +195,8 @@ def render_weekly_report_view(project: Path, runtime: dict, status: dict[str, st
     return f"""
       <section class="view" data-view="weekly-report">
         <div class="section-grid fixed-layout equal-height weekly-report-grid">
-          <form class="card span-9 card-fill weekly-report-form-card" method="post" action="/run-report">
+          <form class="card span-9 card-fill weekly-report-form-card" data-ui-panel="weekly-report-form" method="post" action="{html.escape(_post_action('/run-report', ui_token))}">
+            {_token_input(ui_token)}
             <h4>周报生成参数</h4>
             <div class="form-stack">
               <div class="row">
@@ -215,17 +218,17 @@ def render_weekly_report_view(project: Path, runtime: dict, status: dict[str, st
               </div>
             </div>
           </form>
-          <div class="card span-3 card-fill weekly-report-journals-card">
+          <div class="card span-3 card-fill weekly-report-journals-card" data-ui-panel="weekly-report-journals">
             <h4>当前监测期刊</h4>
             <div class="scroll-fill">{journal_items}</div>
           </div>
           {render_weekly_report_status_card(report_job)}
-          {render_latest_result_card(project, "周报最新结果", latest_report, empty_text="当前没有周报结果。", result_key="weekly_report")}
+          {render_latest_result_card(project, "周报最新结果", latest_report, empty_text="当前没有周报结果。", result_key="weekly_report", ui_token=ui_token)}
         </div>
       </section>"""
 
 
-def render_deep_read_view(project: Path, runtime: dict, paths: dict, status: dict[str, str], ui_state: dict) -> str:
+def render_deep_read_view(project: Path, runtime: dict, paths: dict, status: dict[str, str], ui_state: dict, *, ui_token: str = "") -> str:
     latest_deep_read = _resolve_latest_result_path(
         ui_state.get("latest_deep_read", ""),
         status,
@@ -236,14 +239,16 @@ def render_deep_read_view(project: Path, runtime: dict, paths: dict, status: dic
         if paths.get("local_output_root")
         else "如需写入私人 Obsidian vault，请在本机私有输出目录中填写路径；该文件不会上传 GitHub。"
     )
-    status_alert = _render_action_status_alert(status, title_prefixes=("深度解读", "批量深度解读"))
+    status_alert = _render_action_status_alert(status, title_prefixes=("深度解读", "批量深度解读"), ui_token=ui_token)
     deep_read_job = ui_state.get("deep_read_job", {})
+    page_limit_label = _display_pdf_page_limit(runtime.get("deep_read", {}).get("pdf_page_limit", 40))
     return f"""
       <section class="view" data-view="deep-read">
         <div class="section-grid fixed-layout">
           {status_alert}
           {render_deep_read_status_card(deep_read_job)}
-          <form class="card span-12" method="post" action="/run-deep-read" enctype="multipart/form-data">
+          <form class="card span-12" data-ui-panel="deep-read-single" method="post" action="{html.escape(_post_action('/run-deep-read', ui_token))}" enctype="multipart/form-data">
+            {_token_input(ui_token)}
             <h4>深度解读任务面板</h4>
             <div class="form-stack">
               {_file_input("deep_read_pdf", "deep_read_pdf", "拖拽或选择 PDF", "这是深度解读最可靠的输入材料。上传 PDF 后，程序会优先基于全文组织解读；如果不提供，系统只能做简单网页定位，拿不到全文时会要求补 PDF。")}
@@ -262,7 +267,8 @@ def render_deep_read_view(project: Path, runtime: dict, paths: dict, status: dic
               </div>
             </div>
           </form>
-          <form class="card span-12" method="post" action="/run-deep-read-folder" enctype="multipart/form-data">
+          <form class="card span-12" data-ui-panel="deep-read-folder" method="post" action="{html.escape(_post_action('/run-deep-read-folder', ui_token))}" enctype="multipart/form-data">
+            {_token_input(ui_token)}
             <h4>PDF 文件夹批量深度解读</h4>
             <div class="form-stack">
               {_directory_input("deep_read_pdf_folder_uploads", "deep_read_pdf_folder_uploads", "选择或拖拽 PDF 文件夹", "这里用于从浏览器直接选择或拖拽一个 PDF 文件夹；提交后文件会先进入本地临时目录，再按批量深度解读流程处理。")}
@@ -276,35 +282,36 @@ def render_deep_read_view(project: Path, runtime: dict, paths: dict, status: dic
               </div>
             </div>
           </form>
-          <div class="card span-12">
+          <div class="card span-12" data-ui-panel="deep-read-stats">
             <h4>深度解读文章数量统计</h4>
             <div class="info-lines">
               <div class="info-line"><strong>已生成深度解读</strong><span>{int(ui_state.get("counts", {}).get("deep_reads", 0) or 0)} 篇</span></div>
-              <div class="info-line"><strong>当前 PDF 页数限制</strong><span>{int(runtime.get("deep_read", {}).get("pdf_page_limit", 40) or 40)}</span></div>
+              <div class="info-line"><strong>当前 PDF 页数限制</strong><span>{html.escape(page_limit_label)}</span></div>
               <div class="info-line"><strong>路径说明</strong><span>{html.escape(local_hint)}</span></div>
             </div>
           </div>
-          {render_latest_result_card(project, "最新深度解读报告", latest_deep_read, empty_text="当前没有深度解读结果。", result_key="deep_read")}
+          {render_latest_result_card(project, "最新深度解读报告", latest_deep_read, empty_text="当前没有深度解读结果。", result_key="deep_read", ui_token=ui_token)}
         </div>
       </section>"""
 
 
-def render_manual_view(project: Path, status: dict[str, str], manual_requests: list[ManualRequestStatus], ui_state: dict) -> str:
+def render_manual_view(project: Path, status: dict[str, str], manual_requests: list[ManualRequestStatus], ui_state: dict, *, ui_token: str = "") -> str:
     prompt_path = _manual_prompt_path_from_status(status)
     prompt_preview = _load_text_preview(prompt_path)
     latest_manual_result = _latest_manual_result_path(ui_state, status)
     request_items = "".join(
         f"<li>{html.escape(item.display_label)}</li>" for item in manual_requests[:3]
     ) or "<li>当前没有人工中转活动。</li>"
-    prompt_actions = _render_prompt_actions(prompt_path)
+    prompt_actions = _render_prompt_actions(prompt_path, ui_token=ui_token)
     return f"""
       <section class="view" data-view="manual-llm">
         <div class="section-grid fixed-layout">
-          <div class="card span-12">
+          <div class="card span-12" data-ui-panel="manual-activity">
             <h4>人工中转最近活动</h4>
             <ul class="activity-list compact">{request_items}</ul>
           </div>
-          <form class="card span-12" method="post" action="/manual-llm-create">
+          <form class="card span-12" data-ui-panel="manual-create" method="post" action="{html.escape(_post_action('/manual-llm-create', ui_token))}">
+            {_token_input(ui_token)}
             <h4>请求生成面板</h4>
             <div class="form-stack">
               {_select("manual_create_kind", "article_summary", [("article_summary", "文章总结"), ("deep_read", "深度解读")], "任务类型", "这个字段决定程序要生成哪种人工中转请求。选“文章总结”会生成轻量分析 prompt；选“深度解读”会生成更长、更强调方法和证据的 prompt。")}
@@ -323,7 +330,8 @@ def render_manual_view(project: Path, status: dict[str, str], manual_requests: l
             </div>
             {_render_prompt_preview_card(prompt_path, prompt_preview)}
           </form>
-          <form class="card span-12" method="post" action="/manual-llm-import-upload" enctype="multipart/form-data">
+          <form class="card span-12" data-ui-panel="manual-import" method="post" action="{html.escape(_post_action('/manual-llm-import-upload', ui_token))}" enctype="multipart/form-data">
+            {_token_input(ui_token)}
             <h4>ChatGPT 响应文件解读面板</h4>
             <div class="form-stack">
               {_file_input("manual_response_upload", "manual_response_upload", "拖拽或上传 ChatGPT 返回的 JSON 文件", "这里接收网页端生成的 JSON 响应文件。程序会解析其中的结构化结果，自动继续完成文章总结或深度解读。", accept=".json,application/json")}
@@ -333,12 +341,12 @@ def render_manual_view(project: Path, status: dict[str, str], manual_requests: l
               </div>
             </div>
           </form>
-          {render_latest_result_card(project, "通过响应文件生成的最新结果", latest_manual_result, empty_text="当前没有人工中转生成结果。", result_key="manual_result")}
+          {render_latest_result_card(project, "通过响应文件生成的最新结果", latest_manual_result, empty_text="当前没有人工中转生成结果。", result_key="manual_result", ui_token=ui_token)}
         </div>
       </section>"""
 
 
-def render_settings_view(project: Path, runtime: dict, analysis: dict, paths: dict) -> str:
+def render_settings_view(project: Path, runtime: dict, analysis: dict, paths: dict, *, ui_token: str = "") -> str:
     provider = str(analysis.get("provider", "codex_local") or "codex_local")
     if provider not in {"codex_local", "openai_api", "openrouter_api", "ollama_api"}:
         provider = "codex_local"
@@ -346,15 +354,16 @@ def render_settings_view(project: Path, runtime: dict, analysis: dict, paths: di
     pending_path = pending_tags_markdown_path(project)
     return f"""
       <section class="view" data-view="settings">
-        <form method="post" action="/save-config">
+        <form method="post" action="{html.escape(_post_action('/save-config', ui_token))}">
+          {_token_input(ui_token)}
           <div class="section-grid fixed-layout">
             {_render_llm_settings_card(analysis, provider, span="span-12")}
             {_render_paths_settings_card(paths, span="span-12")}
-            {_render_tag_management_card(formal_path, pending_path, span="span-12")}
+            {_render_tag_management_card(formal_path, pending_path, span="span-12", ui_token=ui_token)}
           </div>
           <div class="settings-actions">
             <button type="submit">保存配置并同步 PROJECT_CONFIG.md</button>
-            <button type="submit" formaction="/shutdown-ui" formmethod="post">关闭面板服务</button>
+            <button type="submit" formaction="{html.escape(_post_action('/shutdown-ui', ui_token))}" formmethod="post">关闭面板服务</button>
           </div>
         </form>
       </section>"""
@@ -366,7 +375,7 @@ def _render_llm_settings_card(analysis: dict, provider: str, *, span: str = "spa
     openrouter_class = "provider-only active" if provider == "openrouter_api" else "provider-only"
     ollama_class = "provider-only active" if provider == "ollama_api" else "provider-only"
     return f"""
-            <div class="card {span}">
+            <div class="card {span}" data-ui-panel="provider-settings">
               <h4>分析后端与服务</h4>
               <div class="form-stack">
                 {_select("provider", provider, automatic_provider_choices(), "分析后端", "这是项目默认使用的自动分析后端。它决定单篇总结、周报和深度解读优先调用哪类模型服务；切换后会改变程序走本地 Codex、OpenAI API、OpenRouter API 或 Ollama 本地服务。", extra_attrs='data-provider-select')}
@@ -427,7 +436,7 @@ def _render_llm_settings_card(analysis: dict, provider: str, *, span: str = "spa
 
 def _render_paths_settings_card(paths: dict, *, span: str = "span-4") -> str:
     return f"""
-            <div class="card {span}">
+            <div class="card {span}" data-ui-panel="path-settings">
               <h4>路径与输出</h4>
               <div class="form-stack">
                 {_text("local_output_root", paths.get("local_output_root", ""), "真实输出目录（本机私有）", "这个字段定义你当前这台机器真正写出报告的目录。程序会把它写入 `config/local.paths.json`；修改后会直接影响本机报告落点，但不会污染公开仓库配置。")}
@@ -437,17 +446,17 @@ def _render_paths_settings_card(paths: dict, *, span: str = "span-4") -> str:
             </div>"""
 
 
-def _render_tag_management_card(formal_path: Path, pending_path: Path, *, span: str = "span-12") -> str:
-    formal_link = _render_action_link(formal_path, label="显示正式标签", new_tab=True)
-    pending_link = _render_action_link(pending_path, label="显示预选标签", new_tab=True)
+def _render_tag_management_card(formal_path: Path, pending_path: Path, *, span: str = "span-12", ui_token: str = "") -> str:
+    formal_link = _render_action_link(formal_path, label="显示正式标签", new_tab=True, ui_token=ui_token, extra_attrs='data-tag-governance-link="formal"')
+    pending_link = _render_action_link(pending_path, label="显示预选标签", new_tab=True, ui_token=ui_token, extra_attrs='data-tag-governance-link="pending"')
     return f"""
-            <div class="card {span}">
+            <div class="card {span}" data-ui-panel="tag-management">
               <h4>标签管理</h4>
               <div class="form-stack">
                 <div class="actions settings-tag-actions">
                   {formal_link}
                   {pending_link}
-                  <button type="submit" class="button-soft" formaction="/promote-pending-tags" formmethod="post">标签转正</button>
+                  <button type="submit" class="button-soft" data-tag-action="promote-pending" formaction="{html.escape(_post_action('/promote-pending-tags', ui_token))}" formmethod="post">标签转正</button>
                 </div>
               </div>
             </div>"""
@@ -475,7 +484,7 @@ def _render_run_stats_card(status: dict[str, str], counts: dict) -> str:
       </section>"""
 
 
-def _render_action_status_alert(status: dict[str, str], *, title_prefixes: tuple[str, ...]) -> str:
+def _render_action_status_alert(status: dict[str, str], *, title_prefixes: tuple[str, ...], ui_token: str = "") -> str:
     kind = status.get("kind", "")
     title = status.get("title", "")
     if kind not in {"ok", "error"} or not any(title.startswith(prefix) for prefix in title_prefixes):
@@ -483,7 +492,7 @@ def _render_action_status_alert(status: dict[str, str], *, title_prefixes: tuple
     message = html.escape(status.get("message", "") or "")
     css_class = "ok" if kind == "ok" else "error"
     path = status.get("path", "") or ""
-    path_link = _render_file_link(Path(path), label="打开结果", new_tab=True) if path else ""
+    path_link = _render_file_link(Path(path), label="打开结果", new_tab=True, ui_token=ui_token) if path else ""
     return f"""
           <div class="inline-alert {css_class} span-12">
             <strong>{html.escape(title)}</strong>
@@ -677,7 +686,7 @@ def _render_prompt_preview_card(prompt_path: str, preview_text: str) -> str:
       </div>"""
 
 
-def _render_status_entry(status: dict[str, str]) -> str:
+def _render_status_entry(status: dict[str, str], *, ui_token: str = "") -> str:
     if not status.get("kind"):
         return '<div class="log-entry"><strong>最近操作</strong><p>本次加载没有新的操作结果。</p></div>'
     banner_class = "ok" if status.get("kind") == "ok" else "error"
@@ -687,19 +696,41 @@ def _render_status_entry(status: dict[str, str]) -> str:
     primary = status.get("path", "").strip()
     secondary = status.get("extra_path", "").strip()
     if primary:
-        details.append(f'<p><span class="mono">输出：</span>{_render_file_link(Path(primary), label=Path(primary).name)}</p>')
+        details.append(f'<p><span class="mono">输出：</span>{_render_file_link(Path(primary), label=Path(primary).name, ui_token=ui_token)}</p>')
     if secondary:
-        details.append(f'<p><span class="mono">资源：</span>{_render_file_link(Path(secondary), label=Path(secondary).name)}</p>')
+        details.append(f'<p><span class="mono">资源：</span>{_render_file_link(Path(secondary), label=Path(secondary).name, ui_token=ui_token)}</p>')
     return f'<div class="log-entry {banner_class}"><strong>{title}</strong>{"".join(details)}</div>'
 
 
-def _render_prompt_actions(prompt_path: str) -> str:
+def _render_prompt_actions(prompt_path: str, *, ui_token: str = "") -> str:
     if not prompt_path:
         return ""
     path = Path(prompt_path)
-    download_link = _render_file_link(path, label="下载 prompt.md", download=True)
-    open_link = _render_file_link(path, label="打开 prompt.md", new_tab=True)
+    download_link = _render_file_link(path, label="下载 prompt.md", download=True, ui_token=ui_token)
+    open_link = _render_file_link(path, label="打开 prompt.md", new_tab=True, ui_token=ui_token)
     return f"{download_link}{open_link}"
+
+
+def _post_action(path: str, ui_token: str = "") -> str:
+    if not ui_token:
+        return path
+    return path + "?" + urlencode({"token": ui_token})
+
+
+def _token_input(ui_token: str = "") -> str:
+    if not ui_token:
+        return ""
+    return f'<input type="hidden" name="_ui_token" value="{html.escape(ui_token)}">'
+
+
+def _display_pdf_page_limit(value: object) -> str:
+    try:
+        limit = int(value)
+    except (TypeError, ValueError):
+        limit = 40
+    if limit <= 0:
+        return "全部"
+    return str(limit)
 
 
 def _current_ui_url(project: Path) -> str:
@@ -756,8 +787,8 @@ def _manual_prompt_path_from_status(status: dict[str, str]) -> str:
     return ""
 
 
-def _render_file_link(path: Path, *, label: str, download: bool = False, new_tab: bool = False) -> str:
-    attrs = ['class="file-link"', f'href="{html.escape(_local_file_href(path))}"']
+def _render_file_link(path: Path, *, label: str, download: bool = False, new_tab: bool = False, ui_token: str = "") -> str:
+    attrs = ['class="file-link"', f'href="{html.escape(_local_file_href(path, ui_token=ui_token))}"']
     if download:
         attrs.append("download")
         attrs.append('draggable="true"')
@@ -767,16 +798,19 @@ def _render_file_link(path: Path, *, label: str, download: bool = False, new_tab
     return f"<a {' '.join(attrs)}>{html.escape(label)}</a>"
 
 
-def _render_action_link(path: Path, *, label: str, new_tab: bool = False) -> str:
-    attrs = ['class="button-link"', f'href="{html.escape(_local_file_href(path))}"']
+def _render_action_link(path: Path, *, label: str, new_tab: bool = False, ui_token: str = "", extra_attrs: str = "") -> str:
+    attrs = ['class="button-link"', f'href="{html.escape(_local_file_href(path, ui_token=ui_token))}"']
     if new_tab:
-        attrs.append('target="_blank"')
-        attrs.append('rel="noreferrer"')
+        attrs.extend(('target="_blank"', 'rel="noreferrer"'))
+    attrs.extend([extra_attrs] if extra_attrs else [])
     return f"<a {' '.join(attrs)}>{html.escape(label)}</a>"
 
 
-def _local_file_href(path: Path) -> str:
-    return "/local-file?" + urlencode({"path": str(path)})
+def _local_file_href(path: Path, *, ui_token: str = "") -> str:
+    params = {"path": str(path)}
+    if ui_token:
+        params["token"] = ui_token
+    return "/local-file?" + urlencode(params)
 
 
 def _load_text_preview(path_value: str, limit: int = 4000) -> str:

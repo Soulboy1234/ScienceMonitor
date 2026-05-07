@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 from pathlib import Path
 
 from .chatgpt_web_manual import ManualRequestStatus
@@ -24,6 +25,7 @@ def render_page(
     status: dict[str, str],
     manual_requests: list[ManualRequestStatus] | None = None,
     ui_state: dict | None = None,
+    ui_token: str = "",
 ) -> str:
     manual_requests = manual_requests or []
     ui_state = ui_state or {}
@@ -39,9 +41,10 @@ def render_page(
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  <meta name="sciencemonitor-ui" content="config-ui">
-  <title>ScienceMonitor 控制台</title>
+	  <meta charset="utf-8">
+	  <meta name="sciencemonitor-ui" content="config-ui">
+	  <meta name="sciencemonitor-ui-token" content="{html.escape(ui_token)}">
+	  <title>ScienceMonitor 控制台</title>
   <style>{css_text}</style>
 </head>
 <body>
@@ -54,11 +57,11 @@ def render_page(
       <div class="main-shell">
         {render_topbar()}
         <div class="stack">
-          {render_overview_view(project, runtime, analysis, paths, doctor, status, manual_requests, ui_state)}
-          {render_weekly_report_view(project, runtime, status, ui_state)}
-          {render_deep_read_view(project, runtime, paths, status, ui_state)}
-          {render_manual_view(project, status, manual_requests, ui_state)}
-          {render_settings_view(project, runtime, analysis, paths)}
+	      {render_overview_view(project, runtime, analysis, paths, doctor, status, manual_requests, ui_state, ui_token=ui_token)}
+	      {render_weekly_report_view(project, runtime, status, ui_state, ui_token=ui_token)}
+	      {render_deep_read_view(project, runtime, paths, status, ui_state, ui_token=ui_token)}
+	      {render_manual_view(project, status, manual_requests, ui_state, ui_token=ui_token)}
+	      {render_settings_view(project, runtime, analysis, paths, ui_token=ui_token)}
         </div>
       </div>
     </main>

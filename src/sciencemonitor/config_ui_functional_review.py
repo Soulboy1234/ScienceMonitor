@@ -48,11 +48,11 @@ def _snapshot_ui_state(page) -> dict[str, object]:
           const activeNav = document.querySelector('.nav-link.active');
           const main = document.querySelector('.main');
           const title = document.querySelector('[data-current-title]');
-          const hasFormalLink = !!Array.from(document.querySelectorAll('a')).find((node) => node.textContent.trim() === '显示正式标签');
-          const hasPendingLink = !!Array.from(document.querySelectorAll('a')).find((node) => node.textContent.trim() === '显示预选标签');
-          const hasPromoteButton = !!Array.from(document.querySelectorAll('button')).find((node) => node.textContent.trim() === '标签转正');
+          const hasFormalLink = !!document.querySelector('[data-tag-governance-link="formal"]');
+          const hasPendingLink = !!document.querySelector('[data-tag-governance-link="pending"]');
+          const hasPromoteButton = !!document.querySelector('[data-tag-action="promote-pending"]');
           const hasDeepReadFolderForm = !!document.querySelector('form[action="/run-deep-read-folder"]');
-          const hasDeepReadFolderButton = !!Array.from(document.querySelectorAll('button')).find((node) => node.textContent.trim() === '开始批量深度解读');
+          const hasDeepReadFolderButton = !!document.querySelector('[data-task-trigger="deep-read-folder"]');
           return {
             active_view: activeView ? activeView.getAttribute('data-view') : '',
             active_nav: activeNav ? activeNav.getAttribute('data-nav-target') : '',

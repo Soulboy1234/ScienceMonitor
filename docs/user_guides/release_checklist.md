@@ -37,13 +37,13 @@
 ### Harness gate
 
 ```bash
-./scripts/run_science_monitor.sh harness-check
+./scripts/run_science_monitor.sh harness-check --profile release
 ```
 
 如本次改动涉及真实案例链路，再跑：
 
 ```bash
-./scripts/run_science_monitor.sh harness-check --include-real-eval --real-case-ids 2023_sw_resnet_tmd,2026_jgr_polar_convection_mohe
+./scripts/run_science_monitor.sh harness-check --profile release --include-real-eval --real-case-ids 2023_sw_resnet_tmd,2026_jgr_polar_convection_mohe
 ```
 
 注意：
@@ -60,7 +60,7 @@
 ## 4. 结果核对
 
 - `log/maintenance/latest.md` 应显示 `overall=ok`
-- `harness-check` 不应出现 doctor / golden / real fixture 失败
+- `harness-check --profile release` 不应出现 doctor / pytest / output / UI / golden / real fixture 失败
 - `pytest` 应全绿
 - 如涉及真实案例，确认 `real-eval --check-fixtures` 通过，或已明确决定更新 fixture
 

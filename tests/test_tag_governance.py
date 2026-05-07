@@ -11,105 +11,72 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from sciencemonitor.tag_candidates import (
+from sciencemonitor.tag_governance import (
     candidate_log_path,
     candidate_review_report_path,
     filter_tag_candidates,
-    render_tag_candidates_report,
-    write_tag_candidates_report,
-)
-from sciencemonitor.tag_governance import (
     merge_tags_into_formal,
     promote_selected_pending_tags,
     reconcile_output_markdown_tags,
+    render_tag_candidates_report,
     refresh_pending_tag_files,
     resolve_existing_output_tag,
     sync_formal_tags_to_focus_tags_json,
+    write_tag_candidates_report,
 )
 
 
-class TagCandidatesTest(unittest.TestCase):
+class TagGovernanceTest(unittest.TestCase):
     def test_render_report_uses_pending_tag_registry(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = pathlib.Path(tmpdir)
             (root / "config").mkdir()
             (root / "config" / "tag").mkdir(parents=True, exist_ok=True)
-            (root / "data").mkdir()
+            (root / "out" / "auto" / "article_summaries").mkdir(parents=True, exist_ok=True)
             (root / "config" / "focus_tags.json").write_text(
                 (ROOT / "config" / "focus_tags.json").read_text(encoding="utf-8"),
                 encoding="utf-8",
             )
-            (root / "data" / "tag_candidates.json").write_text(
-                json.dumps(
-                    {
-                        "version": 1,
-                        "candidates": {
-                            "新的候选标签": {
-                                "count": 3,
-                                "first_seen": "2026-04-02T00:00:00Z",
-                                "last_seen": "2026-04-02T09:00:00Z",
-                                "contexts": {"deep_read": 2, "article_summary": 1},
-                            },
-                            "一次性标签": {
-                                "count": 1,
-                                "first_seen": "2026-04-02T08:00:00Z",
-                                "last_seen": "2026-04-02T08:00:00Z",
-                                "contexts": {"deep_read": 1},
-                            },
-                        },
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
-                + "\n",
+            sync_formal_tags_to_focus_tags_json(root)
+            (root / "out" / "auto" / "article_summaries" / "a.md").write_text(
+                "- 标签： #对象/测试候选A #对象/测试候选B\n",
+                encoding="utf-8",
+            )
+            (root / "out" / "auto" / "article_summaries" / "b.md").write_text(
+                "- 标签： #对象/测试候选A\n",
                 encoding="utf-8",
             )
 
             self.assertEqual(candidate_log_path(root), root / "config" / "pending_tags.json")
             self.assertEqual(candidate_review_report_path(root), root / "config" / "tag" / "pending_tags.md")
             filtered = filter_tag_candidates(root, min_count=2, limit=10)
-            self.assertEqual([item.tag for item in filtered], [])
+            self.assertEqual([item.tag for item in filtered], ["对象/测试候选A"])
 
             markdown = render_tag_candidates_report(root, min_count=2, limit=10)
             self.assertIn("# 预选标签", markdown)
-            self.assertIn("当前没有待审核的预选标签。", markdown)
-            self.assertNotIn("新的候选标签", markdown)
-            self.assertNotIn("一次性标签", markdown)
+            self.assertIn("对象/测试候选A", markdown)
+            self.assertIn("对象/测试候选B", markdown)
 
     def test_write_report_creates_markdown_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = pathlib.Path(tmpdir)
             (root / "config").mkdir()
             (root / "config" / "tag").mkdir(parents=True, exist_ok=True)
-            (root / "data").mkdir()
+            (root / "out" / "auto" / "article_summaries").mkdir(parents=True, exist_ok=True)
             (root / "config" / "focus_tags.json").write_text(
                 (ROOT / "config" / "focus_tags.json").read_text(encoding="utf-8"),
                 encoding="utf-8",
             )
-            (root / "data" / "tag_candidates.json").write_text(
-                json.dumps(
-                    {
-                        "version": 1,
-                        "candidates": {
-                            "新的候选标签": {
-                                "count": 2,
-                                "first_seen": "2026-04-02T00:00:00Z",
-                                "last_seen": "2026-04-02T09:00:00Z",
-                                "contexts": {"deep_read": 2},
-                            }
-                        },
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
-                + "\n",
+            sync_formal_tags_to_focus_tags_json(root)
+            (root / "out" / "auto" / "article_summaries" / "sample.md").write_text(
+                "- 标签： #对象/新预选标签\n",
                 encoding="utf-8",
             )
 
             report_path = write_tag_candidates_report(root, min_count=2, limit=10)
             self.assertTrue(report_path.exists())
             self.assertEqual(report_path, root / "config" / "tag" / "pending_tags.md")
-            self.assertIn("当前没有待审核的预选标签。", report_path.read_text(encoding="utf-8"))
+            self.assertIn("对象/新预选标签", report_path.read_text(encoding="utf-8"))
 
     def test_promote_checked_pending_tag_updates_formal_and_removes_pending(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

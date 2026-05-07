@@ -12,6 +12,7 @@ from .config import (
     load_path_overrides,
     local_path_config_path,
     logs_root,
+    output_deletions_allowed,
     output_root,
     project_root,
     templates_root,
@@ -110,6 +111,7 @@ def _run_consistency_checks(project: Path) -> list[dict[str, object]]:
         _check_template(project, "周报模板", templates_root(project) / "daily_report_template.md", load_report_template),
         _check_template(project, "深度解读模板", templates_root(project) / "deep_reading_report_template.md", _load_deep_read_template),
         _check_focus_tags(project),
+        _check_output_safety(project),
     ]
 
 
@@ -152,6 +154,30 @@ def _check_focus_tags(project: Path) -> dict[str, object]:
     except Exception as exc:
         issues.append(str(exc))
     return _build_check_result("focus_tags", "标签配置", issues)
+
+
+def _check_output_safety(project: Path) -> dict[str, object]:
+    issues: list[str] = []
+    if output_deletions_allowed(project):
+        resolved_output = output_root(project).resolve()
+        default_output = (project / "out").resolve()
+        local_paths = local_path_config_path(project)
+        env_override = bool(os.environ.get("SCIENCEMONITOR_OUTPUT_ROOT"))
+        outside_project = not _is_relative_to(resolved_output, project.resolve())
+        uses_local_override = local_paths.exists()
+        if env_override or uses_local_override or outside_project or resolved_output != default_output:
+            issues.append(
+                "safety.allow_output_deletions=true 且 output_root 不是默认项目内 out；请确认这是本机私有审核后的删除授权。"
+            )
+    return _build_check_result("output_safety", "输出删除保护", issues)
+
+
+def _is_relative_to(path: Path, base: Path) -> bool:
+    try:
+        path.relative_to(base)
+        return True
+    except ValueError:
+        return False
 
 
 def _build_check_result(check_id: str, label: str, issues: list[str]) -> dict[str, object]:

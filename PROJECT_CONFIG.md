@@ -62,7 +62,7 @@
     "pdf_page_limit": 40
   },
   "safety": {
-    "allow_output_deletions": true
+    "allow_output_deletions": false
   }
 }
 ```
