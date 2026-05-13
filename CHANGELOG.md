@@ -27,7 +27,7 @@ Tag: `v2.1.2`
 
 Snapshot commit:
 
-- `TO_BE_FILLED_AFTER_TAG`
+- `f1fa55a480140aa48ab160dc3813eba411b963b5`
 
 版本定位：
 
