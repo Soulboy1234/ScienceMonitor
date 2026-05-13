@@ -21,6 +21,46 @@
 
 - 下一轮变更待规划。
 
+## [v2.1.3] - 2026-05-13
+
+Tag: `v2.1.3`
+
+Snapshot commit:
+
+- `TO_BE_FILLED_AFTER_TAG`
+
+版本定位：
+
+- `v2.1.2` 之后的正式小版本检查点
+- 目标是把标签生成审计、隐私路径清理、稳定性验证和发布 gate 复核收束为可同步 GitHub 的稳定备份点
+
+主要变化：
+
+- 强化标签生成与治理：
+  - 修复 `TEC` 与中文文本贴连时被审核层误删的问题
+  - 新增 HILDCAA、SC/磁暴急始、TIE-GCM、E-CHAIM、F层/hmF2、热层成分/风场、其他行星和重离子等 tag 归一化规则
+  - 收束宽泛方法词和错类 tag，刷新 `pending_tags` 机器资产与人工入口
+- 强化隐私保护记录：
+  - 清理 completed ExecPlan 中泄露本机绝对路径的记录，改为 `<project>` 或 `config/local.paths.json` 来源描述
+  - 复扫源码、文档、配置和测试，未发现待提交的本机私人路径
+  - 密钥扫描未发现真实 API key、Bearer token 或 private key；文档示例仍保留占位符
+- 稳定性与安全边界复核：
+  - 未发现 `shell=True`、`eval()`、`exec()`、`os.system()` 高危执行点
+  - 受控子进程调用继续使用参数数组形式
+  - config-ui 默认 loopback 绑定，非 loopback 仍需要显式开关并受 token 保护
+  - `maintenance_budget.json` 已重校准到 `v2.1.3` 源码基线
+- `real-eval` 未作为本轮阻塞项，保留为后续真实案例验证。
+
+发版时状态：
+
+- `git diff --check`：通过
+- `./scripts/run_science_monitor.sh doctor`：通过
+- `./scripts/run_science_monitor.sh entropy-check`：通过
+- `./scripts/run_science_monitor.sh harness-audit`：通过
+- `./scripts/run_science_monitor.sh harness-check --profile release`：通过
+- `./scripts/run_science_monitor.sh maintenance-check --auto-repair --max-passes 2`：通过
+- `./.venv/bin/python -m pytest -q`：通过
+
 ## [v2.1.2] - 2026-05-13
 
 Tag: `v2.1.2`

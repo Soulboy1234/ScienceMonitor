@@ -341,7 +341,7 @@ IONOSPHERE_CONTEXT_PATTERNS = (
     r"高纬电离层",
 )
 IONOSPHERE_TEC_POSITIVE_PATTERNS = (
-    r"\btec\b",
+    r"(?<![A-Za-z0-9])tec(?![A-Za-z0-9])",
     r"\btotal electron content\b",
     r"\bgnss tec\b",
     r"\bgps tec\b",
@@ -369,6 +369,12 @@ GEOMAGNETIC_STORM_PATTERNS = (
     r"\bstorm-?time\b",
     r"磁暴",
     r"地磁暴",
+)
+SUDDEN_COMMENCEMENT_PATTERNS = (
+    r"\bsudden commencement\b",
+    r"\bstorm sudden commencement\b",
+    r"(?<![A-Za-z0-9])sc(?![A-Za-z0-9])",
+    r"急始",
 )
 EARTHQUAKE_PATTERNS = (
     r"\bearthquake(?:s)?\b",
@@ -1679,6 +1685,9 @@ def should_keep_formal_tag(
 
     if clean == "事件/亚暴":
         return _has_any(haystack, SUBSTORM_PATTERNS)
+
+    if clean == "事件/磁暴/急始":
+        return _has_any(haystack, SUDDEN_COMMENCEMENT_PATTERNS)
 
     if clean == "事件/磁暴" or clean.startswith("事件/磁暴/"):
         return should_keep_geomagnetic_storm_tag(title_text=title_text, body_text=body_text, extra_text=extra_text)

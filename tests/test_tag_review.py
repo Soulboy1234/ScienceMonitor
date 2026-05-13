@@ -65,6 +65,130 @@ class TagReviewTest(unittest.TestCase):
 
             self.assertEqual(tags, ["对象/电离层/电子密度"])
 
+    def test_review_generated_tags_keeps_tec_adjacent_to_chinese_text(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            tags = review_generated_tags(
+                ["对象/电离层/TEC", "仪器/GNSS"],
+                root=root,
+                title_text="基于智能手机载波相位TEC的电离层时空尺度研究",
+                body_text=(
+                    "研究针对安卓设备伪距TEC聚合方法的限制，提出主动采集智能手机载波相位TEC的方案，"
+                    "并验证其在电离层平静期和日食期间的观测能力。"
+                ),
+                context="output_review",
+            )
+
+            self.assertIn("对象/电离层/TEC", tags)
+            self.assertIn("仪器/GNSS", tags)
+
+    def test_review_generated_tags_folds_article_summary_tag_audit_aliases(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            tags = review_generated_tags(
+                [
+                    "仪器/TIE-GCM",
+                    "事件/SC",
+                    "事件/HILDCAA",
+                    "对象/热层/水平风",
+                    "对象/热层/一氧化氮",
+                    "对象/电网",
+                    "对象/地磁场",
+                    "对象/电离层/F层峰高",
+                    "对象/电离层/F2层",
+                    "仪器/卫星",
+                ],
+                root=root,
+                title_text="Thermospheric wind, nitric oxide cooling, and sudden commencement effects",
+                body_text=(
+                    "论文讨论地磁暴急始（SC）和 HILDCAA 期间的热层水平风、一氧化氮冷却、"
+                    "地磁场扰动以及电网地磁感应电流风险，并使用 TIE-GCM 模型分析 hmF2/F2 层响应。"
+                ),
+                context="article_summary",
+                max_tags=20,
+            )
+
+            for expected in (
+                "模型/TIEGCM",
+                "事件/磁暴/急始",
+                "事件/HILDCAAs",
+                "对象/热层/风场",
+                "对象/热层/成分",
+                "应用/基础设施",
+                "对象/地磁",
+                "对象/电离层/hmF2",
+            ):
+                self.assertIn(expected, tags)
+            for unexpected in (
+                "仪器/TIE-GCM",
+                "事件/SC",
+                "事件/HILDCAA",
+                "对象/热层/水平风",
+                "对象/热层/一氧化氮",
+                "对象/电网",
+                "对象/地磁场",
+                "对象/电离层/F层峰高",
+                "对象/电离层/F2层",
+                "仪器/卫星",
+            ):
+                self.assertNotIn(unexpected, tags)
+
+    def test_review_generated_tags_rewrites_pending_roots_and_broad_method_tags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            tags = review_generated_tags(
+                [
+                    "方法/E-CHAIM",
+                    "对象/日食",
+                    "对象/水星/磁尾",
+                    "对象/磁尾/O+",
+                    "对象/磁尾/O2+",
+                    "方法/趋势拟合",
+                    "方法/交叉对比",
+                    "方法/MHD模拟",
+                    "方法/模式识别",
+                ],
+                root=root,
+                title_text="E-CHAIM, eclipse response, and Mercury magnetosphere examples",
+                body_text=(
+                    "The paper compares E-CHAIM results during a solar eclipse, discusses Mercury magnetotail context, "
+                    "includes O+ and O2+ heavy ions, and uses MHD simulation, "
+                    "trend fitting, cross comparison, and pattern recognition."
+                ),
+                context="article_summary",
+                max_tags=20,
+            )
+
+            for expected in (
+                "模型/E-CHAIM",
+                "事件/日食",
+                "对象/其他行星/水星",
+                "对象/重离子",
+                "方法/统计研究",
+                "数据/数据对比",
+                "方法/数值模拟",
+                "方法/建模/机器学习",
+            ):
+                self.assertIn(expected, tags)
+            for unexpected in (
+                "方法/E-CHAIM",
+                "对象/日食",
+                "对象/水星/磁尾",
+                "对象/磁尾/O+",
+                "对象/磁尾/O2+",
+                "方法/趋势拟合",
+                "方法/交叉对比",
+                "方法/MHD模拟",
+                "方法/模式识别",
+            ):
+                self.assertNotIn(unexpected, tags)
+
     def test_deep_read_infers_thermosphere_density_from_plural_title(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = pathlib.Path(tmpdir)
