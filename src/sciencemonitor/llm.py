@@ -113,7 +113,7 @@ DEFAULT_ANALYSIS_CONFIG = {
         "deep_read_num_predict": 8192,
         "deep_read_quality_mode": True,
         "deep_read_stage_keep_alive": "1m",
-        "deep_read_final_max_chars": 12000,
+        "deep_read_final_max_chars": 16000,
     },
     "chatgpt_web_manual": {},
 }
@@ -489,16 +489,17 @@ class AnalysisEngine:
         if self.provider != "chatgpt_web_manual" and not normalized_full_text:
             return None
 
-        cache_basis = "|".join(
-            [
-                "deep_read_template_v6",
-                str(metadata.get("doi", "")),
-                str(metadata.get("title", "")),
-                str(metadata.get("journal", "")),
-                hashlib.sha1(normalized_full_text.encode("utf-8")).hexdigest()[:16] if normalized_full_text else "manual_web_search",
-                self._analysis_signature("deep_reads"),
-            ]
-        )
+        cache_basis_parts = [
+            "deep_read_template_v6",
+            str(metadata.get("doi", "")),
+            str(metadata.get("title", "")),
+            str(metadata.get("journal", "")),
+            hashlib.sha1(normalized_full_text.encode("utf-8")).hexdigest()[:16] if normalized_full_text else "manual_web_search",
+            self._analysis_signature("deep_reads"),
+        ]
+        if self.provider == "ollama_api" and self._ollama_deep_read_quality_mode_enabled():
+            cache_basis_parts.append("ollama_deep_read_quality_v3")
+        cache_basis = "|".join(cache_basis_parts)
         cache_key = hashlib.sha1(cache_basis.encode("utf-8")).hexdigest()
         cached = self._read_json_cache("deep_reads", cache_key)
         if cached:
@@ -668,17 +669,21 @@ class AnalysisEngine:
         cache_key: str,
         progress_callback: Callable[[dict], None] | None = None,
     ) -> dict:
-        evidence_key = hashlib.sha1(f"deep_read_evidence_v2|{cache_key}".encode("utf-8")).hexdigest()
+        evidence_key = hashlib.sha1(f"deep_read_evidence_v3|{cache_key}".encode("utf-8")).hexdigest()
         cached = self._read_json_cache("deep_read_evidence", evidence_key)
         if cached is not None:
             return cached
         _emit_analysis_progress(progress_callback, stage="ollama_evidence", message="正在用全文整理证据边界。")
-        prompt = self._build_ollama_deep_read_evidence_prompt_v2(metadata, full_text, related_summary)
-        retry_prompt = self._build_ollama_deep_read_evidence_retry_prompt_v2(metadata, full_text, related_summary)
+        evidence_source_text = self._ollama_deep_read_final_context_v2(
+            full_text,
+            max_chars=self._ollama_deep_read_evidence_context_max_chars(),
+        )
+        prompt = self._build_ollama_deep_read_evidence_prompt_v2(metadata, evidence_source_text, related_summary)
+        retry_prompt = self._build_ollama_deep_read_evidence_retry_prompt_v2(metadata, evidence_source_text, related_summary)
         payload = self._run_ollama_deep_read_structured_with_repair(
             prompt,
             self._ollama_deep_read_evidence_schema_v2(),
-            f"deep_read_evidence_v2_{cache_key[:20]}",
+            f"deep_read_evidence_v3_{cache_key[:20]}",
             stage="evidence",
             retry_prompt=retry_prompt,
             progress_callback=progress_callback,
@@ -713,6 +718,17 @@ class AnalysisEngine:
             try:
                 payload = self._run_ollama_structured(retry_prompt, schema, retry_name)
             except AnalysisProviderInvalidOutput as retry_exc:
+                repaired_retry = self._repair_ollama_deep_read_payload_from_error(schema, retry_exc)
+                if repaired_retry is not None:
+                    _emit_analysis_progress(
+                        progress_callback,
+                        stage=f"ollama_{stage}_json_repaired_after_retry",
+                        message=(
+                            f"Ollama 深度解读{self._ollama_deep_read_stage_label(stage)}严格重试 JSON "
+                            "已本地修复。"
+                        ),
+                    )
+                    return repaired_retry
                 raise retry_exc from exc
             _emit_analysis_progress(
                 progress_callback,
@@ -729,10 +745,246 @@ class AnalysisEngine:
         raw = self._invalid_output_text(exc)
         if not raw:
             return None
-        try:
-            return _parse_structured_output("ollama_api", raw, schema=schema)
-        except StructuredOutputParseError:
+        schema_name = str((schema or {}).get("name", "") or "")
+        if schema_name not in {"deep_read_analysis", "ollama_deep_read_evidence_v2"}:
+            try:
+                return _parse_structured_output("ollama_api", raw, schema=schema)
+            except StructuredOutputParseError:
+                return None
+        for candidate in self._ollama_deep_read_json_repair_candidates(raw):
+            payload = self._load_ollama_json_candidate(candidate)
+            if not isinstance(payload, dict):
+                continue
+            payload = self._repair_ollama_deep_read_payload_keys(payload, schema)
+            if not self._looks_like_ollama_deep_read_payload(payload, schema):
+                continue
+            completed = self._complete_ollama_deep_read_payload(payload, schema)
+            try:
+                return _parse_structured_output(
+                    "ollama_api",
+                    json.dumps(completed, ensure_ascii=False),
+                    schema=schema,
+                )
+            except StructuredOutputParseError:
+                continue
+        return None
+
+    def _ollama_deep_read_json_repair_candidates(self, raw: str) -> list[str]:
+        sources: list[str] = []
+
+        def add(value: str) -> None:
+            clean = str(value or "").strip()
+            if clean and clean not in sources:
+                sources.append(clean)
+
+        stripped = self._strip_ollama_json_fence(raw)
+        add(raw)
+        add(stripped)
+        add(_extract_json_object_candidate(raw))
+        add(_extract_json_object_candidate(stripped))
+        add(self._slice_first_to_last_json_brace(stripped))
+
+        candidates: list[str] = []
+        for source in sources:
+            repaired = self._repair_ollama_deep_read_json_text(source)
+            for candidate in [source, repaired, *_ollama_json_repair_candidates(repaired)]:
+                clean = str(candidate or "").strip()
+                if clean and clean not in candidates:
+                    candidates.append(clean)
+        return candidates
+
+    def _strip_ollama_json_fence(self, value: str) -> str:
+        text = str(value or "").strip()
+        if not text.startswith("```"):
+            return text
+        lines = text.splitlines()
+        if lines and lines[0].lstrip().startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip().startswith("```"):
+            lines = lines[:-1]
+        return "\n".join(lines).strip()
+
+    def _slice_first_to_last_json_brace(self, value: str) -> str:
+        text = str(value or "").strip()
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            return text
+        return text[start:end + 1].strip()
+
+    def _repair_ollama_deep_read_json_text(self, value: str) -> str:
+        text = self._strip_ollama_json_fence(value)
+        text = re.sub(r"(?m)^(\s*)[-*]\s+(?=\"[^\"]+\"\s*:)", r"\1", text)
+        text = re.sub(r"(?m)^(\s*)[．。·、，,]+(?=\"[^\"]+\"\s*:)", r"\1", text)
+        text = re.sub(r"(?m)^(\s*)[\u4e00-\u9fff]{1,2}(?=\"[^\"\n]+\"\s*[,}\]])", r"\1", text)
+        text = re.sub(r'(?m)^(\s*)_([A-Za-z][A-Za-z0-9_]*)"\s*:', r'\1"\2":', text)
+        text = re.sub(r'(?m)^(\s*)([A-Za-z_][A-Za-z0-9_]*)"\s*:', r'\1"\2":', text)
+        text = re.sub(
+            r'(?m)^(\s*)"?(?:_?open_questions|open_question|open_issues)"?\s*:',
+            r'\1"open_questions":',
+            text,
+        )
+        text = re.sub(
+            r'(?m)^(\s*)"?(?:ers_findings|secondaryfindings|secondary_findings_list)"?\s*:',
+            r'\1"secondary_findings":',
+            text,
+        )
+        text = re.sub(r'(?<=[。.!?！？；;\)])""(?=\s*[,}\]])', r'"', text)
+        text = re.sub(
+            r'(?ms)^(\s*"reproducibility"\s*:\s*"(?:\\.|[^"\\])*")\s*\n\s*}\s*,\s*\n'
+            r'(\s*"(?:relation|final_conclusion|relation_to_my_work|follow_up_questions|needs_manual_review|knowledge_position)"\s*:)',
+            r"\1,\n\2",
+            text,
+        )
+        evidence_keys = (
+            "introduction_gap",
+            "method_chain",
+            "hard_findings",
+            "secondary_findings",
+            "reasonable_inferences",
+            "open_questions",
+            "contribution_points",
+            "limitations",
+            "reproducibility_notes",
+            "relation_to_my_work_evidence",
+            "manual_review_points",
+        )
+        for key in evidence_keys:
+            text = re.sub(
+                rf'(?m)(^\s{{4}}"(?:\\.|[^"\\])*"\s*,?\s*\n)(\s{{2}}"{key}"\s*:)',
+                r"\1  ],\n\2",
+                text,
+            )
+        return text
+
+    def _load_ollama_json_candidate(self, candidate: str) -> object | None:
+        clean = str(candidate or "").strip()
+        if not clean:
             return None
+        try:
+            return json.loads(clean)
+        except json.JSONDecodeError:
+            try:
+                return ast.literal_eval(clean)
+            except Exception:
+                return None
+
+    def _repair_ollama_deep_read_payload_keys(self, payload: dict, schema: dict) -> dict:
+        schema_name = str((schema or {}).get("name", "") or "")
+        repaired = dict(payload or {})
+        aliases: dict[str, tuple[str, ...]] = {}
+        if schema_name == "ollama_deep_read_evidence_v2":
+            aliases = {
+                "open_questions": ("_open_questions", "open_question", "open_issues"),
+                "secondary_findings": ("ers_findings", "secondaryfindings", "secondary_findings_list"),
+            }
+        elif schema_name == "deep_read_analysis":
+            aliases = {
+                "final_conclusion": ("conclusion", "overall_conclusion", "最终结论"),
+                "relation_to_my_work": ("my_work_relation", "relation_to_current_work"),
+                "follow_up_questions": ("follow_up", "followup_questions", "next_questions"),
+                "needs_manual_review": ("manual_review", "need_manual_review"),
+            }
+        for canonical, candidates in aliases.items():
+            if canonical in repaired and repaired.get(canonical) not in (None, ""):
+                continue
+            for candidate in candidates:
+                if candidate not in repaired:
+                    continue
+                value = repaired.get(candidate)
+                if value in (None, ""):
+                    continue
+                repaired[canonical] = value
+                break
+        return repaired
+
+    def _looks_like_ollama_deep_read_payload(self, payload: dict, schema: dict) -> bool:
+        required = [str(item) for item in (((schema or {}).get("schema") or {}).get("required", []) or [])]
+        if not required:
+            return False
+        present = [key for key in required if key in payload]
+        schema_name = str((schema or {}).get("name", "") or "")
+        if schema_name == "ollama_deep_read_evidence_v2":
+            return (
+                len(present) >= len(required) - 2
+                and "research_problem" in payload
+                and ("method_chain" in payload or "hard_findings" in payload)
+            )
+        if schema_name == "deep_read_analysis":
+            return (
+                len(present) >= len(required) - 2
+                and "one_sentence_overview" in payload
+                and ("key_results" in payload or "how" in payload)
+            )
+        return False
+
+    def _complete_ollama_deep_read_payload(self, payload: dict, schema: dict) -> dict:
+        schema_name = str((schema or {}).get("name", "") or "")
+        required = [str(item) for item in (((schema or {}).get("schema") or {}).get("required", []) or [])]
+        completed = dict(payload or {})
+        missing = [key for key in required if key not in completed]
+        if schema_name == "ollama_deep_read_evidence_v2":
+            for key in required:
+                value = completed.get(key)
+                if key not in completed:
+                    completed[key] = []
+                elif isinstance(value, dict):
+                    completed[key] = self._flatten_ollama_deep_read_json_value(value)
+                elif isinstance(value, list):
+                    completed[key] = [
+                        text
+                        for item in value
+                        for text in self._flatten_ollama_deep_read_json_value(item)
+                        if text
+                    ]
+                else:
+                    completed[key] = str(value or "").strip()
+            return completed
+
+        if schema_name == "deep_read_analysis":
+            for key in required:
+                if key == "tags":
+                    completed[key] = self._normalize_ollama_tags(completed.get(key, []))
+                    continue
+                if key == "final_conclusion" and not str(completed.get(key, "") or "").strip():
+                    completed[key] = self._fallback_ollama_final_conclusion(completed)
+                    continue
+                if key not in completed:
+                    completed[key] = ""
+            if missing:
+                note = "Ollama 深度解读结构化输出缺少字段，已本地补齐：{}；需人工复核补齐内容。".format(
+                    "、".join(missing)
+                )
+                existing = str(completed.get("needs_manual_review", "") or "").strip()
+                completed["needs_manual_review"] = f"{existing}\n{note}".strip() if existing else note
+            return completed
+        return completed
+
+    def _flatten_ollama_deep_read_json_value(self, value: object) -> list[str]:
+        if isinstance(value, dict):
+            parts: list[str] = []
+            for raw_key, raw_value in value.items():
+                label = str(raw_key).strip()
+                flattened = self._flatten_ollama_deep_read_json_value(raw_value)
+                if not flattened:
+                    continue
+                body = "；".join(flattened)
+                parts.append(f"{label}：{body}" if label else body)
+            return parts
+        if isinstance(value, list):
+            parts = []
+            for item in value:
+                parts.extend(self._flatten_ollama_deep_read_json_value(item))
+            return parts
+        text = str(value or "").strip()
+        return [text] if text else []
+
+    def _fallback_ollama_final_conclusion(self, payload: dict) -> str:
+        for key in ("one_sentence_overview", "relation", "contribution", "key_results"):
+            value = self._stringify_ollama_deep_read_value(payload.get(key, ""), field=key).strip()
+            if value:
+                return value
+        return "Ollama 输出缺少 final_conclusion，需依据正文和关键结果人工复核最终结论。"
 
     def _build_ollama_deep_read_evidence_retry_prompt_v2(
         self,
@@ -822,9 +1074,18 @@ class AnalysisEngine:
                 lines.append(f"{label}：\n{value}")
         return "\n\n".join(lines)
 
-    def _ollama_deep_read_final_context_v2(self, full_text: str) -> str:
+    def _ollama_deep_read_evidence_context_max_chars(self) -> int:
         settings = self.config.get("ollama_api", {})
-        max_chars = int(settings.get("deep_read_final_max_chars", 12000) or 12000)
+        try:
+            final_max_chars = int(settings.get("deep_read_final_max_chars", 16000) or 16000)
+        except Exception:
+            final_max_chars = 16000
+        return max(16000, min(28000, final_max_chars * 2))
+
+    def _ollama_deep_read_final_context_v2(self, full_text: str, *, max_chars: int | None = None) -> str:
+        settings = self.config.get("ollama_api", {})
+        if max_chars is None:
+            max_chars = int(settings.get("deep_read_final_max_chars", 16000) or 16000)
         text = str(full_text or "").strip()
         if not text:
             return ""
@@ -832,20 +1093,97 @@ class AnalysisEngine:
             return text
 
         section_specs = [
-            ("摘要/引言", ("abstract", "plain language summary", "key points", "introduction"), 0.32),
-            ("方法/数据", ("method", "methods", "data", "observation", "observations", "model", "instrument"), 0.24),
-            ("结果/讨论", ("result", "results", "analysis", "discussion"), 0.28),
-            ("结论/总结", ("conclusion", "conclusions", "summary"), 0.16),
+            ("摘要/引言", ("abstract", "plain language summary", "key points", "introduction"), 0.24),
+            ("方法/数据", ("method", "methods", "data", "observation", "observations", "model", "instrument"), 0.20),
+            ("案例/验证", ("case study", "case studies", "validation", "verification", "benchmark", "experiment"), 0.24),
+            (
+                "结果/讨论",
+                ("result", "results", "analysis", "discussion", "recommendation", "engineering consequence"),
+                0.20,
+            ),
+            ("结论/总结", ("conclusion", "conclusions", "summary"), 0.12),
         ]
-        blocks: list[str] = []
+        section_blocks: list[str] = []
         for label, keywords, fraction in section_specs:
             body = self._extract_ollama_section_excerpt(text, keywords, max_chars=max(900, int(max_chars * fraction)))
             if body:
-                blocks.append(f"{label}：\n{body}")
+                section_blocks.append(f"{label}：\n{body}")
+        blocks = list(section_blocks)
+        target_snippets = self._ollama_deep_read_target_snippets(text, max_chars=max(1600, int(max_chars * 0.65)))
+        target_block = ""
+        if target_snippets:
+            target_block = f"重点案例/建议片段：\n{target_snippets}"
+            blocks.append(target_block)
         joined = "\n\n".join(blocks).strip()
+        if len(joined) > max_chars:
+            if target_block and len(target_block) < max_chars:
+                section_budget = max(600, max_chars - len(target_block) - 2)
+                section_part = self._trim_ollama_context("\n\n".join(section_blocks), max_chars=section_budget)
+                return f"{section_part}\n\n{target_block}".strip()
+            return self._trim_ollama_context(joined, max_chars=max_chars)
         if len(joined) >= min(max_chars, 2200) or len(text) <= max_chars:
             return joined or text[:max_chars].strip()
         return self._ollama_head_mid_tail_context(text, max_chars=max_chars)
+
+    def _ollama_deep_read_target_snippets(self, text: str, *, max_chars: int) -> str:
+        clean = str(text or "").strip()
+        lower = clean.lower()
+        if not (
+            re.search(r"\bpinns?\b|physics[-\s]+informed|物理(?:信息|约束)神经网络", lower, flags=re.IGNORECASE)
+            and re.search(r"\bxai\b|explainab|可解释性?人工智能", lower, flags=re.IGNORECASE)
+        ):
+            return ""
+        keywords = (
+            "multiplicative error propagation",
+            "multiplicative",
+            "false confidence",
+            "kirsch",
+            "stress concentration",
+            "piecewise stiffness",
+            "piecewise",
+            "varying properties",
+            "cantilever",
+            "euler-bernoulli",
+            "recommendations for engineering practice",
+            "recommendations",
+            "validation processes",
+            "sensitivity analysis",
+            "independent engineering review",
+            "fail-safe",
+            "fail safe",
+            "case studies",
+            "case study",
+        )
+        windows: list[tuple[int, int]] = []
+        for keyword in keywords:
+            index = lower.find(keyword)
+            if index < 0:
+                continue
+            start = max(0, index - 700)
+            end = min(len(clean), index + 1500)
+            merged = False
+            for existing_index, (existing_start, existing_end) in enumerate(windows):
+                if start <= existing_end + 250 and end >= existing_start - 250:
+                    windows[existing_index] = (min(existing_start, start), max(existing_end, end))
+                    merged = True
+                    break
+            if not merged:
+                windows.append((start, end))
+        if not windows:
+            return ""
+
+        snippets: list[str] = []
+        used = 0
+        for start, end in windows:
+            if used >= max_chars:
+                break
+            excerpt = clean[start:end].strip()
+            excerpt = self._trim_ollama_context(excerpt, max_chars=max_chars - used)
+            if not excerpt:
+                continue
+            snippets.append(excerpt)
+            used += len(excerpt)
+        return "\n\n".join(snippets).strip()
 
     def _extract_ollama_section_excerpt(self, text: str, keywords: tuple[str, ...], *, max_chars: int) -> str:
         heading_re = re.compile(
@@ -1033,6 +1371,37 @@ class AnalysisEngine:
         evidence_text = json.dumps(evidence_payload, ensure_ascii=False)
         if "缺损" in evidence_text and "缺损" not in str(payload.get("needs_manual_review", "")):
             issues.append("证据预分析提到全文抽取缺损，最终报告需要在人工复核点中保留。")
+        issues.extend(self._ollama_ai_engineering_deep_read_issues(payload, evidence_payload))
+        return issues
+
+    def _ollama_ai_engineering_deep_read_issues(self, payload: dict, evidence_payload: dict) -> list[str]:
+        evidence_text = json.dumps(evidence_payload, ensure_ascii=False)
+        evidence_lower = evidence_text.lower()
+        if not (
+            re.search(r"\bpinns?\b|physics[-\s]+informed|物理(?:信息|约束)神经网络", evidence_lower, flags=re.IGNORECASE)
+            and re.search(r"\bxai\b|explainab|可解释性?人工智能", evidence_lower, flags=re.IGNORECASE)
+        ):
+            return []
+        report_text = json.dumps(payload, ensure_ascii=False)
+        report_lower = report_text.lower()
+        issues: list[str] = []
+        if not re.search(r"乘法式|误差传播|multiplicative|false confidence|虚假(?:可信|信心|验证)", report_lower, flags=re.IGNORECASE):
+            issues.append("PINN/XAI 方法论文缺少对乘法式误差传播或虚假可信度机制的总结。")
+        case_requirements = (
+            ("Kirsch/圆孔应力集中案例", r"kirsch|圆孔|应力集中"),
+            ("悬臂梁 XAI 案例", r"cantilever|悬臂梁"),
+            ("分段刚度/材料不连续案例", r"piecewise|分段|材料不连续|刚度"),
+        )
+        missing_cases = [
+            label
+            for label, pattern in case_requirements
+            if re.search(pattern, evidence_lower, flags=re.IGNORECASE)
+            and not re.search(pattern, report_lower, flags=re.IGNORECASE)
+        ]
+        if missing_cases:
+            issues.append(f"PINN/XAI 方法论文遗漏关键案例：{'、'.join(missing_cases)}。")
+        if not re.search(r"敏感性分析|独立(?:工程)?审查|fail[-\s]?safe|验证协议|triangulat|不确定性", report_lower, flags=re.IGNORECASE):
+            issues.append("PINN/XAI 方法论文缺少作者关于验证、敏感性分析、独立审查或 fail-safe 边界的实践建议。")
         return issues
 
     def _ollama_key_result_counts(self, value: str) -> dict[str, int]:
@@ -1433,7 +1802,7 @@ class AnalysisEngine:
 
     def _ollama_deep_read_final_text(self, full_text: str) -> str:
         settings = self.config.get("ollama_api", {})
-        max_chars = int(settings.get("deep_read_final_max_chars", 12000) or 12000)
+        max_chars = int(settings.get("deep_read_final_max_chars", 16000) or 16000)
         text = str(full_text or "").strip()
         if max_chars <= 0 or len(text) <= max_chars:
             return text

@@ -313,7 +313,7 @@ def _normalize_relation_to_my_work_text(value: str, *, tags: list[str]) -> str:
         and not _contains_downstream_keywords(line.strip())
         and not re.search(r"([一二三四五六七八九十两\d]+个)?重要方向", line.strip())
     ]
-    closing = "这项工作更适合作为边界区动力学个例和机制对照，不宜直接外推到业务化或定量应用。"
+    closing = _relation_to_my_work_closing(tags)
     if kept_items:
         intro = "\n".join(kept_paragraphs) if kept_paragraphs else "它和当前主线的直接关系主要体现在以下几点。"
         lead_block = f"{intro}\n{_render_numbered_items(kept_items)}"
@@ -321,9 +321,13 @@ def _normalize_relation_to_my_work_text(value: str, *, tags: list[str]) -> str:
         lead_block = "\n\n".join(kept_paragraphs)
     else:
         lead_block = _default_relation_to_my_work_lead(tags)
-    if lead_block.rstrip() == closing:
+    if _compact_relation_text(closing) in _compact_relation_text(lead_block):
         return lead_block.strip()
     return f"{lead_block.strip()}\n\n{closing}".strip()
+
+
+def _compact_relation_text(value: str) -> str:
+    return re.sub(r"\s+", "", str(value or ""))
 
 
 def _supports_downstream_application(tags: list[str]) -> bool:
@@ -418,11 +422,27 @@ def _render_numbered_items(items: list[str]) -> str:
 
 
 def _default_relation_to_my_work_lead(tags: list[str]) -> str:
+    if _is_ai_method_deep_read_tags(tags):
+        return "它与当前主线是间接相关的，主要价值在于提醒后续机器学习建模中区分物理约束、统计解释和真实因果机制。"
     if "热层/风场" in tags and any(tag.startswith("极区/") for tag in tags):
         return "它和当前主线的直接关系在于：这是一篇东亚中纬边界区受极区过程直接控制的高质量个例，可用于后续热层风异常事件筛选和机制对照。"
     if "热层/密度" in tags:
         return "它和当前主线的直接关系在于：可作为热层密度异常识别与驱动归因的参考个例。"
     return "它与当前主线是间接相关的，可作为相关机制背景和个例对照。"
+
+
+def _relation_to_my_work_closing(tags: list[str]) -> str:
+    if _is_ai_method_deep_read_tags(tags):
+        return "这项工作更适合作为机器学习模型可靠性、物理约束建模和可解释性审查的方法论参照，不宜直接外推为空间天气业务结论。"
+    return "这项工作更适合作为边界区动力学个例和机制对照，不宜直接外推到业务化或定量应用。"
+
+
+def _is_ai_method_deep_read_tags(tags: list[str]) -> bool:
+    return any(
+        tag in {"方法/建模/机器学习/PINN", "方法/可解释模型/XAI"}
+        or tag.startswith("方法/可解释模型")
+        for tag in tags
+    )
 
 
 def _validate_deep_read_markdown(markdown: str, *, is_output_note: bool) -> list[str]:

@@ -31,6 +31,7 @@ INVALID_PAGE_TITLES = {
     "access denied",
     "please wait",
 }
+PDF_TEXT_EXTRACTOR_VERSION = "pdf_text_v2"
 
 
 @dataclass(frozen=True)
@@ -538,8 +539,27 @@ def _extract_local_pdf_text(
     if not pdftotext_bin:
         return "", ""
 
+    candidates: list[tuple[str, str]] = []
+    layout_raw = _run_pdftotext(pdftotext_bin, pdf_path, page_limit=page_limit, layout=True)
+    if layout_raw:
+        candidates.append(("layout_filtered", prepare_scientific_source_text(layout_raw, assume_pdf_layout=True)))
+        candidates.append(("layout_wide", prepare_scientific_source_text(layout_raw, assume_pdf_layout=False)))
+    plain_raw = _run_pdftotext(pdftotext_bin, pdf_path, page_limit=page_limit, layout=False)
+    if plain_raw:
+        candidates.append(("plain_wide", prepare_scientific_source_text(plain_raw, assume_pdf_layout=False)))
+    scientific_text = _select_best_pdf_scientific_text(candidates)
+    if not scientific_text:
+        return "", ""
+    summary_packet = build_summary_packet_from_scientific_text(scientific_text)
+    return scientific_text, summary_packet
+
+
+def _run_pdftotext(pdftotext_bin: str, pdf_path: Path, *, page_limit: int, layout: bool) -> str:
     try:
-        command = [pdftotext_bin, "-layout", "-nopgbrk", "-f", "1"]
+        command = [pdftotext_bin]
+        if layout:
+            command.append("-layout")
+        command.extend(["-nopgbrk", "-f", "1"])
         if page_limit > 0:
             command.extend(["-l", str(page_limit)])
         command.extend([str(pdf_path), "-"])
@@ -550,10 +570,40 @@ def _extract_local_pdf_text(
             text=True,
         )
     except Exception:
-        return "", ""
-    scientific_text = prepare_scientific_source_text(result.stdout, assume_pdf_layout=True)
-    summary_packet = build_summary_packet_from_scientific_text(scientific_text)
-    return scientific_text, summary_packet
+        return ""
+    return str(result.stdout or "")
+
+
+def _select_best_pdf_scientific_text(candidates: list[tuple[str, str]]) -> str:
+    scored = [
+        (_score_pdf_scientific_text(text, source=name), name, text)
+        for name, text in candidates
+        if str(text or "").strip()
+    ]
+    if not scored:
+        return ""
+    scored.sort(key=lambda item: (item[0], len(item[2])), reverse=True)
+    return scored[0][2].strip()
+
+
+def _score_pdf_scientific_text(text: str, *, source: str) -> int:
+    clean = str(text or "").strip()
+    if not clean:
+        return 0
+    lower = clean.lower()
+    score = min(len(clean) // 1000, 140)
+    score += len(re.findall(r"(?m)^\d+\.\s+[A-Z][A-Za-z0-9,()\-–/& ]{2,90}$", clean)) * 8
+    score += min(lower.count("abstract"), 2) * 4
+    score += min(lower.count("introduction"), 3) * 4
+    score += min(sum(lower.count(item) for item in ("method", "results", "discussion", "conclusion")), 8) * 3
+    score += min(sum(lower.count(item) for item in ("pinn", "xai", "case study", "validation", "reproduc")), 12) * 2
+    if source == "layout_filtered":
+        score += 6
+    if len(clean) < 12000:
+        score -= 20
+    if len(clean) < 6000:
+        score -= 30
+    return score
 
 
 def extract_pdf_scientific_text(pdf_path: Path, *, project_root: Path | None = None, page_limit: int = 6) -> str:
@@ -649,6 +699,7 @@ def write_article_source_cache(
     }
     if pdf_page_limit is not None:
         payload["pdf_page_limit"] = pdf_page_limit
+        payload["text_extractor_version"] = PDF_TEXT_EXTRACTOR_VERSION
     cache_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return str(cache_path)
 

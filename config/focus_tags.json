@@ -1577,6 +1577,25 @@
       "category": "model_method"
     },
     {
+      "id": "xai",
+      "label": "方法/可解释模型/XAI",
+      "category": "model_method",
+      "aliases": [
+        "XAI",
+        "可解释性人工智能",
+        "可解释人工智能",
+        "explainable artificial intelligence",
+        "explainability methods",
+        "post-hoc explainability"
+      ],
+      "patterns": [
+        "(?<![A-Za-z0-9])xai(?![A-Za-z0-9])",
+        "explainab(?:le|ility)\\s+(?:artificial\\s+intelligence|methods?)",
+        "post[-\\s]?hoc\\s+explainability",
+        "可解释性?人工智能"
+      ]
+    },
+    {
       "id": "shap_2",
       "label": "方法/SHAP",
       "category": "model_method"
@@ -1690,7 +1709,21 @@
     {
       "id": "pinn",
       "label": "方法/建模/机器学习/PINN",
-      "category": "model_method"
+      "category": "model_method",
+      "aliases": [
+        "PINN",
+        "PINNs",
+        "物理信息神经网络",
+        "物理约束神经网络",
+        "physics-informed neural network",
+        "physics-informed neural networks",
+        "physics-informed neural nets"
+      ],
+      "patterns": [
+        "(?<![A-Za-z0-9])pinns?(?![A-Za-z0-9])",
+        "physics[-\\s]+informed\\s+neural\\s+(?:networks?|nets?)",
+        "物理(?:信息|约束)神经网络"
+      ]
     },
     {
       "id": "tag_63",

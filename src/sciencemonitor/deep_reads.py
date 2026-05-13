@@ -11,6 +11,7 @@ from sqlite3 import Row
 from typing import Callable
 
 from .article_fetch import (
+    PDF_TEXT_EXTRACTOR_VERSION,
     build_candidate_article_urls,
     extract_pdf_scientific_text,
     fetch_article_page_snapshot,
@@ -731,6 +732,8 @@ def _cached_source_matches_runtime(cached: dict, runtime: dict) -> bool:
     source_kind = str(cached.get("source_kind", "") or "")
     if source_kind not in {"provided_pdf", "downloaded_pdf", "local_pdf_full_text"}:
         return True
+    if str(cached.get("text_extractor_version", "") or "") != PDF_TEXT_EXTRACTOR_VERSION:
+        return False
     if "pdf_page_limit" not in cached:
         return False
     try:

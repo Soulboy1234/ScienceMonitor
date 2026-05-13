@@ -118,14 +118,14 @@
   "ollama_api": {
     "model": "gemma4:26b",
     "base_url": "http://127.0.0.1:11434/api/chat",
-    "timeout_seconds": 500,
+    "timeout_seconds": 800,
     "keep_alive": 0,
     "num_ctx": 32768,
     "num_predict": 4096,
     "deep_read_num_predict": 8192,
     "deep_read_quality_mode": true,
     "deep_read_stage_keep_alive": "1m",
-    "deep_read_final_max_chars": 12000
+    "deep_read_final_max_chars": 16000
   },
   "chatgpt_web_manual": {}
 }
@@ -216,7 +216,7 @@
 - `ollama_api.deep_read_num_predict`：建议 `8192`，只给 Ollama 深度解读使用，允许本地模型输出更完整的 JSON
 - `ollama_api.deep_read_quality_mode`：建议保持 `true`，只增强深度解读，不改变单篇摘要总结的证据边界
 - `ollama_api.deep_read_stage_keep_alive`：建议 `1m`，避免深度解读两阶段之间反复加载模型
-- `ollama_api.deep_read_final_max_chars`：建议 `12000`；完整全文已在第一阶段读取，最终阶段用压缩核对材料生成报告
+- `ollama_api.deep_read_final_max_chars`：建议 `16000`；完整全文已在第一阶段读取，最终阶段用压缩核对材料生成报告
 
 ## 建议的模型策略
 

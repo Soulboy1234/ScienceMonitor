@@ -509,7 +509,7 @@ def infer_sub_index_pages(note_path: Path, root: Path) -> list[str]:
     haystack = normalize_haystack(f"{note_path.stem}\n{text}")
     pages: list[str] = []
     for page_name, keywords in KEYWORD_PAGE_RULES:
-        if any(keyword.lower() in haystack for keyword in keywords):
+        if any(_keyword_matches_haystack(haystack, keyword) for keyword in keywords):
             pages.append(page_name)
     if not pages:
         for label in topic_labels:
@@ -519,6 +519,25 @@ def infer_sub_index_pages(note_path: Path, root: Path) -> list[str]:
 
     pages = prune_parent_pages(dedupe(pages))
     return pages[:3]
+
+
+def _keyword_matches_haystack(haystack: str, keyword: str) -> bool:
+    needle = str(keyword or "").strip().lower()
+    if not needle:
+        return False
+    if needle == "kp":
+        if re.search(r"\bnot\s+(?:a\s+|the\s+)?(?:geomagnetic\s+)?kp\s+index\b", haystack):
+            return False
+        if re.search(r"\b(?:kp\s+equation|generalized\s+potential\s+kp|kadomtsev[-\s]+petviashvili)\b|kp\s*方程", haystack) and not re.search(
+            r"\b(?:kp\s*(?:index|指数|[<>=≥≤])|geomagnetic\s+kp|planetary\s+k(?:p)?\s+index)\b",
+            haystack,
+        ):
+            return False
+    if needle in {"业务化", "operational"} and re.search(r"(?:不宜|不能|不可|未|没有).{0,24}(?:业务化|operational)", haystack):
+        return False
+    if re.fullmatch(r"[a-z0-9][a-z0-9-]{0,4}", needle):
+        return re.search(rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])", haystack) is not None
+    return needle in haystack
 
 
 def load_doi_topics(root: Path) -> dict[str, list[str]]:

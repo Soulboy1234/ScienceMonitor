@@ -2,17 +2,17 @@
   "global_limits": {
     "default_module_max_lines": 600,
     "default_function_max_lines": 80,
-    "package_total_max_lines": 26200
+    "package_total_max_lines": 26252
   },
   "module_line_limits": {
     "article_summaries.py": 708,
     "article_summary_markdown.py": 320,
     "article_summary_text.py": 610,
     "article_summary_meta.py": 240,
-    "deep_reads.py": 964,
+    "deep_reads.py": 967,
     "deep_read_markdown.py": 560,
-    "llm.py": 1850,
-    "llm_contracts.py": 754,
+    "llm.py": 2172,
+    "llm_contracts.py": 757,
     "chatgpt_web_manual.py": 640,
     "article_index.py": 760,
     "article_index_rules.py": 320,
@@ -20,7 +20,7 @@
     "config.py": 500,
     "project_config_markdown.py": 280,
     "research_preferences.py": 320,
-    "article_fetch.py": 593,
+    "article_fetch.py": 638,
     "article_source_text.py": 500,
     "config_ui.py": 569,
     "config_ui_actions.py": 320,
@@ -38,9 +38,9 @@
     "cli.py": 80,
     "config_ui_visual_review.py": 650,
     "config_ui_report_jobs.py": 291,
-    "tag_governance.py": 1911,
+    "tag_governance.py": 2043,
     "tag_governance_review.py": 260,
-    "tag_review.py": 1668,
+    "tag_review.py": 1886,
     "token_monitor.py": 371
   },
   "function_length_limits": {

@@ -57,8 +57,7 @@
 需要人工核对全文中的图表细节与定量结果。
 
 - Obsidian 索引挂接：
-1. [[article_index/sub_index/1.2 - 空间环境指数|1.2 - 空间环境指数]]
-2. [[article_index/sub_index/7 - 太阳与日球层|7 - 太阳与日球层]]
+1. [[article_index/sub_index/7 - 太阳与日球层|7 - 太阳与日球层]]
 
 ----
 记录时间戳: <TIMESTAMP>

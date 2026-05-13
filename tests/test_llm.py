@@ -596,7 +596,7 @@ class LLMProviderResolutionTest(unittest.TestCase):
 
             def fake_run(prompt, schema, name):
                 calls.append((name, prompt))
-                if name.startswith("deep_read_evidence_v2_"):
+                if name.startswith("deep_read_evidence_v3_"):
                     return {
                         "research_problem": ["研究问题证据1", "研究问题证据2"],
                         "introduction_gap": "引言空白证据",
@@ -645,7 +645,7 @@ class LLMProviderResolutionTest(unittest.TestCase):
 
             self.assertIsNotNone(result)
             self.assertEqual(len(calls), 2)
-            self.assertTrue(calls[0][0].startswith("deep_read_evidence_v2_"))
+            self.assertTrue(calls[0][0].startswith("deep_read_evidence_v3_"))
             self.assertTrue(calls[1][0].startswith("deep_read_"))
             self.assertFalse(calls[1][0].startswith("deep_read_evidence_"))
             self.assertIn("证据预分析 v2", calls[1][1])
@@ -671,6 +671,29 @@ class LLMProviderResolutionTest(unittest.TestCase):
             self.assertIn("结果/讨论", context)
             self.assertIn("结论/总结", context)
             self.assertIn("research gap", context)
+
+    def test_ollama_deep_read_final_context_keeps_ai_method_case_sections(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = self._prepare_root(tmpdir)
+            engine = AnalysisEngine(root)
+            context = engine._ollama_deep_read_final_context_v2(
+                "\n\n".join(
+                    [
+                        "Abstract\nPINNs and XAI are evaluated for engineering reliability.",
+                        "1. Introduction\nThe paper warns that physics-informed loss can create false confidence.",
+                        "2. Methodology\nThe authors compare physics-informed neural networks and explainability methods.",
+                        "5. Case studies\nThe Kirsch stress concentration case, piecewise stiffness rod, and cantilever beam XAI example show failure modes.",
+                        "7. Recommendations\nThe paper recommends sensitivity analysis, independent engineering review, validation, and fail-safe deployment boundaries.",
+                        "8. Conclusions\nPrediction accuracy and explainability are not sufficient conditions for reliability.",
+                    ]
+                ),
+                max_chars=2400,
+            )
+
+            self.assertIn("案例/验证", context)
+            self.assertIn("Kirsch stress concentration", context)
+            self.assertIn("cantilever beam XAI", context)
+            self.assertIn("sensitivity analysis", context)
 
     def test_ollama_deep_read_normalizes_json_object_strings(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -810,6 +833,241 @@ class LLMProviderResolutionTest(unittest.TestCase):
             self.assertIn("论文自身局限：\n1. 样本边界需要复核。", normalized["limitations"])
             self.assertIn("1. 哪些事件最敏感？", normalized["follow_up_questions"])
             self.assertIn("\\xi", normalized["needs_manual_review"])
+
+    def test_ollama_deep_read_evidence_repair_maps_truncated_required_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = self._prepare_root(tmpdir)
+            engine = AnalysisEngine(root)
+            raw = """{
+  "research_problem": "研究问题",
+  "introduction_gap": ["引言空白"],
+  "method_chain": ["方法链"],
+  "hard_findings": ["硬结论"],
+ers_findings": ["次级结论"],
+  "reasonable_inferences": ["合理推论"],
+_open_questions": ["待验证问题"],
+  "contribution_points": ["贡献"],
+  "limitations": ["局限"],
+  "reproducibility_notes": ["复现线索"],
+  "relation_to_my_work_evidence": {"indirect_relation": ["间接相关"]},
+  "manual_review_points": ["复核图表"]
+}"""
+            exc = AnalysisProviderInvalidOutput("ollama_api", request_name="deep_read_evidence", raw_preview=raw)
+
+            payload = engine._repair_ollama_deep_read_payload_from_error(
+                engine._ollama_deep_read_evidence_schema_v2(),
+                exc,
+            )
+
+            self.assertIsNotNone(payload)
+            assert payload is not None
+            self.assertEqual(payload["secondary_findings"], ["次级结论"])
+            self.assertEqual(payload["open_questions"], ["待验证问题"])
+            self.assertIn("indirect_relation：间接相关", payload["relation_to_my_work_evidence"])
+
+    def test_ollama_deep_read_evidence_repair_strips_fullwidth_prefix_before_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = self._prepare_root(tmpdir)
+            engine = AnalysisEngine(root)
+            raw = """{
+  "research_problem": ["研究问题"],
+  "introduction_gap": ["引言空白"],
+  "method_chain": ["方法链"],
+  "hard_findings": ["硬结论"],
+．"secondary_findings": ["次级结论"],
+  "reasonable_inferences": ["合理推论"],
+  "open_questions": ["待验证问题"],
+  "contribution_points": ["贡献"],
+  "limitations": ["局限"],
+  "reproducibility_notes": ["复现线索"],
+  "relation_to_my_work_evidence": {"indirect_relation": ["间接相关"]},
+  "manual_review_points": ["复核图表"]
+}"""
+            exc = AnalysisProviderInvalidOutput("ollama_api", request_name="deep_read_evidence", raw_preview=raw)
+
+            payload = engine._repair_ollama_deep_read_payload_from_error(
+                engine._ollama_deep_read_evidence_schema_v2(),
+                exc,
+            )
+
+            self.assertIsNotNone(payload)
+            assert payload is not None
+            self.assertEqual(payload["secondary_findings"], ["次级结论"])
+
+    def test_ollama_deep_read_evidence_repair_strips_stray_cjk_before_array_item(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = self._prepare_root(tmpdir)
+            engine = AnalysisEngine(root)
+            raw = """{
+  "research_problem": ["研究问题"],
+  "introduction_gap": [
+    "已有研究空白",
+验"缺乏对边界控制机制的时序解释"
+  ],
+  "method_chain": ["方法链"],
+  "hard_findings": ["硬结论"],
+  "secondary_findings": ["次级结论"],
+  "reasonable_inferences": ["合理推论"],
+  "open_questions": ["待验证问题"],
+  "contribution_points": ["贡献"],
+  "limitations": ["局限"],
+  "reproducibility_notes": ["复现线索"],
+  "relation_to_my_work_evidence": {"indirect_relation": ["间接相关"]},
+  "manual_review_points": ["复核图表"]
+}"""
+            exc = AnalysisProviderInvalidOutput("ollama_api", request_name="deep_read_evidence", raw_preview=raw)
+
+            payload = engine._repair_ollama_deep_read_payload_from_error(
+                engine._ollama_deep_read_evidence_schema_v2(),
+                exc,
+            )
+
+            self.assertIsNotNone(payload)
+            assert payload is not None
+            self.assertEqual(payload["introduction_gap"][1], "缺乏对边界控制机制的时序解释")
+
+    def test_ollama_deep_read_evidence_repair_closes_array_before_next_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = self._prepare_root(tmpdir)
+            engine = AnalysisEngine(root)
+            raw = """{
+  "research_problem": ["研究问题"],
+  "introduction_gap": ["引言空白"],
+  "method_chain": ["方法链"],
+  "hard_findings": [
+    "硬结论一",
+    "硬结论二",
+  "secondary_findings": ["次级结论"],
+  "reasonable_inferences": ["合理推论"],
+  "open_questions": ["待验证问题"],
+  "contribution_points": ["贡献"],
+  "limitations": ["局限"],
+  "reproducibility_notes": ["复现线索"],
+  "relation_to_my_work_evidence": {"indirect_relation": ["间接相关"]},
+  "manual_review_points": ["复核图表"]
+}"""
+            exc = AnalysisProviderInvalidOutput("ollama_api", request_name="deep_read_evidence", raw_preview=raw)
+
+            payload = engine._repair_ollama_deep_read_payload_from_error(
+                engine._ollama_deep_read_evidence_schema_v2(),
+                exc,
+            )
+
+            self.assertIsNotNone(payload)
+            assert payload is not None
+            self.assertEqual(payload["hard_findings"], ["硬结论一", "硬结论二"])
+            self.assertEqual(payload["secondary_findings"], ["次级结论"])
+
+    def test_ollama_deep_read_final_repair_fills_missing_final_conclusion(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = self._prepare_root(tmpdir)
+            engine = AnalysisEngine(root)
+            payload = {
+                "chinese_title": "中文题目",
+                "tags": ["方法/机器学习/PINN", "方法/可解释模型/XAI"],
+                "paper_type": "观点论文",
+                "one_sentence_overview": "这篇文章批判 PINN 与 XAI 在工程系统中的虚假可信度。",
+                "why": "说明工程可信度风险。",
+                "how": "通过案例分析。",
+                "key_results": "硬结论：\n1. loss 收敛不等于物理正确。",
+                "contribution": "提出风险框架。",
+                "limitations": "案例边界有限。",
+                "reproducibility": "可复核案例。",
+                "relation": "间接相关。",
+                "relation_to_my_work": "间接相关。",
+                "follow_up_questions": "如何验证？",
+                "needs_manual_review": "复核案例。",
+                "knowledge_position": "AI 工程可靠性批判。",
+            }
+            exc = AnalysisProviderInvalidOutput(
+                "ollama_api",
+                request_name="deep_read_sample_json_retry",
+                raw_preview=json.dumps(payload, ensure_ascii=False),
+            )
+
+            repaired = engine._repair_ollama_deep_read_payload_from_error(engine._deep_read_schema(), exc)
+
+            self.assertIsNotNone(repaired)
+            assert repaired is not None
+            self.assertEqual(
+                repaired["final_conclusion"],
+                "这篇文章批判 PINN 与 XAI 在工程系统中的虚假可信度。",
+            )
+            self.assertIn("final_conclusion", repaired["needs_manual_review"])
+
+    def test_ollama_deep_read_final_repair_removes_extra_root_brace_before_relation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = self._prepare_root(tmpdir)
+            engine = AnalysisEngine(root)
+            raw = '''```json
+{
+  "chinese_title": "中文题目",
+  "tags": ["指数/SYM-H", "方法/机器学习/图神经网络", "方法/不确定性量化"],
+  "paper_type": "研究论文",
+  "one_sentence_overview": "这篇文章预测 SYM-H 指数。",
+  "why": "为什么做。",
+  "how": "怎么做。",
+  "key_results": "硬结论：\\n1. 预测效果提升。",
+  "contribution": "贡献。",
+  "limitations": "局限。",
+  "reproducibility": "可复现部分说明。"
+  },
+  "relation": "直接相关。",
+  "final_conclusion": "最终结论。",
+  "relation_to_my_work": "直接相关。",
+  "follow_up_questions": ["如何验证？"],
+  "needs_manual_review": ["复核 FSS。"],
+  "knowledge_position": "空间天气预报。"
+}
+```'''
+            exc = AnalysisProviderInvalidOutput("ollama_api", request_name="deep_read_sample", raw_preview=raw)
+
+            repaired = engine._repair_ollama_deep_read_payload_from_error(engine._deep_read_schema(), exc)
+
+            self.assertIsNotNone(repaired)
+            assert repaired is not None
+            self.assertEqual(repaired["relation"], "直接相关。")
+            self.assertEqual(repaired["final_conclusion"], "最终结论。")
+
+    def test_ollama_deep_read_retry_invalid_json_can_be_repaired(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = self._prepare_root(tmpdir)
+            engine = AnalysisEngine(root)
+            retry_payload = {
+                "chinese_title": "中文题目",
+                "tags": ["对象/热层/密度", "应用/碰撞风险评估"],
+                "paper_type": "研究论文",
+                "one_sentence_overview": "这篇文章研究大气密度不确定性对碰撞概率的影响。",
+                "why": "为什么做。",
+                "how": "怎么做。",
+                "key_results": "硬结论：\n1. 密度不确定性影响 Pc。",
+                "contribution": "贡献。",
+                "limitations": "局限。",
+                "reproducibility": "复现线索。",
+                "relation": "直接相关。",
+                "relation_to_my_work": "直接相关。",
+                "follow_up_questions": "如何扩展？",
+                "needs_manual_review": "复核公式。",
+                "knowledge_position": "轨道风险评估。",
+            }
+            calls: list[str] = []
+
+            def fake_run(prompt, schema_arg, name):
+                calls.append(name)
+                raw = '{"body": "unterminated' if len(calls) == 1 else json.dumps(retry_payload, ensure_ascii=False)
+                raise AnalysisProviderInvalidOutput("ollama_api", request_name=name, raw_preview=raw)
+
+            with mock.patch.object(engine, "_run_ollama_structured", side_effect=fake_run):
+                repaired = engine._run_ollama_deep_read_structured_with_repair(
+                    "bad prompt",
+                    engine._deep_read_schema(),
+                    "deep_read_sample",
+                    stage="final",
+                    retry_prompt="strict retry prompt",
+                )
+
+            self.assertEqual(calls, ["deep_read_sample", "deep_read_sample_json_retry"])
+            self.assertEqual(repaired["final_conclusion"], "这篇文章研究大气密度不确定性对碰撞概率的影响。")
 
     def test_ollama_deep_read_structured_retry_runs_after_unrepairable_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

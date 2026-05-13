@@ -57,7 +57,12 @@ JOURNAL_ABBREVIATIONS = {
     "The Astrophysical Journal": "ApJ",
     "The Astrophysical Journal Letters": "ApJL",
     "Astronomy & Astrophysics": "A&A",
+    "National Academies Press": "NAP",
 }
+
+ORGANIZATION_AUTHOR_PATTERNS = (
+    (re.compile(r"\bNational Academies of Sciences,\s*Engineering,\s*and Medicine\b", re.IGNORECASE), "National Academies"),
+)
 
 
 def format_authors_apa(authors: list[str]) -> str:
@@ -73,6 +78,9 @@ def format_authors_apa(authors: list[str]) -> str:
 
 
 def format_single_author_apa(author: str) -> str:
+    organization = organization_author_label(author)
+    if organization:
+        return str(author or "").strip()
     parts = preferred_author_tokens(author)
     if not parts:
         return author
@@ -111,8 +119,21 @@ def first_author_label(raw_authors: str) -> str:
     if not authors:
         return "Unknown"
     first = authors[0]
+    organization = organization_author_label(first)
+    if organization:
+        return organization
     parts = preferred_author_tokens(first)
     return parts[-1] if parts else first
+
+
+def organization_author_label(author: str) -> str:
+    clean = str(author or "").strip()
+    if not clean:
+        return ""
+    for pattern, label in ORGANIZATION_AUTHOR_PATTERNS:
+        if pattern.search(clean):
+            return label
+    return ""
 
 
 def preferred_author_tokens(author: str) -> list[str]:

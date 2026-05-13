@@ -273,6 +273,8 @@ class TagReviewTest(unittest.TestCase):
                         "- [PDF](<../deep_reads_pdf/chen.pdf>) #事件/磁暴 #指数/Dst #指数/Kp",
                         "",
                         "本文讨论 solar-terrestrial interactions、强地磁暴和全球强震之间的相关性。",
+                        "论文使用 D index st / Dst 作为强地磁暴的主要强度刻画。",
+                        "数据筛选使用 Kp ≥ 7 的强地磁扰动阈值。",
                         "方法上使用 SNMC algorithm / shift neighborhood matching correlation，并用 random sampling、binomial 和 chi-square tests 做统计检验。",
                         "结果包括 27-28 day time-lagged correlation、probability gain，并讨论 electrokinetic 与 inverse ofpiezoelectric effects。",
                         "后续问题提到 moon tides，但题名和正文主线明确是 solar-terrestrial interactions。",
@@ -407,6 +409,181 @@ class TagReviewTest(unittest.TestCase):
         self.assertNotIn("仪器/FPI", tags)
         self.assertNotIn("仪器/ICON", tags)
 
+    def test_deep_read_drops_kp_equation_but_keeps_pinn_xai_method_tags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            tags = review_generated_tags(
+                ["方法/物理信息神经网络", "方法/可解释性人工智能", "指数/Kp"],
+                root=root,
+                title_text="Fundamental flaws of physics-informed neural networks and explainability methods in engineering systems",
+                body_text=(
+                    "The article critiques physics-informed neural networks (PINNs) and explainable artificial "
+                    "intelligence (XAI) in engineering systems. A related-work sentence mentions that ASW-PINN "
+                    "was used for a generalized potential KP equation, but this is a mathematical KP equation, "
+                    "not a geomagnetic Kp index or space physics study."
+                ),
+                context="deep_read",
+                max_tags=10,
+            )
+
+        self.assertIn("方法/建模/机器学习/PINN", tags)
+        self.assertIn("方法/可解释模型/XAI", tags)
+        self.assertNotIn("指数/Kp", tags)
+
+    def test_deep_read_drops_earthquake_from_late_reference_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            tags = review_generated_tags(
+                ["事件/地震", "领域/工程计算", "方法/物理信息神经网络", "方法/可解释性人工智能"],
+                root=root,
+                title_text="Fundamental flaws of physics-informed neural networks and explainability methods in engineering systems",
+                body_text=(
+                    "This paper critiques PINNs and XAI for engineering systems. "
+                    + "Physics-informed models can produce false confidence. " * 80
+                    + "A late reference list mentions physics-informed neural network and fault zone acoustic monitoring "
+                    "to predict lab earthquakes, but earthquakes are not the paper topic."
+                ),
+                context="deep_read",
+                max_tags=10,
+            )
+
+        self.assertIn("方法/建模/机器学习/PINN", tags)
+        self.assertIn("方法/可解释模型/XAI", tags)
+        self.assertNotIn("事件/地震", tags)
+        self.assertNotIn("对象/领域/工程计算", tags)
+
+    def test_deep_read_drops_indices_only_mentioned_in_late_limits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            tags = review_generated_tags(
+                ["指数/SYM-H", "指数/Dst", "指数/Kp"],
+                root=root,
+                title_text="Prediction of the SYM-H Index Using a Bayesian Deep Learning Method",
+                body_text=(
+                    "### 为什么做\n"
+                    "This paper predicts the SYM-H index from solar wind and IMF inputs.\n"
+                    "### 怎么做\n"
+                    "The model uses SSCDAS data and uncertainty quantification for SYM-H forecasts.\n"
+                    "### 局限性\n"
+                    "The framework is not extended to Kp or Dst geomagnetic indices."
+                ),
+                context="deep_read",
+                max_tags=10,
+            )
+
+        self.assertIn("指数/SYM-H", tags)
+        self.assertNotIn("指数/Dst", tags)
+        self.assertNotIn("指数/Kp", tags)
+
+    def test_deep_read_tag_review_folds_noisy_pending_aliases_to_canonical_tags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            tags = review_generated_tags(
+                [
+                    "对象/物理对象/大气重力波",
+                    "对象/物理对象/平均分子量",
+                    "对象/物理量/等离子体密度",
+                    "对象/物理量/等离子体温度",
+                    "对象/物理对象/离子漂移",
+                    "对象/物理量/磁场扰动",
+                    "对象/物理过程/辐射冷却",
+                    "对象/数据科学",
+                    "对象/统计分析",
+                    "对象/低纬度电离层",
+                    "对象/全球平均TEC",
+                    "对象/行星际磁场",
+                    "对象/磁场/IMFBy",
+                    "模型/TIE-GCM",
+                    "仪器/THEMIS",
+                    "仪器/NO",
+                    "仪器/地面磁力计",
+                    "对象/低地球轨道/卫星",
+                    "应用/碰撞风险评估",
+                ],
+                root=root,
+                title_text="Gravity wave deep read tag audit example",
+                body_text=(
+                    "The paper discusses atmospheric gravity waves and gravity waves, plasma temperature, "
+                    "ion drift, IMF By, THEMIS observations, thermospheric nitric oxide cooling, "
+                    "low-latitude ionospheric TEC, ground magnetometers, TIE-GCM simulations, "
+                    "and satellite conjunction assessment. 该研究还明确讨论重力波驱动和重力波传播。"
+                ),
+                context="deep_read",
+                max_tags=20,
+            )
+
+        for expected in (
+            "对象/重力波",
+            "对象/热层/成分",
+            "对象/电离层/电子温度",
+            "对象/电离层/离子飘移",
+            "对象/地磁",
+            "对象/热层/温度",
+            "方法/建模/机器学习",
+            "方法/统计研究",
+            "对象/电离层/低纬",
+            "对象/电离层/TEC",
+            "指数/IMF/By",
+            "模型/TIEGCM",
+            "仪器/THEMIS_A-E",
+            "仪器/磁强计",
+            "应用/卫星轨道",
+        ):
+            self.assertIn(expected, tags)
+        for unexpected in (
+            "对象/物理对象/大气重力波",
+            "对象/物理对象/平均分子量",
+            "对象/物理量/等离子体密度",
+            "对象/物理过程/辐射冷却",
+            "对象/数据科学",
+            "对象/统计分析",
+            "对象/低纬度电离层",
+            "对象/行星际磁场",
+            "模型/TIE-GCM",
+            "仪器/THEMIS",
+            "仪器/NO",
+            "仪器/地面磁力计",
+            "应用/碰撞风险评估",
+        ):
+            self.assertNotIn(unexpected, tags)
+
+    def test_deep_read_output_reconcile_recovers_pinn_xai_from_body(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+            deep_dir = root / "out" / "auto" / "deep_reads"
+            deep_dir.mkdir(parents=True, exist_ok=True)
+            deep = deep_dir / "Naser 2026 - PINN XAI 深度解读.md"
+            deep.write_text(
+                "\n".join(
+                    [
+                        "# 论文深度阅读报告",
+                        "- [PDF](<../deep_reads_pdf/naser.pdf>) #方法/特征归因 #对象/悬臂梁 #模型/建模误差",
+                        "",
+                        "本文讨论 physics-informed neural networks (PINNs) and explainable artificial intelligence (XAI)。",
+                        "正文参考文献里提到 lab earthquakes，但地震不是论文主题。",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            result = reconcile_deep_read_output_tags_with_review(root)
+            rewritten = deep.read_text(encoding="utf-8")
+
+        self.assertEqual(result.scanned_files, 1)
+        self.assertIn("#方法/建模/机器学习/PINN", rewritten)
+        self.assertIn("#方法/可解释模型/XAI", rewritten)
+        self.assertNotIn("#事件/地震", rewritten)
+
     def test_instrument_tags_are_kept_with_explicit_source_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = pathlib.Path(tmpdir)
@@ -429,6 +606,55 @@ class TagReviewTest(unittest.TestCase):
 
         self.assertIn("仪器/FPI", fpi_tags)
         self.assertIn("仪器/ICON", icon_tags)
+
+    def test_deep_read_instrument_tags_need_data_source_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            strategic_tags = review_generated_tags(
+                ["仪器/SuperDARN", "仪器/MMS", "仪器/GDC", "应用/空间天气"],
+                root=root,
+                title_text="The Next Decade of Discovery in Solar and Space Physics",
+                body_text=(
+                    "The report discusses future mission priorities including GDC and mentions SuperDARN and MMS "
+                    "as examples in the heliophysics ecosystem. No observational data products are analyzed."
+                ),
+                context="deep_read",
+            )
+            observation_tags = review_generated_tags(
+                ["仪器/SuperDARN"],
+                root=root,
+                title_text="Polar convection control of thermospheric wind",
+                body_text="The study uses SuperDARN convection maps and radar observations to track the boundary.",
+                context="deep_read",
+            )
+
+        self.assertNotIn("仪器/SuperDARN", strategic_tags)
+        self.assertNotIn("仪器/MMS", strategic_tags)
+        self.assertNotIn("仪器/GDC", strategic_tags)
+        self.assertIn("应用/空间天气", strategic_tags)
+        self.assertIn("仪器/SuperDARN", observation_tags)
+
+    def test_review_generated_tags_repairs_corrupted_deep_read_tags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            self._seed_root(root)
+
+            tags = review_generated_tags(
+                ["对象/热层/风", "对象/极区对all", "事件/日冕物质抛"],
+                root=root,
+                title_text="CME-driven geomagnetic storm response",
+                body_text="The paper studies thermospheric wind, polar convection, and geomagnetic storm response driven by CME impacts.",
+                context="deep_read",
+            )
+
+        self.assertIn("对象/热层/风场", tags)
+        self.assertIn("对象/极区/等离子体对流", tags)
+        self.assertIn("事件/磁暴/CME", tags)
+        self.assertNotIn("对象/热层/风", tags)
+        self.assertNotIn("对象/极区对all", tags)
+        self.assertNotIn("事件/日冕物质抛", tags)
 
     def test_review_generated_tags_drops_storm_tag_when_storm_is_not_main_topic(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

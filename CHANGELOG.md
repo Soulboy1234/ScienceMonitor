@@ -21,6 +21,46 @@
 
 - 下一轮变更待规划。
 
+## [v2.1.2] - 2026-05-13
+
+Tag: `v2.1.2`
+
+Snapshot commit:
+
+- `TO_BE_FILLED_AFTER_TAG`
+
+版本定位：
+
+- `v2.1.1` 之后的正式小版本检查点
+- 目标是把深度解读恢复、PDF 抽取、标签治理和当前候选改动收束为可同步 GitHub 的稳定备份点
+
+主要变化：
+
+- 强化深度解读和 Ollama 结构化恢复：
+  - 改善本地模型返回非严格 JSON 时的结构化恢复能力
+  - 深度解读生成链路补充兼容修复、元数据回填和测试覆盖
+- 修复非空间 AI 深读和正文抽取边界：
+  - 空间物理主线之外但与研究相关的 AI 论文深读标签可被正确保留
+  - PDF / 网页正文抽取和索引解析相关边界补充回归测试
+- 收束标签治理资产：
+  - formal / pending 标签入口和机器标签资产已同步当前审计结果
+  - 标签审核、自动输出标签转正和索引联动补充治理逻辑
+- 更新发布治理记录：
+  - 归档近期深读、ChatGPT 旧文重写迁移和标签全量审计 ExecPlan
+  - golden deep-read fixture 已同步当前稳定输出
+  - `maintenance_budget.json` 已重校准到 `v2.1.2` 源码基线
+- `real-eval` 未作为本轮阻塞项，保留为后续真实案例验证。
+
+发版时状态：
+
+- `git diff --check`：通过
+- `./scripts/run_science_monitor.sh doctor`：通过
+- `./scripts/run_science_monitor.sh entropy-check`：通过
+- `./scripts/run_science_monitor.sh harness-audit`：通过
+- `./scripts/run_science_monitor.sh harness-check --profile release`：通过
+- `./scripts/run_science_monitor.sh maintenance-check --auto-repair --max-passes 2`：通过
+- `./.venv/bin/python -m pytest -q`：通过
+
 ## [v2.1.1] - 2026-05-08
 
 Tag: `v2.1.1`

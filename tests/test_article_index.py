@@ -11,11 +11,34 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from sciencemonitor.article_index import sync_out_library
+from sciencemonitor.article_index import infer_sub_index_pages, sync_out_library
 from sciencemonitor.article_index_paths import resolve_note_target_path
 
 
 class ArticleIndexTest(unittest.TestCase):
+    def test_infer_sub_index_pages_does_not_match_short_index_tokens_inside_words(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            note = root / "out" / "auto" / "deep_reads" / "Naser 2026 - PINN XAI.md"
+            note.parent.mkdir(parents=True)
+            note.write_text(
+                "\n".join(
+                    [
+                        "# 论文深度阅读报告",
+                        "- [PDF](<../deep_reads_pdf/naser.pdf>) #方法/建模/机器学习/PINN #方法/可解释模型/XAI",
+                        "This analysis discusses explainable artificial intelligence, validation, and reliability.",
+                        "The text contains many ordinary words such as analysis, artificial, and reliability.",
+                        "A related work paragraph mentions ASW-PINN for a KP equation breather, not the geomagnetic Kp index.",
+                        "这项工作不宜直接外推到业务化应用。",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            pages = infer_sub_index_pages(note, root)
+
+        self.assertNotIn("1.2 - 空间环境指数", pages)
+
     def test_resolve_note_target_path_rejects_traversal_and_absolute_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = pathlib.Path(tmpdir)

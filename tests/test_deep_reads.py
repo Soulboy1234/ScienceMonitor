@@ -37,6 +37,7 @@ from sciencemonitor.deep_reads import (
     run_deep_read,
     run_deep_read_folder,
 )
+from sciencemonitor.article_fetch import PDF_TEXT_EXTRACTOR_VERSION
 from sciencemonitor.llm import DeepReadAnalysis
 from sciencemonitor.llm_contracts import _extract_introduction_excerpt
 from sciencemonitor.storage import Storage
@@ -222,6 +223,24 @@ class DeepReadTest(unittest.TestCase):
         self.assertNotIn("2.", text)
         self.assertIn("不宜直接外推到业务化或定量应用。", text)
         self.assertNotIn("两个重要方向", text)
+
+    def test_relation_to_my_work_uses_ai_method_closing_for_pinn_xai_papers(self) -> None:
+        text = _normalize_relation_to_my_work_text(
+            "间接相关。可提醒后续建模不要把统计相关直接解释为物理因果。",
+            tags=["方法/建模/机器学习/PINN", "方法/可解释模型/XAI"],
+        )
+
+        self.assertIn("机器学习模型可靠性", text)
+        self.assertNotIn("边界区动力学个例", text)
+
+    def test_relation_to_my_work_does_not_duplicate_ai_method_closing(self) -> None:
+        closing = "这项工作更适合作为机器学习模型可靠性、物理约束建模和可解释性审查的方法论参照，不宜直接外推为空间天气业务结论。"
+        text = _normalize_relation_to_my_work_text(
+            f"间接相关。可作为方法论参照。\n\n{closing}",
+            tags=["方法/建模/机器学习/PINN", "方法/可解释模型/XAI"],
+        )
+
+        self.assertEqual(text.count(closing), 1)
 
     def test_bare_relation_label_expands_to_explanatory_text(self) -> None:
         text = _normalize_relation_text("间接相关。")
@@ -1028,6 +1047,7 @@ class DeepReadTest(unittest.TestCase):
                         "source_url": "file:///tmp/example.pdf",
                         "pdf_path": "",
                         "pdf_page_limit": 10,
+                        "text_extractor_version": PDF_TEXT_EXTRACTOR_VERSION,
                         "scientific_text": "Full scientific text from cache.",
                         "summary_packet": "Summary packet.",
                     },
@@ -1094,9 +1114,28 @@ class DeepReadTest(unittest.TestCase):
 
     def test_pdf_source_cache_requires_matching_page_limit(self) -> None:
         runtime = {"deep_read": {"pdf_page_limit": 10}}
-        self.assertTrue(_cached_source_matches_runtime({"source_kind": "local_pdf_full_text", "pdf_page_limit": 10}, runtime))
+        self.assertTrue(
+            _cached_source_matches_runtime(
+                {
+                    "source_kind": "local_pdf_full_text",
+                    "pdf_page_limit": 10,
+                    "text_extractor_version": PDF_TEXT_EXTRACTOR_VERSION,
+                },
+                runtime,
+            )
+        )
+        self.assertFalse(_cached_source_matches_runtime({"source_kind": "local_pdf_full_text", "pdf_page_limit": 10}, runtime))
         self.assertFalse(_cached_source_matches_runtime({"source_kind": "local_pdf_full_text"}, runtime))
-        self.assertFalse(_cached_source_matches_runtime({"source_kind": "downloaded_pdf", "pdf_page_limit": 0}, runtime))
+        self.assertFalse(
+            _cached_source_matches_runtime(
+                {
+                    "source_kind": "downloaded_pdf",
+                    "pdf_page_limit": 0,
+                    "text_extractor_version": PDF_TEXT_EXTRACTOR_VERSION,
+                },
+                runtime,
+            )
+        )
         self.assertTrue(_cached_source_matches_runtime({"source_kind": "html_full_text"}, runtime))
 
     def test_deep_read_can_write_to_eval_local_overrides_without_sync(self) -> None:

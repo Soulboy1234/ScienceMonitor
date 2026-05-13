@@ -376,6 +376,12 @@ EARTHQUAKE_PATTERNS = (
     r"地震",
     r"强震",
 )
+EARTHQUAKE_NEGATION_PATTERNS = (
+    r"\bearthquake(?:s)?\b.{0,40}\bnot\b.{0,30}\b(?:topic|focus|stud(?:y|ied))\b",
+    r"\bnot\b.{0,30}\b(?:topic|focus|stud(?:y|ied))\b.{0,40}\bearthquake(?:s)?\b",
+    r"地震.{0,12}不是.{0,12}(?:主题|研究对象|重点)",
+    r"不是.{0,12}地震.{0,12}(?:主题|研究对象|重点)",
+)
 SUBSTORM_PATTERNS = (
     r"\bsubstorm(?:s)?\b",
     r"亚暴",
@@ -394,6 +400,17 @@ STATISTICAL_STUDY_PATTERNS = (
     r"卡方",
     r"统计验证",
     r"统计检验",
+)
+PINN_PATTERNS = (
+    r"(?<![A-Za-z0-9])pinns?(?![A-Za-z0-9])",
+    r"physics[-\s]+informed\s+neural\s+(?:networks?|nets?)",
+    r"物理(?:信息|约束)神经网络",
+)
+XAI_PATTERNS = (
+    r"(?<![A-Za-z0-9])xai(?![A-Za-z0-9])",
+    r"explainab(?:le|ility)\s+(?:artificial\s+intelligence|methods?)",
+    r"post[-\s]?hoc\s+explainability",
+    r"可解释性?人工智能",
 )
 TIME_LAG_CORRELATION_PATTERNS = (
     r"time[-\s]?lag(?:ged)?\s*correlation",
@@ -420,9 +437,47 @@ DST_INDEX_PATTERNS = (
     r"(?<![A-Za-z0-9])dst(?![A-Za-z0-9])",
     r"(?<![A-Za-z0-9])d\s*(?:st|指数|[-_]?index\s*(?:st)?)(?![A-Za-z0-9])",
 )
+DST_INDEX_STRONG_PATTERNS = (
+    r"(?<![A-Za-z0-9])dst\s*(?:index|指数)(?![A-Za-z0-9])",
+    r"\bgeomagnetic\s+dst\b",
+    r"\bdisturbance\s+storm[-\s]?time\s+index\b",
+    r"Dst指数",
+    r"D指数",
+    r"D\s*index\s*(?:st)?",
+)
+DST_INDEX_NEGATION_PATTERNS = (
+    r"\bnot\s+(?:extended|expanded|applied)\s+to\b[^.。;；]{0,80}\bdst\b",
+    r"\bdst\b[^.。;；]{0,80}\bnot\s+(?:included|modeled|modelled|predicted|forecasted)\b",
+    r"尚?未[^。；]{0,40}(?:扩展|应用|预测|建模)[^。；]{0,40}Dst",
+    r"Dst[^。；]{0,40}不是[^。；]{0,20}(?:主题|研究对象|重点|目标)",
+)
 KP_INDEX_PATTERNS = (
     r"(?<![A-Za-z0-9])kp(?![A-Za-z0-9])",
     r"(?<![A-Za-z0-9])k\s*(?:p|指数|[-_]?index\s*(?:p)?)(?![A-Za-z0-9])",
+)
+KP_INDEX_STRONG_PATTERNS = (
+    r"(?<![A-Za-z0-9])kp\s*(?:index|指数)(?![A-Za-z0-9])",
+    r"(?<![A-Za-z0-9])kp\s*(?:[<>=≥≤]|=|≥|≤)",
+    r"\bgeomagnetic\s+kp\b",
+    r"\bplanetary\s+k(?:p)?\s+index\b",
+    r"地磁.{0,8}Kp",
+    r"Kp指数",
+    r"K指数",
+    r"K\s*index",
+)
+KP_INDEX_EXCLUSION_PATTERNS = (
+    r"\bkp\s+equation\b",
+    r"\bgeneralized\s+potential\s+kp\b",
+    r"\bkadomtsev[-\s]+petviashvili\b",
+    r"KP\s*方程",
+)
+KP_INDEX_NEGATION_PATTERNS = (
+    r"\bnot\s+(?:a\s+|the\s+)?(?:geomagnetic\s+)?kp\s+index\b",
+    r"\bnot\s+(?:a\s+|the\s+)?geomagnetic\s+kp\b",
+    r"\bnot\s+(?:extended|expanded|applied)\s+to\b[^.。;；]{0,80}\bkp\b",
+    r"\bkp\b[^.。;；]{0,80}\bnot\s+(?:included|modeled|modelled|predicted|forecasted)\b",
+    r"尚?未[^。；]{0,40}(?:扩展|应用|预测|建模)[^。；]{0,40}Kp",
+    r"不是.{0,12}Kp.{0,8}指数",
 )
 SOLAR_WIND_PATTERNS = (
     r"\bsolar wind\b",
@@ -471,8 +526,8 @@ ICON_DATA_EVIDENCE_PATTERNS = (
 )
 MISSION_DATA_EVIDENCE_PATTERNS = {
     "仪器/CHAMP": (
-        r"(?:uses?|using|used|based on|from|derived from|with|利用|使用|基于|采用)[^.。;；]{0,80}(?<!like\s)\bchamp\b[^.。;；]{0,80}(?:data|observations?|measurements?|accelerometer[- ]?derived|accelerometer data|density|数据|观测|测量|加速度计|密度)",
-        r"(?<!like\s)\bchamp\b[^.。;；]{0,80}(?:data|observations?|measurements?|accelerometer[- ]?derived|accelerometer data|density|数据|观测|测量|加速度计|密度)",
+        r"(?:uses?|using|used|based on|from|derived from|with|利用|使用|基于|采用)[^.。;；]{0,80}(?<!like\s)\bchamp(?:\b|(?=卫星))[^.。;；]{0,80}(?:satellite|data|observations?|measurements?|accelerometer[- ]?derived|accelerometer data|density|卫星|数据|观测|测量|加速度计|密度)",
+        r"(?<!like\s)\bchamp(?:\b|(?=卫星))[^.。;；]{0,80}(?:satellite|data|observations?|measurements?|accelerometer[- ]?derived|accelerometer data|density|卫星|数据|观测|测量|加速度计|密度)",
     ),
     "仪器/GRACE": (
         r"(?:\bgrace\b|gravity recovery and climate experiment)[^.。;；]{0,40}(?:data|observations?|measurements?|accelerometer[- ]?derived|accelerometer data|数据|观测|测量|加速度计数据)",
@@ -485,6 +540,32 @@ MISSION_DATA_EVIDENCE_PATTERNS = {
     "仪器/Swarm": (
         r"(?:uses?|using|used|based on|from|derived from|with|利用|使用|基于|采用)[^.。;；]{0,80}(?:\bswarm(?:[- ]?[abc])?\b)[^.。;；]{0,80}(?:data|observations?|measurements?|density|数据|观测|测量|密度)",
         r"(?:\bswarm(?:[- ]?[abc])?\b)[^.。;；]{0,80}(?:data|observations?|measurements?|density|数据|观测|测量|密度)",
+    ),
+    "仪器/SuperDARN": (
+        r"(?:uses?|using|used|based on|from|with|利用|使用|基于|采用)[^.。;；]{0,80}(?:\bsuperdarn\b)[^.。;；]{0,80}(?:data|observations?|measurements?|convection maps?|radar|数据|观测|测量|对流图|雷达)",
+        r"(?:\bsuperdarn\b)[^.。;；]{0,80}(?:data|observations?|measurements?|convection maps?|radar|数据|观测|测量|对流图|雷达)",
+    ),
+    "仪器/MMS": (
+        r"(?:uses?|using|used|based on|from|with|利用|使用|基于|采用)[^.。;；]{0,80}(?:\bmms\b|magnetospheric multiscale)[^.。;；]{0,80}(?:data|observations?|measurements?|数据|观测|测量)",
+        r"(?:\bmms\b|magnetospheric multiscale)[^.。;；]{0,80}(?:data|observations?|measurements?|数据|观测|测量)",
+    ),
+    "仪器/GDC": (
+        r"(?:uses?|using|used|based on|from|with|利用|使用|基于|采用)[^.。;；]{0,80}(?:\bgdc\b|geospace dynamics constellation)[^.。;；]{0,80}(?:data|observations?|measurements?|数据|观测|测量)",
+        r"(?:\bgdc\b|geospace dynamics constellation)[^.。;；]{0,80}(?:data|observations?|measurements?|数据|观测|测量)",
+    ),
+}
+MISSION_DATA_NEGATION_PATTERNS = {
+    "仪器/SuperDARN": (
+        r"(?:does\s+not|did\s+not|not)\s+use[^.。;；]{0,80}\bsuperdarn\b[^.。;；]{0,80}(?:data|observations?|measurements?|数据|观测|测量)",
+        r"\bsuperdarn\b[^.。;；]{0,80}(?:not|不是|未|没有)[^.。;；]{0,80}(?:data source|数据来源|观测来源|测量来源)",
+    ),
+    "仪器/MMS": (
+        r"(?:does\s+not|did\s+not|not)\s+use[^.。;；]{0,80}(?:\bmms\b|magnetospheric multiscale)[^.。;；]{0,80}(?:data|observations?|measurements?|数据|观测|测量)",
+        r"(?:\bmms\b|magnetospheric multiscale)[^.。;；]{0,80}(?:not|不是|未|没有)[^.。;；]{0,80}(?:data source|数据来源|观测来源|测量来源)",
+    ),
+    "仪器/GDC": (
+        r"(?:does\s+not|did\s+not|not)\s+use[^.。;；]{0,80}(?:\bgdc\b|geospace dynamics constellation)[^.。;；]{0,80}(?:data|observations?|measurements?|数据|观测|测量)",
+        r"(?:\bgdc\b|geospace dynamics constellation)[^.。;；]{0,80}(?:not|不是|未|没有)[^.。;；]{0,80}(?:data source|数据来源|观测来源|测量来源)",
     ),
 }
 PLANET_PATTERNS_BY_NAME = {
@@ -628,6 +709,9 @@ BROAD_TAG_DROP_PATTERNS = (
 
 DEEP_READ_VIRTUAL_OBJECT_PREFIXES = (
     "对象/物理机制",
+    "对象/物理对象",
+    "对象/物理量",
+    "对象/物理过程",
     "对象/能量转换",
     "对象/过程",
     "对象/机制",
@@ -964,6 +1048,12 @@ class TagReviewAgent:
             return ["仪器/全天空相机"]
         if re.fullmatch(r"(?:事件|对象|应用)?(?:卫星会合|conjunction|satelliteconjunction|cola|collisionavoidance)", compact):
             return ["事件/卫星会合"]
+        if re.fullmatch(r"(?:对象)?(?:热层风|热层的风|thermosphericwind|neutralwind)", compact):
+            return ["对象/热层/风场"]
+        if re.fullmatch(r"(?:对象)?(?:极区对all|极区对流|polarconvection)", compact):
+            return ["对象/极区/等离子体对流"]
+        if re.fullmatch(r"(?:事件|对象)?(?:日冕物质抛|日冕物质抛射|cme|coronalmass(?:ejection)?)", compact):
+            return ["事件/磁暴/CME"]
         if re.fullmatch(r"(?:对象)?(?:极区)?(?:极光)?(?:流光|auroralstreamer|auroralstreamers|streamer|streamers)", compact):
             return ["对象/极区/极光"]
         if re.fullmatch(r"(?:对象)?极区极光流光", compact):
@@ -1089,6 +1179,24 @@ def _resolve_deep_read_abstract_tag(tag: str) -> list[str] | None:
         return ["对象/磁层/电流体系"]
     if re.search(r"inductivecircuitmodel|电感?电路模型|电路模型", folded_leaf):
         return ["模型/电路模型"]
+    if re.search(r"atmosphericgravitywave|大气重力波", folded_leaf):
+        return ["对象/重力波"]
+    if re.search(r"tidalwave|潮汐波", folded_leaf):
+        return ["对象/潮汐"]
+    if re.search(r"auroralprecipitation|particleprecipitation|electronprecipitation|极光沉降|粒子沉降|电子沉降", folded_leaf):
+        return ["对象/电子沉降"]
+    if re.search(r"meanmolecularmass|nitricoxide|carbondioxide|atomicoxygen|一氧化氮|二氧化碳|原子氧|平均分子量", folded_leaf):
+        return ["对象/热层/成分"]
+    if re.search(r"plasmadensity|等离子体密度", folded_leaf):
+        return ["对象/电离层/电子密度"]
+    if re.search(r"plasmatemperature|等离子体温度", folded_leaf):
+        return ["对象/电离层/电子温度"]
+    if re.search(r"iondrift|plasmadrift|离子漂移|等离子体流速", folded_leaf):
+        return ["对象/电离层/离子飘移"]
+    if re.search(r"magneticfielddisturbance|地磁扰动|磁场扰动", folded_leaf):
+        return ["对象/地磁"]
+    if re.search(r"radiativecooling|辐射冷却", folded_leaf):
+        return ["对象/热层/温度"]
     if clean.startswith(DEEP_READ_VIRTUAL_OBJECT_PREFIXES):
         return []
     if re.fullmatch(r"(?:电学)?放电(?:现象|机制)?", folded_leaf):
@@ -1107,7 +1215,8 @@ def _infer_deep_read_evidence_tags(
     extra_text: str = "",
 ) -> list[str]:
     title_haystack = _support_haystack(title_text=title_text, body_text="", extra_text="")
-    haystack = _support_haystack(title_text=title_text, body_text=body_text, extra_text=extra_text)
+    primary_body_text = _primary_deep_read_body_text(body_text)
+    haystack = _support_haystack(title_text=title_text, body_text=primary_body_text, extra_text=extra_text)
     if not haystack:
         return []
 
@@ -1117,15 +1226,27 @@ def _infer_deep_read_evidence_tags(
         if tag not in inferred:
             inferred.append(tag)
 
-    if should_keep_sun_to_earth_coupling_tag(title_text=title_text, body_text=body_text, extra_text=extra_text):
+    if should_keep_sun_to_earth_coupling_tag(title_text=title_text, body_text=primary_body_text, extra_text=extra_text):
         add("对象/日地耦合")
+    if _has_any(haystack, PINN_PATTERNS):
+        add("方法/建模/机器学习/PINN")
+    if _has_any(haystack, XAI_PATTERNS):
+        add("方法/可解释模型/XAI")
     if _has_any(haystack, GEOMAGNETIC_STORM_PATTERNS):
         add("事件/磁暴")
-    if _has_any(title_haystack, EARTHQUAKE_PATTERNS) or _has_any(haystack, EARTHQUAKE_PATTERNS):
+    if should_keep_earthquake_tag(title_text=title_text, body_text=primary_body_text, extra_text=extra_text):
         add("事件/地震")
-    if _has_any(haystack, DST_INDEX_PATTERNS):
+    if _has_any(haystack, DST_INDEX_PATTERNS) and should_keep_dst_index_tag(
+        title_text=title_text,
+        body_text=primary_body_text,
+        extra_text=extra_text,
+    ):
         add("指数/Dst")
-    if _has_any(haystack, KP_INDEX_PATTERNS):
+    if _has_any(haystack, KP_INDEX_PATTERNS) and should_keep_kp_index_tag(
+        title_text=title_text,
+        body_text=primary_body_text,
+        extra_text=extra_text,
+    ):
         add("指数/Kp")
     title_density_signal = _has_any(title_haystack, THERMOSPHERE_DENSITY_POSITIVE_PATTERNS) or (
         _has_any(title_haystack, (r"\bdensit(?:y|ies)\b", r"密度"))
@@ -1354,6 +1475,94 @@ def should_keep_euv_tag(
     return _has_any(positive_haystack, EUV_PATTERNS)
 
 
+def should_keep_dst_index_tag(
+    *,
+    title_text: str = "",
+    body_text: str = "",
+    extra_text: str = "",
+) -> bool:
+    title_haystack = _support_haystack(title_text=title_text, body_text="", extra_text="")
+    primary_body_text = _primary_deep_read_body_text(body_text)
+    positive_haystack = _support_haystack(title_text=title_text, body_text=primary_body_text, extra_text="")
+    full_haystack = _support_haystack(title_text=title_text, body_text=body_text, extra_text=extra_text)
+    if not positive_haystack:
+        return True
+    if _has_any(full_haystack, DST_INDEX_NEGATION_PATTERNS):
+        return False
+    if _has_any(title_haystack, DST_INDEX_STRONG_PATTERNS):
+        return True
+    if _has_any(positive_haystack, DST_INDEX_STRONG_PATTERNS):
+        return True
+    space_context = (
+        GEOMAGNETIC_STORM_PATTERNS
+        + SOLAR_WIND_PATTERNS
+        + SUN_TO_EARTH_MAGNETOSPHERE_PATTERNS
+        + SUN_TO_EARTH_IONOSPHERE_PATTERNS
+        + SUN_TO_EARTH_THERMOSPHERE_PATTERNS
+    )
+    return _has_any(positive_haystack, DST_INDEX_PATTERNS) and _has_any(positive_haystack, space_context)
+
+
+def should_keep_kp_index_tag(
+    *,
+    title_text: str = "",
+    body_text: str = "",
+    extra_text: str = "",
+) -> bool:
+    title_haystack = _support_haystack(title_text=title_text, body_text="", extra_text="")
+    primary_body_text = _primary_deep_read_body_text(body_text)
+    positive_haystack = _support_haystack(title_text=title_text, body_text=primary_body_text, extra_text="")
+    full_haystack = _support_haystack(title_text=title_text, body_text=body_text, extra_text=extra_text)
+    if not positive_haystack:
+        return True
+    if _has_any(full_haystack, KP_INDEX_NEGATION_PATTERNS):
+        return False
+    if _has_any(title_haystack, KP_INDEX_STRONG_PATTERNS):
+        return True
+    if _has_any(positive_haystack, KP_INDEX_STRONG_PATTERNS):
+        return True
+    if _has_any(positive_haystack, KP_INDEX_EXCLUSION_PATTERNS):
+        return False
+    space_context = (
+        GEOMAGNETIC_STORM_PATTERNS
+        + SOLAR_WIND_PATTERNS
+        + SUN_TO_EARTH_MAGNETOSPHERE_PATTERNS
+        + SUN_TO_EARTH_IONOSPHERE_PATTERNS
+        + SUN_TO_EARTH_THERMOSPHERE_PATTERNS
+    )
+    return _has_any(positive_haystack, KP_INDEX_PATTERNS) and _has_any(positive_haystack, space_context)
+
+
+def should_keep_earthquake_tag(
+    *,
+    title_text: str = "",
+    body_text: str = "",
+    extra_text: str = "",
+) -> bool:
+    title_haystack = _support_haystack(title_text=title_text, body_text="", extra_text="")
+    if _has_any(title_haystack, EARTHQUAKE_PATTERNS):
+        return True
+    primary_haystack = _primary_focus_haystack(title_text=title_text, body_text=body_text, limit=1400)
+    if _has_any(primary_haystack, EARTHQUAKE_NEGATION_PATTERNS):
+        return False
+    if _has_any(primary_haystack, EARTHQUAKE_PATTERNS):
+        return True
+    extra_haystack = _support_haystack(title_text="", body_text="", extra_text=extra_text)
+    if _has_any(extra_haystack, EARTHQUAKE_PATTERNS) and _has_any(
+        extra_haystack,
+        (
+            r"\bcatalog(?:s)?\b",
+            r"\bcorrelation\b",
+            r"\bseismicity\b",
+            r"目录",
+            r"相关",
+            r"强震",
+        ),
+    ):
+        return True
+    return False
+
+
 def should_keep_fpi_tag(
     *,
     title_text: str = "",
@@ -1389,6 +1598,9 @@ def should_keep_mission_data_tag(
     positive_haystack = _support_haystack(title_text=title_text, body_text=body_text, extra_text=extra_text)
     if not positive_haystack:
         return True
+    negation_patterns = MISSION_DATA_NEGATION_PATTERNS.get(clean_tag_text(tag), ())
+    if negation_patterns and _has_any(positive_haystack, negation_patterns):
+        return False
     return _has_any(positive_haystack, patterns)
 
 
@@ -1471,8 +1683,17 @@ def should_keep_formal_tag(
     if clean == "事件/磁暴" or clean.startswith("事件/磁暴/"):
         return should_keep_geomagnetic_storm_tag(title_text=title_text, body_text=body_text, extra_text=extra_text)
 
+    if clean == "事件/地震":
+        return should_keep_earthquake_tag(title_text=title_text, body_text=body_text, extra_text=extra_text)
+
     if clean == "指数/EUV":
         return should_keep_euv_tag(title_text=title_text, body_text=body_text)
+
+    if clean == "指数/Dst":
+        return should_keep_dst_index_tag(title_text=title_text, body_text=body_text, extra_text=extra_text)
+
+    if clean == "指数/Kp":
+        return should_keep_kp_index_tag(title_text=title_text, body_text=body_text, extra_text=extra_text)
 
     if clean == "仪器/FPI":
         return should_keep_fpi_tag(title_text=title_text, body_text=body_text)
@@ -1527,7 +1748,13 @@ def prune_unsupported_formal_tags(
 
 def _primary_deep_read_body_text(body_text: str) -> str:
     text = str(body_text or "")
-    return re.split(r"(?m)^### 与已有工作的关系|^## 总结|^- 和我已有工作的关系：", text, maxsplit=1)[0]
+    return re.split(
+        r"(?m)^###\s*(?:局限性|可复现性|与已有工作的关系|和我已有工作的关系|后续问题|需要人工复核)"
+        r"|^##\s*总结"
+        r"|^- 和我已有工作的关系：",
+        text,
+        maxsplit=1,
+    )[0]
 
 
 def _strip_tag_lines(text: str) -> str:

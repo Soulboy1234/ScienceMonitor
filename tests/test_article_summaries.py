@@ -22,7 +22,7 @@ from sciencemonitor.article_summaries import (
     load_existing_summary_result,
     render_article_summary,
 )
-from sciencemonitor.article_summary_meta import abbreviate_journal_name, get_override
+from sciencemonitor.article_summary_meta import abbreviate_journal_name, first_author_label, format_single_author_apa, get_override
 from sciencemonitor.article_summary_text import (
     get_focus_tags,
     infer_method,
@@ -947,6 +947,13 @@ class ArticleSummariesTest(unittest.TestCase):
 
     def test_abbreviate_journal_name_supports_full_jgr_title(self) -> None:
         self.assertEqual(abbreviate_journal_name("Journal of Geophysical Research: Space Physics"), "JGR.SP")
+
+    def test_national_academies_metadata_formats_as_organization(self) -> None:
+        author = "National Academies of Sciences, Engineering, and Medicine"
+
+        self.assertEqual(first_author_label(author), "National Academies")
+        self.assertEqual(format_single_author_apa(author), author)
+        self.assertEqual(abbreviate_journal_name("National Academies Press"), "NAP")
 
 
 if __name__ == "__main__":

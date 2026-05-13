@@ -327,6 +327,39 @@ class ArticleFetchTest(unittest.TestCase):
             self.assertIn("-f", observed["command"])
             self.assertNotIn("-l", observed["command"])
 
+    def test_extract_local_pdf_text_prefers_wide_scientific_body_when_layout_filter_is_too_sparse(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir)
+            pdf_path = root / "sample.pdf"
+            pdf_path.write_bytes(b"%PDF")
+            body = "\n".join(
+                [
+                    "Abstract",
+                    "Physics-informed neural networks (PINNs) and explainable artificial intelligence (XAI) are evaluated.",
+                    "1. Introduction",
+                    "PINNs embed idealized governing equations and XAI can turn correlation into false physical explanations.",
+                    "2. Case studies",
+                    "The Kirsch stress concentration case, cantilever beam case, and multiplicative propagation of errors are discussed.",
+                ]
+                + [
+                    "PINN and XAI evidence sentence with validation, case study, and reproducibility details."
+                    for _ in range(80)
+                ]
+            )
+
+            def fake_run(command, **kwargs):
+                return mock.Mock(stdout=body)
+
+            with mock.patch("sciencemonitor.article_fetch.shutil.which", return_value="/usr/bin/pdftotext"), mock.patch(
+                "sciencemonitor.article_fetch.subprocess.run",
+                side_effect=fake_run,
+            ):
+                scientific_text, _ = _extract_local_pdf_text(pdf_path, project_root=root, page_limit=0)
+
+            self.assertGreater(len(scientific_text), 5000)
+            self.assertIn("Kirsch stress concentration", scientific_text)
+            self.assertIn("multiplicative propagation of errors", scientific_text)
+
     def test_resolve_summary_source_material_ignores_redirect_page_title(self) -> None:
         html = """
         <html>
